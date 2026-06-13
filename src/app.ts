@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import { env } from './shared/config/env'
 import { errorHandler } from './shared/middlewares/error-handler'
 import authRouter from './modules/auth/auth.router'
+import userRouter from './modules/users/user.router'
 
 const app = express()
 
@@ -12,6 +13,7 @@ app.use(cors())
 app.use(express.json())
 
 app.use(authRouter)
+app.use(userRouter)
 
 app.use(errorHandler)
 
