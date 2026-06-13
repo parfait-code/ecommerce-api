@@ -17,6 +17,7 @@ model User {
   role      String   @default("user")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  baskets   Basket[]
 }
 
 model Product {
@@ -29,4 +30,25 @@ model Product {
   images      String[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  basketItems BasketItem[]
+}
+
+model Basket {
+  id         String       @id @default(cuid())
+  userId     Int
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items      BasketItem[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model BasketItem {
+  id        String  @id @default(cuid())
+  basketId  String
+  basket    Basket  @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int
+
+  @@unique([basketId, productId])
 }
