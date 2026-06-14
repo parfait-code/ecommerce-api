@@ -9,6 +9,7 @@ import productRouter from './modules/products/product.router'
 import basketRouter from './modules/basket/basket.router'
 import orderRouter from './modules/orders/order.router'
 import checkoutRouter from './modules/checkout/checkout.router'
+import paymentRouter from './modules/payments/payment.router'
 
 const app = express()
 
@@ -22,6 +23,7 @@ app.use(productRouter)
 app.use(basketRouter)
 app.use(orderRouter)
 app.use(checkoutRouter)
+app.use(paymentRouter)
 
 app.use(errorHandler)
 
