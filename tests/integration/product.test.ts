@@ -7,10 +7,11 @@ describe('Product Integration', () => {
   let adminToken: string
   let productId: number
   const timestamp = Date.now()
+  const adminUsername = `admin_${timestamp}`
 
   beforeAll(async () => {
     const res = await request(app).post('/signup').send({
-      username: `admin_${timestamp}`,
+      username: adminUsername,
       email: `admin_${timestamp}@example.com`,
       password: 'admin123',
       firstName: 'Admin',
@@ -22,9 +23,16 @@ describe('Product Integration', () => {
   })
 
   afterAll(async () => {
+    await prisma.product.deleteMany({
+      where: { name: { startsWith: 'Test Product' } },
+    })
+    await prisma.user.deleteMany({
+      where: { username: adminUsername },
+    })
     await prisma.$disconnect()
     await getRedis().quit()
   })
+
 
   describe('POST /product', () => {
     it('should create a product', async () => {

@@ -15,6 +15,9 @@ describe('Auth Integration', () => {
   }
 
   afterAll(async () => {
+    await prisma.user.deleteMany({
+      where: { username: { startsWith: `testuser_${timestamp}` } },
+    })
     await prisma.$disconnect()
     await getRedis().quit()
   })
