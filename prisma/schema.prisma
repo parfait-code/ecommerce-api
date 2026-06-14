@@ -146,3 +146,12 @@ model Review {
 
   @@unique([productId, userId])
 }
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  name      String
+  location  String
+  capacity  Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
