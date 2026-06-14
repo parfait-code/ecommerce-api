@@ -37,6 +37,7 @@ model Product {
   basketItems BasketItem[]
   orderItems  OrderItem[]
   reviews     Review[]
+  inventory   Inventory[]
 }
 
 model Basket {
@@ -154,4 +155,18 @@ model Warehouse {
   capacity  Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  inventory   Inventory[]
+}
+
+model Inventory {
+  id          String    @id @default(cuid())
+  productId   Int
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  quantity    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([productId, warehouseId])
 }

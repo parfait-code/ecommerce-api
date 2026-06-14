@@ -12,6 +12,7 @@ import checkoutRouter from './modules/checkout/checkout.router'
 import paymentRouter from './modules/payments/payment.router'
 import reviewRouter from './modules/reviews/review.router'
 import warehouseRouter from './modules/warehouses/warehouse.router'
+import inventoryRouter from './modules/inventory/inventory.router'
 
 const app = express()
 
@@ -28,6 +29,7 @@ app.use(checkoutRouter)
 app.use(paymentRouter)
 app.use(reviewRouter)
 app.use(warehouseRouter)
+app.use(inventoryRouter)
 
 app.use(errorHandler)
 
