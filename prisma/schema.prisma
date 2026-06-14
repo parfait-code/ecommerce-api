@@ -19,6 +19,7 @@ model User {
   updatedAt DateTime @updatedAt
   baskets   Basket[]
   orders    Order[]
+  checkouts Checkout[]
 }
 
 model Product {
@@ -80,4 +81,20 @@ model OrderItem {
   product   Product @relation(fields: [productId], references: [id])
   quantity  Int
   price     Float
+}
+
+model Checkout {
+  id              String   @id @default(cuid())
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  basketId        String
+  status          String   @default("PENDING")
+  shippingAddress Json
+  billingAddress  Json?
+  paymentMethodId String?
+  total           Float    @default(0)
+  items           Json     @default("[]")
+  orderId         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
