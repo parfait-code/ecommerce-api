@@ -1,6 +1,19 @@
 import Redis from 'ioredis'
-import { env } from './env'
 
-export const redis = new Redis(env.REDIS_URL)
+let redisInstance: Redis | null = null
 
-redis.on('error', (err) => console.error('Redis error:', err))
+export const getRedis = (): Redis => {
+  if (!redisInstance) {
+    redisInstance = new Redis(process.env.REDIS_URL!)
+    redisInstance.on('error', (err) => console.error('Redis error:', err))
+  }
+  return redisInstance
+}
+
+export const redis = new Proxy({} as Redis, {
+  get: (_target, prop) => {
+    const instance = getRedis()
+    const value = instance[prop as keyof Redis]
+    return typeof value === 'function' ? value.bind(instance) : value
+  },
+})

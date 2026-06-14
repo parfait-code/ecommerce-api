@@ -37,8 +37,4 @@ app.use(addressRouter)
 
 app.use(errorHandler)
 
-app.listen(env.PORT, () => {
-  console.log(`Server running on port ${env.PORT}`)
-})
-
 export default app
