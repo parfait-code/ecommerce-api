@@ -22,6 +22,7 @@ model User {
   checkouts Checkout[]
   payments  Payment[]
   reviews     Review[]
+  pickupRequests PickupRequest[]
 }
 
 model Product {
@@ -169,4 +170,63 @@ model Inventory {
   updatedAt   DateTime  @updatedAt
 
   @@unique([productId, warehouseId])
+}
+
+enum ShipmentStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+model Shipment {
+  id                    String         @id @default(cuid())
+  orderId               String?
+  senderName            String
+  senderAddress         String
+  recipientName         String
+  recipientAddress      String
+  weight                Float
+  dimensions            Json?
+  status                ShipmentStatus @default(PENDING)
+  trackingNumber        String?
+  estimatedDeliveryDate String?
+  trackingEvents        TrackingEvent[]
+  label                 ShippingLabel?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+}
+
+model TrackingEvent {
+  id          String    @id @default(cuid())
+  shipmentId  String
+  shipment    Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  status      String
+  location    String?
+  createdAt   DateTime  @default(now())
+}
+
+model ShippingLabel {
+  id         String   @id @default(cuid())
+  shipmentId String   @unique
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  labelUrl   String
+  createdAt  DateTime @default(now())
+}
+
+enum PickupStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model PickupRequest {
+  id            String       @id @default(cuid())
+  userId        Int
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pickupDate    String
+  pickupAddress String
+  status        PickupStatus @default(PENDING)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 }
