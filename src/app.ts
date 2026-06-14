@@ -14,6 +14,7 @@ import reviewRouter from './modules/reviews/review.router'
 import warehouseRouter from './modules/warehouses/warehouse.router'
 import inventoryRouter from './modules/inventory/inventory.router'
 import shipmentRouter from './modules/shipments/shipment.router'
+import addressRouter from './modules/address/address.router'
 
 const app = express()
 
@@ -32,6 +33,7 @@ app.use(reviewRouter)
 app.use(warehouseRouter)
 app.use(inventoryRouter)
 app.use(shipmentRouter)
+app.use(addressRouter)
 
 app.use(errorHandler)
 
