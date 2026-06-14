@@ -21,6 +21,7 @@ model User {
   orders    Order[]
   checkouts Checkout[]
   payments  Payment[]
+  reviews     Review[]
 }
 
 model Product {
@@ -35,6 +36,7 @@ model Product {
   updatedAt   DateTime @updatedAt
   basketItems BasketItem[]
   orderItems  OrderItem[]
+  reviews     Review[]
 }
 
 model Basket {
@@ -129,4 +131,18 @@ model Payment {
   notes         String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Float
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, userId])
 }
