@@ -1,11 +1,15 @@
 import Redis from 'ioredis'
+import { logger } from './logger'
 
 let redisInstance: Redis | null = null
 
 export const getRedis = (): Redis => {
   if (!redisInstance) {
     redisInstance = new Redis(process.env.REDIS_URL!)
-    redisInstance.on('error', (err) => console.error('Redis error:', err))
+    redisInstance.on('error', (err) =>
+      logger.error('Redis connection error', { error: err.message }),
+    )
+    redisInstance.on('connect', () => logger.info('Redis connected'))
   }
   return redisInstance
 }

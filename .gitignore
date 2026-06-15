@@ -1,11 +1,13 @@
 node_modules
 # Keep environment variables out of version control
 .env
-text
 /src/generated/prisma
 dist/
 .env.test
 *.log
+logs/
+
+text
 outils.md
 API_EXAMPLES.md
 DOCUMENTATION.MD
