@@ -6,3 +6,6 @@ text
 dist/
 .env.test
 *.log
+outils.md
+API_EXAMPLES.md
+DOCUMENTATION.MD
