@@ -4,27 +4,41 @@ import path from 'path'
 
 const { combine, timestamp, json, colorize, printf, errors } = winston.format
 
+const levels = {
+  error: 0,
+  warn: 1,
+  info: 2,
+  http: 3,
+  debug: 4,
+}
+
+const level = () => {
+  const env = process.env.NODE_ENV ?? 'development'
+  return env === 'production' ? 'info' : 'debug'
+}
+
 const consoleFormat = printf(({ level, message, timestamp, stack, ...meta }) => {
   const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : ''
   return `${timestamp} [${level}]: ${stack ?? message}${metaStr}`
 })
 
-const fileTransport = (filename: string, level: string) =>
+const fileTransport = (filename: string, lvl: string) =>
   new DailyRotateFile({
     filename: path.join('logs', `${filename}-%DATE%.log`),
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
     maxFiles: '14d',
-    level,
+    level: lvl,
     format: combine(timestamp(), errors({ stack: true }), json()),
   })
 
 export const logger = winston.createLogger({
-  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  level: level(),
+  levels,
   format: combine(timestamp(), errors({ stack: true }), json()),
   transports: [
     fileTransport('error', 'error'),
-    fileTransport('combined', 'info'),
+    fileTransport('combined', 'http'),
   ],
   exceptionHandlers: [
     new DailyRotateFile({
@@ -56,3 +70,11 @@ if (process.env.NODE_ENV !== 'production') {
     }),
   )
 }
+
+winston.addColors({
+  error: 'red',
+  warn: 'yellow',
+  info: 'green',
+  http: 'magenta',
+  debug: 'white',
+})
