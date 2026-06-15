@@ -2,6 +2,7 @@ import { productRepository } from './product.repository'
 import { CreateProductDto, UpdateProductDto } from './product.schema'
 import { AppError } from '../../shared/utils/app-error'
 import { cache } from '../../shared/utils/cache'
+import { uploadImage, deleteImage } from '../../shared/utils/upload'
 
 const CACHE_KEYS = {
   all: (page: number, limit: number) => `products:all:${page}:${limit}`,
@@ -26,7 +27,6 @@ export const productService = {
 
   getById: async (id: number) => {
     const cacheKey = CACHE_KEYS.single(id)
-
     const cached = await cache.get(cacheKey)
     if (cached) return cached
 
@@ -59,5 +59,32 @@ export const productService = {
     await cache.del(CACHE_KEYS.single(id))
     await cache.delByPattern('products:all:*')
     return { numberOfProductsDeleted: 1 }
+  },
+
+  uploadImages: async (id: number, files: Express.Multer.File[]) => {
+    const product = await productRepository.findById(id)
+    if (!product) throw new AppError('Product not found', 404)
+
+    const uploadedUrls = await Promise.all(files.map((file) => uploadImage(file)))
+    const images = [...product.images, ...uploadedUrls]
+
+    const updated = await productRepository.update(id, { images })
+    await cache.del(CACHE_KEYS.single(id))
+    await cache.delByPattern('products:all:*')
+    return updated
+  },
+
+  deleteImage: async (id: number, imageUrl: string) => {
+    const product = await productRepository.findById(id)
+    if (!product) throw new AppError('Product not found', 404)
+
+    const images = product.images.filter((img) => img !== imageUrl)
+    if (images.length === product.images.length) throw new AppError('Image not found', 404)
+
+    await deleteImage(imageUrl)
+    const updated = await productRepository.update(id, { images })
+    await cache.del(CACHE_KEYS.single(id))
+    await cache.delByPattern('products:all:*')
+    return updated
   },
 }

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { productService } from './product.service'
 import { respond } from '../../shared/utils/response'
+import { AppError } from '../../shared/utils/app-error'
 
 export const productController = {
   getAll: async (req: Request, res: Response, next: NextFunction) => {
@@ -42,6 +43,28 @@ export const productController = {
   delete: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await productService.delete(Number(req.params.productId))
+      respond(res, result)
+    } catch (err) {
+      next(err)
+    }
+  },
+
+  uploadImages: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const files = req.files as Express.Multer.File[]
+      if (!files || files.length === 0) throw new AppError('No files uploaded', 400)
+      const result = await productService.uploadImages(Number(req.params.productId), files)
+      respond(res, result)
+    } catch (err) {
+      next(err)
+    }
+  },
+
+  deleteImage: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { imageUrl } = req.body
+      if (!imageUrl) throw new AppError('imageUrl is required', 400)
+      const result = await productService.deleteImage(Number(req.params.productId), imageUrl)
       respond(res, result)
     } catch (err) {
       next(err)

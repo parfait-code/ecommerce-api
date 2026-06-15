@@ -13,6 +13,7 @@ const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET_PRODUCTS: z.string().default('products'),
   R2_BUCKET_INVOICES: z.string().default('invoices'),
+  R2_ENDPOINT: z.string().optional(),
 })
 
 export const env = envSchema.parse(process.env)
