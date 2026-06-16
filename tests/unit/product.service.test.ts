@@ -65,12 +65,16 @@ describe('ProductService', () => {
   })
 
   describe('getAll', () => {
-    it('should return paginated products', async () => {
-      mockProductRepository.findAll.mockResolvedValue([[mockProduct], 1])
-      const result = await productService.getAll({ page: '1', limit: '20' })
-      expect(result.items).toHaveLength(1)
-      expect(result.total).toBe(1)
-      expect(result.totalPages).toBe(1)
-    })
+  it('should return paginated products', async () => {
+    mockProductRepository.findAll.mockResolvedValue([[mockProduct], 1])
+    const result = await productService.getAll({ page: '1', limit: '20' }) as {
+      items: typeof mockProduct[]
+      total: number
+      totalPages: number
+    }
+    expect(result.items).toHaveLength(1)
+    expect(result.total).toBe(1)
+    expect(result.totalPages).toBe(1)
   })
+})
 })
