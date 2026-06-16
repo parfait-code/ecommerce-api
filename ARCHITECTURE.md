@@ -49,22 +49,16 @@ ecommerce-api/
 │   │   ├── config/          # env, database, redis, storage
 │   │   └── types/           # types globaux TypeScript
 │   └── app.ts               # setup Express + routes
+├── logs/
 ├── prisma/
 │   ├── schema.prisma
 │   └── migrations/
 ├── tests/
 │   ├── unit/
 │   └── integration/
-├── docker/
-│   ├── nginx/
-│   │   └── nginx.conf
-│   └── postgres/
-│       └── init.sql
 ├── .env                     # dev local (gitignore)
 ├── .env.example             # template commité
 ├── .env.test                # base de test sur Neon (gitignore)
-├── docker-compose.prod.yml  # production VPS uniquement
-├── Dockerfile
 └── package.json
 ```
 
