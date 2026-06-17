@@ -2,10 +2,10 @@ import { basketRepository } from './basket.repository'
 import { productRepository } from '../products/product.repository'
 import { AddProductDto, UpdateQuantityDto, RemoveProductDto } from './basket.schema'
 import { AppError } from '../../shared/utils/app-error'
+import { businessLogger } from '../../shared/logger'
 
 export const basketService = {
-  create: (userId: number) =>
-    basketRepository.create(userId),
+  create: (userId: number) => basketRepository.create(userId),
 
   getById: async (basketId: string) => {
     const basket = await basketRepository.findById(basketId)
@@ -21,6 +21,14 @@ export const basketService = {
     if (!product) throw new AppError('Product not found', 404)
 
     await basketRepository.addItem(basketId, dto.product_id, dto.quantity)
+
+    businessLogger.log('ITEM_ADDED', {
+      service: 'basket',
+      actor:   { userId: basket.userId, role: 'CUSTOMER' },
+      target:  { basketId, productId: dto.product_id },
+      metadata: { quantity: dto.quantity, productName: product.name },
+    })
+
     return basketRepository.findById(basketId)
   },
 
@@ -43,6 +51,13 @@ export const basketService = {
     if (!item) throw new AppError('Product not in basket', 404)
 
     await basketRepository.removeItem(basketId, dto.product_id)
+
+    businessLogger.log('ITEM_REMOVED', {
+      service: 'basket',
+      actor:   { userId: basket.userId, role: 'CUSTOMER' },
+      target:  { basketId, productId: dto.product_id },
+    })
+
     return basketRepository.findById(basketId)
   },
 }

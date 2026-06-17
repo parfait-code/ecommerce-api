@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaNeon } from '@prisma/adapter-neon'
-import { logger } from './logger'
+import { systemLogger } from '../logger'
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
 
@@ -19,5 +19,16 @@ export const prisma = globalForPrisma.prisma ?? createPrismaClient()
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
-// prisma.$on('error', (e) => logger.error('Prisma error', { message: e.message }))
-// prisma.$on('warn', (e) => logger.warn('Prisma warning', { message: e.message }))
+prisma.$on('error', (e) => {
+  systemLogger.error('DATABASE_ERROR', {
+    service: 'database',
+    metadata: { message: e.message },
+  })
+})
+
+prisma.$on('warn', (e) => {
+  systemLogger.log('DATABASE_CONNECTED', {
+    service: 'database',
+    metadata: { warning: e.message },
+  })
+})

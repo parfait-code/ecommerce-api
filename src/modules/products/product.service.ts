@@ -3,15 +3,16 @@ import { CreateProductDto, UpdateProductDto } from './product.schema'
 import { AppError } from '../../shared/utils/app-error'
 import { cache } from '../../shared/utils/cache'
 import { uploadImage, deleteImage } from '../../shared/utils/upload'
+import { businessLogger, auditLogger } from '../../shared/logger'
 
 const CACHE_KEYS = {
-  all: (page: number, limit: number) => `products:all:${page}:${limit}`,
-  single: (id: number) => `products:${id}`,
+  all:    (page: number, limit: number) => `products:all:${page}:${limit}`,
+  single: (id: number)                  => `products:${id}`,
 }
 
 export const productService = {
   getAll: async (query: { page?: string; limit?: string }) => {
-    const page = Number(query.page ?? 1)
+    const page  = Number(query.page  ?? 1)
     const limit = Number(query.limit ?? 20)
     const cacheKey = CACHE_KEYS.all(page, limit)
 
@@ -40,24 +41,82 @@ export const productService = {
   create: async (dto: CreateProductDto) => {
     const product = await productRepository.create(dto)
     await cache.delByPattern('products:all:*')
+
+    businessLogger.log('PRODUCT_CREATED', {
+      service: 'products',
+      actor:   { userId: null, role: 'ADMIN' },
+      target:  { productId: product.id },
+      metadata: { name: product.name, price: product.price, category: product.category },
+    })
+
+    auditLogger.log('PRODUCT_CREATED', {
+      service: 'products',
+      actor:   { userId: null, role: 'ADMIN' },
+      target:  { productId: product.id },
+      metadata: { name: product.name, price: product.price },
+    })
+
     return product
   },
 
   update: async (id: number, dto: UpdateProductDto) => {
     const product = await productRepository.findById(id)
     if (!product) throw new AppError('Product not found', 404)
+
+    const priceChanged = dto.price !== undefined && dto.price !== product.price
     const updated = await productRepository.update(id, dto)
+
     await cache.del(CACHE_KEYS.single(id))
     await cache.delByPattern('products:all:*')
+
+    businessLogger.log('PRODUCT_UPDATED', {
+      service: 'products',
+      actor:   { userId: null, role: 'ADMIN' },
+      target:  { productId: id },
+      metadata: { fields: Object.keys(dto) },
+    })
+
+    if (priceChanged) {
+      auditLogger.log('PRICE_CHANGED', {
+        service: 'products',
+        actor:   { userId: null, role: 'ADMIN' },
+        target:  { productId: id },
+        metadata: { oldPrice: product.price, newPrice: dto.price },
+      })
+    }
+
+    auditLogger.log('PRODUCT_UPDATED', {
+      service: 'products',
+      actor:   { userId: null, role: 'ADMIN' },
+      target:  { productId: id },
+      metadata: { fields: Object.keys(dto) },
+    })
+
     return updated
   },
 
   delete: async (id: number) => {
     const product = await productRepository.findById(id)
     if (!product) throw new AppError('Product not found', 404)
+
     await productRepository.delete(id)
     await cache.del(CACHE_KEYS.single(id))
     await cache.delByPattern('products:all:*')
+
+    businessLogger.log('PRODUCT_DELETED', {
+      service: 'products',
+      actor:   { userId: null, role: 'ADMIN' },
+      target:  { productId: id },
+      metadata: { name: product.name },
+    })
+
+    auditLogger.log('PRODUCT_DELETED', {
+      service: 'products',
+      actor:   { userId: null, role: 'ADMIN' },
+      target:  { productId: id },
+      metadata: { name: product.name },
+    })
+
     return { numberOfProductsDeleted: 1 }
   },
 
@@ -67,8 +126,8 @@ export const productService = {
 
     const uploadedUrls = await Promise.all(files.map((file) => uploadImage(file)))
     const images = [...product.images, ...uploadedUrls]
-
     const updated = await productRepository.update(id, { images })
+
     await cache.del(CACHE_KEYS.single(id))
     await cache.delByPattern('products:all:*')
     return updated
@@ -83,6 +142,7 @@ export const productService = {
 
     await deleteImage(imageUrl)
     const updated = await productRepository.update(id, { images })
+
     await cache.del(CACHE_KEYS.single(id))
     await cache.delByPattern('products:all:*')
     return updated

@@ -1,8 +1,9 @@
 import { checkoutRepository } from './checkout.repository'
-import { basketRepository } from '../basket/basket.repository'
-import { orderRepository } from '../orders/order.repository'
-import { CreateCheckoutDto } from './checkout.schema'
-import { AppError } from '../../shared/utils/app-error'
+import { basketRepository }   from '../basket/basket.repository'
+import { orderRepository }    from '../orders/order.repository'
+import { CreateCheckoutDto }  from './checkout.schema'
+import { AppError }           from '../../shared/utils/app-error'
+import { businessLogger }     from '../../shared/logger'
 
 export const checkoutService = {
   create: async (userId: number, dto: CreateCheckoutDto) => {
@@ -12,14 +13,22 @@ export const checkoutService = {
 
     const items = basket.items.map((i) => ({
       productId: i.productId,
-      name: i.product.name,
-      price: i.product.price,
-      quantity: i.quantity,
+      name:      i.product.name,
+      price:     i.product.price,
+      quantity:  i.quantity,
     }))
 
     const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+    const checkout = await checkoutRepository.create(userId, dto, total, items)
 
-    return checkoutRepository.create(userId, dto, total, items)
+    businessLogger.log('CHECKOUT_STARTED', {
+      service: 'checkout',
+      actor:   { userId, role: 'CUSTOMER' },
+      target:  { checkoutId: checkout.id, basketId: dto.basket_id },
+      metadata: { total, itemCount: items.length },
+    })
+
+    return checkout
   },
 
   getById: async (id: string) => {
@@ -42,10 +51,7 @@ export const checkoutService = {
       {
         items: items.map((i) => ({ id: String(i.productId), quantity: i.quantity })),
         shippingAddress: checkout.shippingAddress as {
-          street: string
-          city: string
-          country: string
-          postalCode: string
+          street: string; city: string; country: string; postalCode: string
         },
         paymentMethodId: checkout.paymentMethodId ?? undefined,
       },
@@ -53,6 +59,15 @@ export const checkoutService = {
       items,
     )
 
-    return checkoutRepository.complete(id, order.id)
+    const completed = await checkoutRepository.complete(id, order.id)
+
+    businessLogger.log('CHECKOUT_COMPLETED', {
+      service: 'checkout',
+      actor:   { userId, role: 'CUSTOMER' },
+      target:  { checkoutId: id, orderId: order.id },
+      metadata: { total: checkout.total },
+    })
+
+    return completed
   },
 }
