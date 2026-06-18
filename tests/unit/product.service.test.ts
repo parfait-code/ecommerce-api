@@ -6,24 +6,24 @@ jest.mock('../../src/modules/products/product.repository')
 
 const mockProductRepository = productRepository as jest.Mocked<typeof productRepository>
 
+const mockCategory = {
+  id: 'cat-cuid-1', name: 'Electronics', slug: 'electronics',
+}
+
 const mockProduct = {
-  id: 1,
-  name: 'Test Product',
-  description: 'A test product',
-  price: 99.99,
-  category: 'Electronics',
-  stock: 10,
-  images: [],
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  id: 1, name: 'Test Product', description: 'A test product',
+  price: 99.99, categoryId: 'cat-cuid-1', category: mockCategory,
+  stock: 10, images: [], createdAt: new Date(), updatedAt: new Date(),
 }
 
 describe('ProductService', () => {
   describe('getById', () => {
-    it('should return product if found', async () => {
+    it('should return product with category if found', async () => {
       mockProductRepository.findById.mockResolvedValue(mockProduct)
       const result = await productService.getById(1)
       expect(result).toEqual(mockProduct)
+      expect(result).toHaveProperty('category')
+      expect((result as typeof mockProduct).category.slug).toBe('electronics')
     })
 
     it('should throw 404 if product not found', async () => {
@@ -35,16 +35,14 @@ describe('ProductService', () => {
   })
 
   describe('create', () => {
-    it('should create and return product', async () => {
+    it('should create product with categoryId', async () => {
       mockProductRepository.create.mockResolvedValue(mockProduct)
       const result = await productService.create({
-        name: 'Test Product',
-        price: 99.99,
-        category: 'Electronics',
-        stock: 10,
-        images: [],
+        name: 'Test Product', price: 99.99,
+        categoryId: 'cat-cuid-1', stock: 10, images: [],
       })
       expect(result).toEqual(mockProduct)
+      expect(result).toHaveProperty('categoryId', 'cat-cuid-1')
     })
   })
 
@@ -65,16 +63,24 @@ describe('ProductService', () => {
   })
 
   describe('getAll', () => {
-  it('should return paginated products', async () => {
-    mockProductRepository.findAll.mockResolvedValue([[mockProduct], 1])
-    const result = await productService.getAll({ page: '1', limit: '20' }) as {
-      items: typeof mockProduct[]
-      total: number
-      totalPages: number
-    }
-    expect(result.items).toHaveLength(1)
-    expect(result.total).toBe(1)
-    expect(result.totalPages).toBe(1)
+    it('should return paginated products', async () => {
+      mockProductRepository.findAll.mockResolvedValue([[mockProduct], 1])
+      const result = await productService.getAll({ page: '1', limit: '20' }) as {
+        items: typeof mockProduct[]
+        total: number
+        totalPages: number
+      }
+      expect(result.items).toHaveLength(1)
+      expect(result.total).toBe(1)
+      expect(result.totalPages).toBe(1)
+    })
+
+    it('should filter by categoryId', async () => {
+      mockProductRepository.findAll.mockResolvedValue([[mockProduct], 1])
+      await productService.getAll({ categoryId: 'cat-cuid-1' })
+      expect(mockProductRepository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ categoryId: 'cat-cuid-1' }),
+      )
+    })
   })
-})
 })

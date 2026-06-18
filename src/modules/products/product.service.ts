@@ -6,15 +6,16 @@ import { uploadImage, deleteImage } from '../../shared/utils/upload'
 import { businessLogger, auditLogger } from '../../shared/logger'
 
 const CACHE_KEYS = {
-  all:    (page: number, limit: number) => `products:all:${page}:${limit}`,
-  single: (id: number)                  => `products:${id}`,
+  all:    (page: number, limit: number, categoryId?: string) =>
+    `products:all:${page}:${limit}${categoryId ? `:${categoryId}` : ''}`,
+  single: (id: number) => `products:${id}`,
 }
 
 export const productService = {
-  getAll: async (query: { page?: string; limit?: string }) => {
-    const page  = Number(query.page  ?? 1)
-    const limit = Number(query.limit ?? 20)
-    const cacheKey = CACHE_KEYS.all(page, limit)
+  getAll: async (query: { page?: string; limit?: string; categoryId?: string }) => {
+    const page       = Number(query.page  ?? 1)
+    const limit      = Number(query.limit ?? 20)
+    const cacheKey   = CACHE_KEYS.all(page, limit, query.categoryId)
 
     const cached = await cache.get(cacheKey)
     if (cached) return cached
@@ -28,7 +29,7 @@ export const productService = {
 
   getById: async (id: number) => {
     const cacheKey = CACHE_KEYS.single(id)
-    const cached = await cache.get(cacheKey)
+    const cached   = await cache.get(cacheKey)
     if (cached) return cached
 
     const product = await productRepository.findById(id)
@@ -43,16 +44,16 @@ export const productService = {
     await cache.delByPattern('products:all:*')
 
     businessLogger.log('PRODUCT_CREATED', {
-      service: 'products',
-      actor:   { userId: null, role: 'ADMIN' },
-      target:  { productId: product.id },
-      metadata: { name: product.name, price: product.price, category: product.category },
+      service:  'products',
+      actor:    { userId: null, role: 'ADMIN' },
+      target:   { productId: product.id },
+      metadata: { name: product.name, price: product.price, categoryId: dto.categoryId },
     })
 
     auditLogger.log('PRODUCT_CREATED', {
-      service: 'products',
-      actor:   { userId: null, role: 'ADMIN' },
-      target:  { productId: product.id },
+      service:  'products',
+      actor:    { userId: null, role: 'ADMIN' },
+      target:   { productId: product.id },
       metadata: { name: product.name, price: product.price },
     })
 
@@ -64,31 +65,31 @@ export const productService = {
     if (!product) throw new AppError('Product not found', 404)
 
     const priceChanged = dto.price !== undefined && dto.price !== product.price
-    const updated = await productRepository.update(id, dto)
+    const updated      = await productRepository.update(id, dto)
 
     await cache.del(CACHE_KEYS.single(id))
     await cache.delByPattern('products:all:*')
 
     businessLogger.log('PRODUCT_UPDATED', {
-      service: 'products',
-      actor:   { userId: null, role: 'ADMIN' },
-      target:  { productId: id },
+      service:  'products',
+      actor:    { userId: null, role: 'ADMIN' },
+      target:   { productId: id },
       metadata: { fields: Object.keys(dto) },
     })
 
     if (priceChanged) {
       auditLogger.log('PRICE_CHANGED', {
-        service: 'products',
-        actor:   { userId: null, role: 'ADMIN' },
-        target:  { productId: id },
+        service:  'products',
+        actor:    { userId: null, role: 'ADMIN' },
+        target:   { productId: id },
         metadata: { oldPrice: product.price, newPrice: dto.price },
       })
     }
 
     auditLogger.log('PRODUCT_UPDATED', {
-      service: 'products',
-      actor:   { userId: null, role: 'ADMIN' },
-      target:  { productId: id },
+      service:  'products',
+      actor:    { userId: null, role: 'ADMIN' },
+      target:   { productId: id },
       metadata: { fields: Object.keys(dto) },
     })
 
@@ -104,16 +105,16 @@ export const productService = {
     await cache.delByPattern('products:all:*')
 
     businessLogger.log('PRODUCT_DELETED', {
-      service: 'products',
-      actor:   { userId: null, role: 'ADMIN' },
-      target:  { productId: id },
+      service:  'products',
+      actor:    { userId: null, role: 'ADMIN' },
+      target:   { productId: id },
       metadata: { name: product.name },
     })
 
     auditLogger.log('PRODUCT_DELETED', {
-      service: 'products',
-      actor:   { userId: null, role: 'ADMIN' },
-      target:  { productId: id },
+      service:  'products',
+      actor:    { userId: null, role: 'ADMIN' },
+      target:   { productId: id },
       metadata: { name: product.name },
     })
 
@@ -125,8 +126,8 @@ export const productService = {
     if (!product) throw new AppError('Product not found', 404)
 
     const uploadedUrls = await Promise.all(files.map((file) => uploadImage(file)))
-    const images = [...product.images, ...uploadedUrls]
-    const updated = await productRepository.update(id, { images })
+    const images       = [...product.images, ...uploadedUrls]
+    const updated      = await productRepository.update(id, { images })
 
     await cache.del(CACHE_KEYS.single(id))
     await cache.delByPattern('products:all:*')
@@ -138,7 +139,8 @@ export const productService = {
     if (!product) throw new AppError('Product not found', 404)
 
     const images = product.images.filter((img) => img !== imageUrl)
-    if (images.length === product.images.length) throw new AppError('Image not found', 404)
+    if (images.length === product.images.length)
+      throw new AppError('Image not found', 404)
 
     await deleteImage(imageUrl)
     const updated = await productRepository.update(id, { images })

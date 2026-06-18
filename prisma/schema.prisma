@@ -24,6 +24,7 @@ model User {
   reviews     Review[]
   pickupRequests PickupRequest[]
   addresses Address[]
+  couponUses  CouponUse[]
 }
 
 model Product {
@@ -31,7 +32,9 @@ model Product {
   name        String
   description String?
   price       Float
-  category    String
+  categoryId  String
+  category    Category          @relation(fields: [categoryId], references: [id])
+  discounts   DiscountProduct[]
   stock       Int      @default(0)
   images      String[]
   createdAt   DateTime @default(now())
@@ -73,6 +76,8 @@ model Order {
   paymentMethodId String?
   notes           String?
   couponCode      String?
+  couponCodeId  String?
+  appliedCoupon CouponCode? @relation(fields: [couponCodeId], references: [id], onDelete: SetNull)
   totalAmount     Float
   discountedAmount Float?
   createdAt       DateTime    @default(now())
@@ -244,4 +249,98 @@ model Address {
   isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  slug        String     @unique
+  description String?
+  parentId    String?
+  parent      Category?  @relation("subcategories", fields: [parentId], references: [id])
+  children    Category[] @relation("subcategories")
+  products    Product[]
+  discounts   Discount[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+enum PromotionStatus {
+  SCHEDULED
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+model Promotion {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  description String?
+  images      String[]
+  status      PromotionStatus @default(SCHEDULED)
+  isActive    Boolean         @default(true)
+  startDate   DateTime
+  endDate     DateTime
+  coupons     CouponCode[]
+  discounts   Discount[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model Discount {
+  id          String           @id @default(cuid())
+  promotionId String
+  promotion   Promotion        @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  type        DiscountType
+  value       Float
+  categoryId  String?
+  category    Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  products    DiscountProduct[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model DiscountProduct {
+  id         String   @id @default(cuid())
+  discountId String
+  discount   Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([discountId, productId])
+}
+
+model CouponCode {
+  id           String      @id @default(cuid())
+  code         String      @unique
+  promotionId  String
+  promotion    Promotion   @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  maxUses      Int?
+  usedCount    Int         @default(0)
+  perUserLimit Int         @default(1)
+  startDate    DateTime?
+  endDate      DateTime?
+  isActive     Boolean     @default(true)
+  uses         CouponUse[]
+  orders       Order[]     
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model CouponUse {
+  id         String     @id @default(cuid())
+  couponId   String
+  coupon     CouponCode @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  userId     Int
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId    String
+  createdAt  DateTime   @default(now())
+
+  @@unique([couponId, userId, orderId])
 }

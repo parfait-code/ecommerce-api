@@ -6,7 +6,9 @@ import { AppError } from '../../shared/utils/app-error'
 export const productController = {
   getAll: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await productService.getAll(req.query as { page?: string; limit?: string })
+      const result = await productService.getAll(
+        req.query as { page?: string; limit?: string; categoryId?: string },
+      )
       respond(res, result)
     } catch (err) {
       next(err)
@@ -52,8 +54,12 @@ export const productController = {
   uploadImages: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const files = req.files as Express.Multer.File[]
-      if (!files || files.length === 0) throw new AppError('No files uploaded', 400)
-      const result = await productService.uploadImages(Number(req.params.productId), files)
+      if (!files || files.length === 0)
+        throw new AppError('No files uploaded', 400)
+      const result = await productService.uploadImages(
+        Number(req.params.productId),
+        files,
+      )
       respond(res, result)
     } catch (err) {
       next(err)
@@ -64,7 +70,10 @@ export const productController = {
     try {
       const { imageUrl } = req.body
       if (!imageUrl) throw new AppError('imageUrl is required', 400)
-      const result = await productService.deleteImage(Number(req.params.productId), imageUrl)
+      const result = await productService.deleteImage(
+        Number(req.params.productId),
+        imageUrl,
+      )
       respond(res, result)
     } catch (err) {
       next(err)

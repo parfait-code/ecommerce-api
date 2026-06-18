@@ -4,7 +4,7 @@ export const createProductSchema = z.object({
   name: z.string().min(2).max(200),
   description: z.string().optional(),
   price: z.number().positive(),
-  category: z.string(),
+  categoryId: z.string(),
   stock: z.number().int().min(0).default(0),
   images: z.array(z.string()).default([]),
 })
