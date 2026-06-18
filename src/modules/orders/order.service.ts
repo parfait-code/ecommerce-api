@@ -1,125 +1,160 @@
-import { orderRepository }   from './order.repository'
-import { productRepository }  from '../products/product.repository'
-import { CreateOrderDto, UpdateOrderDto, UpdateOrderStatusDto } from './order.schema'
-import { AppError }           from '../../shared/utils/app-error'
-import { cache }              from '../../shared/utils/cache'
-import { businessLogger, auditLogger } from '../../shared/logger'
+import { orderRepository } from "./order.repository";
+import { productRepository } from "../products/product.repository";
+import {
+  CreateOrderDto,
+  UpdateOrderDto,
+  UpdateOrderStatusDto,
+} from "./order.schema";
+import { AppError } from "../../shared/utils/app-error";
+import { cache } from "../../shared/utils/cache";
+import { businessLogger, auditLogger } from "../../shared/logger";
 
 const CACHE_KEYS = {
-  all:    (query: Record<string, string>) => `orders:all:${JSON.stringify(query)}`,
-  single: (id: string)                    => `orders:${id}`,
-}
+  all: (query: Record<string, string>) => `orders:all:${JSON.stringify(query)}`,
+  single: (id: string) => `orders:${id}`,
+};
 
 export const orderService = {
-  getAll: async (query: { status?: string; customer?: string; page?: string; limit?: string }) => {
-    const cacheKey = CACHE_KEYS.all(query as Record<string, string>)
-    const cached = await cache.get(cacheKey)
-    if (cached) return cached
+  getAll: async (query: {
+    status?: string;
+    customer?: string;
+    page?: string;
+    limit?: string;
+  }) => {
+    const cacheKey = CACHE_KEYS.all(query as Record<string, string>);
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
 
-    const [items, total] = await orderRepository.findAll(query)
-    const page  = Number(query.page  ?? 1)
-    const limit = Number(query.limit ?? 20)
-    const result = { items, total, page, limit, totalPages: Math.ceil(total / limit) }
+    const [items, total] = await orderRepository.findAll(query);
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    const result = {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
 
-    await cache.set(cacheKey, result)
-    return result
+    await cache.set(cacheKey, result);
+    return result;
   },
 
   getById: async (id: string) => {
-    const cacheKey = CACHE_KEYS.single(id)
-    const cached = await cache.get(cacheKey)
-    if (cached) return cached
+    const cacheKey = CACHE_KEYS.single(id);
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
 
-    const order = await orderRepository.findById(id)
-    if (!order) throw new AppError('Order not found', 404)
+    const order = await orderRepository.findById(id);
+    if (!order) throw new AppError("Order not found", 404);
 
-    await cache.set(cacheKey, order)
-    return order
+    await cache.set(cacheKey, order);
+    return order;
   },
 
   create: async (userId: number, dto: CreateOrderDto) => {
-    const orderItems: { productId: number; quantity: number; price: number }[] = []
-    let totalAmount = 0
+    const orderItems: { productId: number; quantity: number; price: number }[] =
+      [];
+    let totalAmount = 0;
 
     for (const item of dto.items) {
-      const product = await productRepository.findById(Number(item.id))
-      if (!product) throw new AppError(`Product ${item.id} not found`, 404)
-      orderItems.push({ productId: product.id, quantity: item.quantity, price: product.price })
-      totalAmount += product.price * item.quantity
+      const product = await productRepository.findById(Number(item.id));
+      if (!product) throw new AppError(`Product ${item.id} not found`, 404);
+      orderItems.push({
+        productId: product.id,
+        quantity: item.quantity,
+        price: product.price,
+      });
+      totalAmount += product.price * item.quantity;
     }
 
-    const order = await orderRepository.create(userId, dto, totalAmount, orderItems)
-    await cache.delByPattern('orders:all:*')
+    const order = await orderRepository.create(
+      userId,
+      dto,
+      totalAmount,
+      orderItems,
+    );
+    await cache.delByPattern("orders:all:*");
 
-    businessLogger.log('ORDER_CREATED', {
-      service: 'orders',
-      actor:   { userId, role: 'CUSTOMER' },
-      target:  { orderId: order.id },
+    businessLogger.log("ORDER_CREATED", {
+      service: "orders",
+      actor: { userId, role: "CUSTOMER" },
+      target: { orderId: order.id },
       metadata: { totalAmount, itemCount: orderItems.length },
-    })
+    });
 
-    return order
+    return order;
   },
 
   update: async (id: string, dto: UpdateOrderDto) => {
-    const order = await orderRepository.findById(id)
-    if (!order) throw new AppError('Order not found', 404)
+    const order = await orderRepository.findById(id);
+    if (!order) throw new AppError("Order not found", 404);
 
-    const updated = await orderRepository.update(id, dto)
-    await cache.del(CACHE_KEYS.single(id))
-    await cache.delByPattern('orders:all:*')
-    return updated
+    const updated = await orderRepository.update(id, dto);
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("orders:all:*");
+    return updated;
+  },
+
+  getByUser: async (
+    userId: number,
+    query: { page?: string; limit?: string },
+  ) => {
+    const [items, total] = await orderRepository.findByUser(userId, query);
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 10);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
   updateStatus: async (id: string, dto: UpdateOrderStatusDto) => {
-    const order = await orderRepository.findById(id)
-    if (!order) throw new AppError('Order not found', 404)
+    const order = await orderRepository.findById(id);
+    if (!order) throw new AppError("Order not found", 404);
 
-    const oldStatus = order.status
-    const updated   = await orderRepository.updateStatus(id, dto.status)
+    const oldStatus = order.status;
+    const updated = await orderRepository.updateStatus(id, dto.status);
 
-    await cache.del(CACHE_KEYS.single(id))
-    await cache.delByPattern('orders:all:*')
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("orders:all:*");
 
-    businessLogger.log('ORDER_STATUS_CHANGED', {
-      service: 'orders',
-      actor:   { userId: order.userId, role: 'ADMIN' },
-      target:  { orderId: id },
+    businessLogger.log("ORDER_STATUS_CHANGED", {
+      service: "orders",
+      actor: { userId: order.userId, role: "ADMIN" },
+      target: { orderId: id },
       metadata: { oldStatus, newStatus: dto.status },
-    })
+    });
 
-    auditLogger.log('ORDER_STATUS_CHANGED', {
-      service: 'orders',
-      actor:   { userId: order.userId, role: 'ADMIN' },
-      target:  { orderId: id },
+    auditLogger.log("ORDER_STATUS_CHANGED", {
+      service: "orders",
+      actor: { userId: order.userId, role: "ADMIN" },
+      target: { orderId: id },
       metadata: { oldStatus, newStatus: dto.status },
-    })
+    });
 
-    return updated
+    return updated;
   },
 
   delete: async (id: string) => {
-    const order = await orderRepository.findById(id)
-    if (!order) throw new AppError('Order not found', 404)
+    const order = await orderRepository.findById(id);
+    if (!order) throw new AppError("Order not found", 404);
 
-    await orderRepository.delete(id)
-    await cache.del(CACHE_KEYS.single(id))
-    await cache.delByPattern('orders:all:*')
+    await orderRepository.delete(id);
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("orders:all:*");
 
-    businessLogger.log('ORDER_CANCELLED', {
-      service: 'orders',
-      actor:   { userId: order.userId, role: 'CUSTOMER' },
-      target:  { orderId: id },
+    businessLogger.log("ORDER_CANCELLED", {
+      service: "orders",
+      actor: { userId: order.userId, role: "CUSTOMER" },
+      target: { orderId: id },
       metadata: { totalAmount: order.totalAmount },
-    })
+    });
 
-    auditLogger.log('ORDER_CANCELLED', {
-      service: 'orders',
-      actor:   { userId: order.userId, role: 'CUSTOMER' },
-      target:  { orderId: id },
+    auditLogger.log("ORDER_CANCELLED", {
+      service: "orders",
+      actor: { userId: order.userId, role: "CUSTOMER" },
+      target: { orderId: id },
       metadata: { totalAmount: order.totalAmount },
-    })
+    });
 
-    return { message: 'Order cancelled successfully' }
+    return { message: "Order cancelled successfully" };
   },
-}
+};

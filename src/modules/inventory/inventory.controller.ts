@@ -4,13 +4,15 @@ import { respond } from '../../shared/utils/response'
 
 export const inventoryController = {
   getAll: async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const result = await inventoryService.getAll(req.query as { category?: string; location?: string })
-      respond(res, result)
-    } catch (err) {
-      next(err)
-    }
-  },
+  try {
+    const result = await inventoryService.getAll(
+      req.query as { category?: string; location?: string; page?: string; limit?: string },
+    )
+    respond(res, result)
+  } catch (err) {
+    next(err)
+  }
+},
 
   getById: async (req: Request, res: Response, next: NextFunction) => {
     try {

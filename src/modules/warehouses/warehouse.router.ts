@@ -9,6 +9,7 @@ const router = Router()
 
 router.get('/warehouses', authGuard, warehouseController.getAll)
 router.get('/warehouses/:warehouse_id', authGuard, warehouseController.getById)
+router.get('/warehouses/:warehouse_id/inventory', authGuard, warehouseController.getInventory)
 router.post('/warehouses', authGuard, adminGuard, validate(createWarehouseSchema), warehouseController.create)
 router.put('/warehouses/:warehouse_id', authGuard, adminGuard, validate(updateWarehouseSchema), warehouseController.update)
 router.delete('/warehouses/:warehouse_id', authGuard, adminGuard, warehouseController.delete)

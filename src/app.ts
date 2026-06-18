@@ -20,6 +20,7 @@ import warehouseRouter     from './modules/warehouses/warehouse.router'
 import inventoryRouter     from './modules/inventory/inventory.router'
 import shipmentRouter      from './modules/shipments/shipment.router'
 import addressRouter       from './modules/address/address.router'
+import dashboardRouter from './modules/dashboard/dashboard.router'
 
 const app = express()
 
@@ -81,6 +82,7 @@ app.use(warehouseRouter)
 app.use(inventoryRouter)
 app.use(shipmentRouter)
 app.use(addressRouter)
+app.use(dashboardRouter)
 
 // ── Gestion d'erreurs (doit être le dernier middleware) ───────────────────────
 app.use(errorHandler)

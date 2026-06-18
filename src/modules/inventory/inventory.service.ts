@@ -8,8 +8,13 @@ import { businessLogger, auditLogger } from '../../shared/logger'
 const LOW_STOCK_THRESHOLD = 10
 
 export const inventoryService = {
-  getAll: (query: { category?: string; location?: string }) =>
-    inventoryRepository.findAll(query),
+
+  getAll: async (query: { category?: string; location?: string; page?: string; limit?: string }) => {
+  const [items, total] = await inventoryRepository.findAll(query)
+  const page  = Number(query.page  ?? 1)
+  const limit = Number(query.limit ?? 20)
+  return { items, total, page, limit, totalPages: Math.ceil(total / limit) }
+},
 
   getById: async (id: string) => {
     const item = await inventoryRepository.findById(id)

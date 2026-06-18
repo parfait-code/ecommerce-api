@@ -1,21 +1,37 @@
-import { prisma } from '../../shared/config/database'
-import { CreateInventoryDto, UpdateInventoryDto } from './inventory.schema'
+import { prisma } from "../../shared/config/database";
+import { CreateInventoryDto, UpdateInventoryDto } from "./inventory.schema";
+import { paginate } from "../../shared/utils/pagination";
 
 const inventoryInclude = {
   product: true,
   warehouse: true,
-}
+};
 
 export const inventoryRepository = {
-  findAll: (query: { category?: string; location?: string }) =>
-    prisma.inventory.findMany({
-      where: {
-        ...(query.category && { product: { category: query.category } }),
-        ...(query.location && { warehouse: { location: { contains: query.location } } }),
-      },
-      include: inventoryInclude,
-      orderBy: { createdAt: 'desc' },
-    }),
+  findAll: (query: {
+    category?: string;
+    location?: string;
+    page?: string;
+    limit?: string;
+  }) => {
+    const { skip, take } = paginate(query);
+    const where = {
+      ...(query.category && { product: { category: query.category } }),
+      ...(query.location && {
+        warehouse: { location: { contains: query.location } },
+      }),
+    };
+    return Promise.all([
+      prisma.inventory.findMany({
+        where,
+        skip,
+        take,
+        include: inventoryInclude,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.inventory.count({ where }),
+    ]);
+  },
 
   findById: (id: string) =>
     prisma.inventory.findUnique({ where: { id }, include: inventoryInclude }),
@@ -40,7 +56,7 @@ export const inventoryRepository = {
 
   search: (keyword: string) =>
     prisma.inventory.findMany({
-      where: { product: { name: { contains: keyword, mode: 'insensitive' } } },
+      where: { product: { name: { contains: keyword, mode: "insensitive" } } },
       include: inventoryInclude,
     }),
 
@@ -64,8 +80,7 @@ export const inventoryRepository = {
       include: inventoryInclude,
     }),
 
-  delete: (id: string) =>
-    prisma.inventory.delete({ where: { id } }),
+  delete: (id: string) => prisma.inventory.delete({ where: { id } }),
 
   decrementQuantity: (id: string, quantity: number) =>
     prisma.inventory.update({
@@ -78,4 +93,4 @@ export const inventoryRepository = {
       where: { id },
       data: { quantity: { increment: quantity } },
     }),
-}
+};
