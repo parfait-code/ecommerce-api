@@ -1,6 +1,7 @@
 import { shipmentRepository, pickupRepository } from './shipment.repository'
 import { CreateShipmentDto, TrackingEventDto, ShippingCostDto, CreatePickupRequestDto } from './shipment.schema'
-import { AppError } from '../../shared/utils/app-error'
+import { AppError }      from '../../shared/utils/app-error'
+import { businessLogger } from '../../shared/logger'
 
 const generateTrackingNumber = () =>
   Math.random().toString(36).substring(2, 12).toUpperCase()
@@ -13,14 +14,32 @@ const generateEstimatedDelivery = () => {
 
 export const shipmentService = {
   calculateCost: (dto: ShippingCostDto) => {
-    const baseCost = 5
+    const baseCost  = 5
     const weightCost = dto.weight * 0.1
     const cost = baseCost + weightCost
     return { cost: Math.round(cost * 100) / 100, currency: 'XAF' }
   },
 
-  create: (dto: CreateShipmentDto) =>
-    shipmentRepository.create(dto, generateTrackingNumber(), generateEstimatedDelivery()),
+  create: async (dto: CreateShipmentDto) => {
+    const shipment = await shipmentRepository.create(
+      dto,
+      generateTrackingNumber(),
+      generateEstimatedDelivery(),
+    )
+
+    businessLogger.log('SHIPMENT_CREATED', {
+      service: 'shipments',
+      actor:   { userId: null, role: 'CUSTOMER' },
+      target:  { shipmentId: shipment.id },
+      metadata: {
+        trackingNumber:        shipment.trackingNumber,
+        estimatedDeliveryDate: shipment.estimatedDeliveryDate,
+        weight:                dto.weight,
+      },
+    })
+
+    return shipment
+  },
 
   getById: async (id: string) => {
     const shipment = await shipmentRepository.findById(id)
@@ -31,18 +50,34 @@ export const shipmentService = {
   addTrackingEvent: async (id: string, dto: TrackingEventDto) => {
     const shipment = await shipmentRepository.findById(id)
     if (!shipment) throw new AppError('Shipment not found', 404)
+
     await shipmentRepository.addTrackingEvent(id, dto)
-    await shipmentRepository.updateStatus(id, dto.status as 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED')
-    return shipmentRepository.findById(id)
+    await shipmentRepository.updateStatus(
+      id,
+      dto.status as 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED',
+    )
+
+    const updated = await shipmentRepository.findById(id)
+
+    if (dto.status === 'DELIVERED') {
+      businessLogger.log('SHIPMENT_DELIVERED', {
+        service: 'shipments',
+        actor:   { userId: null, role: 'SYSTEM' },
+        target:  { shipmentId: id },
+        metadata: { location: dto.location },
+      })
+    }
+
+    return updated
   },
 
   getTracking: async (id: string) => {
     const shipment = await shipmentRepository.findById(id)
     if (!shipment) throw new AppError('Shipment not found', 404)
     return {
-      current_status: shipment.status,
+      current_status:   shipment.status,
       current_location: shipment.trackingEvents[0]?.location ?? null,
-      updates: shipment.trackingEvents,
+      updates:          shipment.trackingEvents,
     }
   },
 
@@ -50,7 +85,17 @@ export const shipmentService = {
     const shipment = await shipmentRepository.findById(id)
     if (!shipment) throw new AppError('Shipment not found', 404)
     if (shipment.status === 'CANCELLED') throw new AppError('Shipment already cancelled', 400)
-    return shipmentRepository.updateStatus(id, 'CANCELLED')
+
+    const cancelled = await shipmentRepository.updateStatus(id, 'CANCELLED')
+
+    businessLogger.log('SHIPMENT_FAILED', {
+      service: 'shipments',
+      actor:   { userId: null, role: 'CUSTOMER' },
+      target:  { shipmentId: id },
+      metadata: { reason: 'Cancelled by user' },
+    })
+
+    return cancelled
   },
 
   getLabel: async (shipmentId: string) => {
@@ -69,7 +114,7 @@ export const shipmentService = {
 
   createPickupRequest: (userId: number, dto: CreatePickupRequestDto) =>
     pickupRepository.create(userId, {
-      pickupDate: dto.pickup_date,
+      pickupDate:    dto.pickup_date,
       pickupAddress: dto.pickup_address,
     }),
 

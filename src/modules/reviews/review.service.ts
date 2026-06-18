@@ -1,7 +1,8 @@
-import { reviewRepository } from './review.repository'
-import { productRepository } from '../products/product.repository'
+import { reviewRepository }  from './review.repository'
+import { productRepository }  from '../products/product.repository'
 import { CreateReviewDto, UpdateReviewDto } from './review.schema'
-import { AppError } from '../../shared/utils/app-error'
+import { AppError }           from '../../shared/utils/app-error'
+import { businessLogger }     from '../../shared/logger'
 
 export const reviewService = {
   getByProduct: async (productId: number) => {
@@ -15,9 +16,9 @@ export const reviewService = {
         : 0
 
     return {
-      product_id: productId,
+      product_id:     productId,
       average_rating: Math.round(averageRating * 10) / 10,
-      total_reviews: reviews.length,
+      total_reviews:  reviews.length,
       reviews,
     }
   },
@@ -35,21 +36,48 @@ export const reviewService = {
     const existing = await reviewRepository.findByUserAndProduct(userId, dto.product_id)
     if (existing) throw new AppError('You have already reviewed this product', 409)
 
-    return reviewRepository.create(userId, dto)
+    const review = await reviewRepository.create(userId, dto)
+
+    businessLogger.log('REVIEW_CREATED', {
+      service: 'reviews',
+      actor:   { userId, role: 'CUSTOMER' },
+      target:  { reviewId: review.id, productId: dto.product_id },
+      metadata: { rating: dto.rating },
+    })
+
+    return review
   },
 
   update: async (id: string, userId: number, dto: UpdateReviewDto) => {
     const review = await reviewRepository.findById(id)
     if (!review) throw new AppError('Review not found', 404)
     if (review.userId !== userId) throw new AppError('Forbidden', 403)
-    return reviewRepository.update(id, dto)
+
+    const updated = await reviewRepository.update(id, dto)
+
+    businessLogger.log('REVIEW_UPDATED', {
+      service: 'reviews',
+      actor:   { userId, role: 'CUSTOMER' },
+      target:  { reviewId: id, productId: review.productId },
+      metadata: { fields: Object.keys(dto) },
+    })
+
+    return updated
   },
 
   delete: async (id: string, userId: number) => {
     const review = await reviewRepository.findById(id)
     if (!review) throw new AppError('Review not found', 404)
     if (review.userId !== userId) throw new AppError('Forbidden', 403)
+
     await reviewRepository.delete(id)
+
+    businessLogger.log('REVIEW_DELETED', {
+      service: 'reviews',
+      actor:   { userId, role: 'CUSTOMER' },
+      target:  { reviewId: id, productId: review.productId },
+    })
+
     return { id }
   },
 }
