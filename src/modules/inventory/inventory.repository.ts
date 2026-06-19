@@ -16,7 +16,13 @@ export const inventoryRepository = {
   }) => {
     const { skip, take } = paginate(query);
     const where = {
-      ...(query.category && { product: { category: query.category } }),
+      ...(query.category && {
+        product: {
+          category: {
+            name: { contains: query.category, mode: "insensitive" as const },
+          },
+        },
+      }),
       ...(query.location && {
         warehouse: { location: { contains: query.location } },
       }),
