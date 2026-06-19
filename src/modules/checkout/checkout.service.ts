@@ -4,7 +4,7 @@ import { orderRepository }       from '../orders/order.repository'
 import { promotionRepository }   from '../promotions/promotion.repository'
 import { CreateCheckoutDto }     from './checkout.schema'
 import { AppError }              from '../../shared/utils/app-error'
-import { businessLogger }        from '../../shared/logger'
+import { auditLogger, businessLogger }        from '../../shared/logger'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -190,14 +190,29 @@ export const checkoutService = {
     )
 
     // Si un coupon a été appliqué, tracer son usage et incrémenter le compteur
-    if (checkout.couponCodeId) {
-      await promotionRepository.createCouponUse(
-        checkout.couponCodeId,
-        userId,
-        order.id,
-      )
-      await promotionRepository.incrementCouponUsage(checkout.couponCodeId)
-    }
+    // après createCouponUse() et incrementCouponUsage()
+if (checkout.couponCodeId) {
+  await promotionRepository.createCouponUse(
+    checkout.couponCodeId,
+    userId,
+    order.id,
+  )
+  await promotionRepository.incrementCouponUsage(checkout.couponCodeId)
+
+  businessLogger.log('COUPON_APPLIED', {        // ← ajouter
+    service:  'checkout',
+    actor:    { userId, role: 'CUSTOMER' },
+    target:   { couponId: checkout.couponCodeId, orderId: order.id },
+    metadata: { total: checkout.total },
+  })
+
+  auditLogger.log('COUPON_APPLIED', {           // ← ajouter
+    service:  'checkout',
+    actor:    { userId, role: 'CUSTOMER' },
+    target:   { couponId: checkout.couponCodeId, orderId: order.id },
+    metadata: { total: checkout.total },
+  })
+}
 
     const completed = await checkoutRepository.complete(id, order.id)
 

@@ -19,19 +19,23 @@ export interface Actor {
 // ─── Target ──────────────────────────────────────────────────────────────────
 
 export interface Target {
-  userId?: string | number
-  orderId?: string
-  productId?: string | number
-  paymentId?: string
-  shipmentId?: string
-  basketId?: string
-  checkoutId?: string
-  inventoryId?: string
-  warehouseId?: string
-  reviewId?: string
-  addressId?: string
-  pickupRequestId?: string
-  [key: string]: unknown
+  userId?:           string | number
+  orderId?:          string
+  productId?:        string | number
+  paymentId?:        string
+  shipmentId?:       string
+  basketId?:         string
+  checkoutId?:       string
+  inventoryId?:      string
+  warehouseId?:      string
+  reviewId?:         string
+  addressId?:        string
+  pickupRequestId?:  string
+  categoryId?:       string  
+  promotionId?:      string   
+  discountId?:       string  
+  couponId?:         string   
+  [key: string]:     unknown
 }
 
 // ─── Log Entry (schéma universel section 9) ───────────────────────────────────
@@ -150,6 +154,10 @@ export type BusinessEvent =
   | WarehouseEvent
   | ReviewEvent
   | AddressEvent
+  | CategoryEvent    
+  | PromotionEvent   
+  | DiscountEvent    
+  | CouponEvent      
 
 // ─── Audit Events (section 14) ────────────────────────────────────────────────
 
@@ -174,6 +182,14 @@ export type AuditEvent =
   | 'ORDER_CANCELLED'
   | 'ORDER_STATUS_CHANGED'
   | 'ORDER_REFUNDED'
+  | 'PROMOTION_CREATED'    
+  | 'PROMOTION_TOGGLED'   
+  | 'PROMOTION_DELETED'    
+  | 'COUPON_APPLIED'      
+  | 'DISCOUNT_CREATED'    
+  | 'CATEGORY_CREATED'     
+  | 'CATEGORY_UPDATED'    
+  | 'CATEGORY_DELETED'     
 
 // ─── Security Events (section 16) ────────────────────────────────────────────
 
@@ -213,3 +229,26 @@ export type ErrorEvent =
   | 'NOT_FOUND_ERROR'
   | 'FORBIDDEN_ERROR'
   | 'INTERNAL_ERROR'
+
+  // ─── Category Events (section 7) ────────────────────────────────────────────────
+
+  export type CategoryEvent =
+  | 'CATEGORY_CREATED'
+  | 'CATEGORY_UPDATED'
+  | 'CATEGORY_DELETED'
+
+export type PromotionEvent =
+  | 'PROMOTION_CREATED'
+  | 'PROMOTION_UPDATED'
+  | 'PROMOTION_TOGGLED'
+  | 'PROMOTION_DELETED'
+
+export type DiscountEvent =
+  | 'DISCOUNT_CREATED'
+  | 'DISCOUNT_DELETED'
+
+export type CouponEvent =
+  | 'COUPON_CREATED'
+  | 'COUPON_DELETED'
+  | 'COUPON_APPLIED'
+  | 'COUPON_USAGE_RECORDED'
