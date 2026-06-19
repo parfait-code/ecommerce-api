@@ -27,7 +27,7 @@ const mockCategory = {
 const mockProduct = {
   id: 1,
   name: "Test Product",
-  description: null,
+  description: null as string | null,
   price: 99.99,
   categoryId: "cat-cuid-1",
   category: mockCategory,
@@ -55,21 +55,29 @@ const mockInventoryItem = {
   updatedAt: new Date(),
   product: mockProduct,
   warehouse: mockWarehouse,
-};
+} as any;
 
 describe("InventoryService", () => {
   describe("getAll", () => {
     it("should return all inventory items", async () => {
-      mockInventoryRepository.findAll.mockResolvedValue([mockInventoryItem]);
+      mockInventoryRepository.findAll.mockResolvedValue([
+        [mockInventoryItem],
+        1,
+      ]);
 
-      const result = await inventoryService.getAll({});
+      const result = (await inventoryService.getAll({})) as {
+        items: (typeof mockInventoryItem)[];
+      };
 
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual(mockInventoryItem);
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toEqual(mockInventoryItem);
     });
 
     it("should filter by category", async () => {
-      mockInventoryRepository.findAll.mockResolvedValue([mockInventoryItem]);
+      mockInventoryRepository.findAll.mockResolvedValue([
+        [mockInventoryItem],
+        1,
+      ]);
 
       await inventoryService.getAll({ category: "Electronics" });
 
@@ -79,7 +87,10 @@ describe("InventoryService", () => {
     });
 
     it("should filter by location", async () => {
-      mockInventoryRepository.findAll.mockResolvedValue([mockInventoryItem]);
+      mockInventoryRepository.findAll.mockResolvedValue([
+        [mockInventoryItem],
+        1,
+      ]);
 
       await inventoryService.getAll({ location: "Yaoundé" });
 
@@ -96,6 +107,9 @@ describe("InventoryService", () => {
       const result = await inventoryService.getById("inventory-cuid-1");
 
       expect(result).toEqual(mockInventoryItem);
+      expect(mockInventoryRepository.findById).toHaveBeenCalledWith(
+        "inventory-cuid-1",
+      );
     });
 
     it("should throw 404 if inventory item not found", async () => {
@@ -122,7 +136,7 @@ describe("InventoryService", () => {
 
   describe("getOutOfStock", () => {
     it("should return out of stock items", async () => {
-      const outOfStock = { ...mockInventoryItem, quantity: 0 };
+      const outOfStock = { ...mockInventoryItem, quantity: 0 } as any;
       mockInventoryRepository.findOutOfStock.mockResolvedValue([outOfStock]);
 
       const result = await inventoryService.getOutOfStock();
@@ -145,7 +159,7 @@ describe("InventoryService", () => {
 
   describe("create", () => {
     it("should create an inventory item", async () => {
-      mockProductRepository.findById.mockResolvedValue(mockProduct);
+      mockProductRepository.findById.mockResolvedValue(mockProduct as any);
       mockWarehouseRepository.findById.mockResolvedValue(mockWarehouse);
       mockInventoryRepository.findByProductAndWarehouse.mockResolvedValue(null);
       mockInventoryRepository.create.mockResolvedValue(mockInventoryItem);
@@ -172,7 +186,7 @@ describe("InventoryService", () => {
     });
 
     it("should throw 404 if warehouse not found", async () => {
-      mockProductRepository.findById.mockResolvedValue(mockProduct);
+      mockProductRepository.findById.mockResolvedValue(mockProduct as any);
       mockWarehouseRepository.findById.mockResolvedValue(null);
 
       await expect(
@@ -185,7 +199,7 @@ describe("InventoryService", () => {
     });
 
     it("should throw 409 if inventory item already exists", async () => {
-      mockProductRepository.findById.mockResolvedValue(mockProduct);
+      mockProductRepository.findById.mockResolvedValue(mockProduct as any);
       mockWarehouseRepository.findById.mockResolvedValue(mockWarehouse);
       mockInventoryRepository.findByProductAndWarehouse.mockResolvedValue(
         mockInventoryItem,
@@ -208,7 +222,7 @@ describe("InventoryService", () => {
 
   describe("update", () => {
     it("should update inventory item", async () => {
-      const updated = { ...mockInventoryItem, quantity: 100 };
+      const updated = { ...mockInventoryItem, quantity: 100 } as any;
       mockInventoryRepository.findById.mockResolvedValue(mockInventoryItem);
       mockInventoryRepository.update.mockResolvedValue(updated);
 
@@ -260,27 +274,28 @@ describe("InventoryService", () => {
     };
 
     it("should transfer stock between warehouses (destination exists)", async () => {
-      const sourceItem = { ...mockInventoryItem, quantity: 100 };
+      const sourceItem = { ...mockInventoryItem, quantity: 100 } as any;
       const destinationItem = {
         ...mockInventoryItem,
         id: "inventory-cuid-2",
         warehouseId: "warehouse-cuid-2",
         quantity: 20,
-      };
+        warehouse: mockDestinationWarehouse,
+      } as any;
 
       mockInventoryRepository.findById.mockResolvedValue(sourceItem);
       mockInventoryRepository.findByProductAndWarehouse
-        .mockResolvedValueOnce(sourceItem) // source lookup
-        .mockResolvedValueOnce(destinationItem); // destination lookup
+        .mockResolvedValueOnce(sourceItem)
+        .mockResolvedValueOnce(destinationItem);
 
       mockInventoryRepository.decrementQuantity.mockResolvedValue({
         ...sourceItem,
         quantity: 70,
-      });
+      } as any);
       mockInventoryRepository.incrementQuantity.mockResolvedValue({
         ...destinationItem,
         quantity: 50,
-      });
+      } as any);
 
       const result = await inventoryService.transfer({
         item_id: "inventory-cuid-1",
@@ -306,24 +321,24 @@ describe("InventoryService", () => {
     });
 
     it("should create destination inventory if it does not exist", async () => {
-      const sourceItem = { ...mockInventoryItem, quantity: 100 };
+      const sourceItem = { ...mockInventoryItem, quantity: 100 } as any;
 
       mockInventoryRepository.findById.mockResolvedValue(sourceItem);
       mockInventoryRepository.findByProductAndWarehouse
-        .mockResolvedValueOnce(sourceItem) // source lookup
-        .mockResolvedValueOnce(null); // destination does not exist
+        .mockResolvedValueOnce(sourceItem)
+        .mockResolvedValueOnce(null);
 
       mockInventoryRepository.decrementQuantity.mockResolvedValue({
         ...sourceItem,
         quantity: 70,
-      });
+      } as any);
       mockInventoryRepository.create.mockResolvedValue({
         ...mockInventoryItem,
         id: "inventory-cuid-new",
         warehouseId: "warehouse-cuid-2",
         quantity: 30,
         warehouse: mockDestinationWarehouse,
-      });
+      } as any);
 
       await inventoryService.transfer({
         item_id: "inventory-cuid-1",
@@ -354,7 +369,7 @@ describe("InventoryService", () => {
     });
 
     it("should throw 400 if insufficient stock", async () => {
-      const sourceItem = { ...mockInventoryItem, quantity: 5 };
+      const sourceItem = { ...mockInventoryItem, quantity: 5 } as any;
 
       mockInventoryRepository.findById.mockResolvedValue(sourceItem);
       mockInventoryRepository.findByProductAndWarehouse.mockResolvedValue(
@@ -366,7 +381,7 @@ describe("InventoryService", () => {
           item_id: "inventory-cuid-1",
           from_warehouse: "warehouse-cuid-1",
           to_warehouse: "warehouse-cuid-2",
-          quantity: 50, // more than available (5)
+          quantity: 50,
         }),
       ).rejects.toThrow(
         new AppError("Insufficient stock in source warehouse", 400),

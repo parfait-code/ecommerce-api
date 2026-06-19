@@ -7,6 +7,7 @@ import { AppError } from "../../src/shared/utils/app-error";
 jest.mock("../../src/modules/checkout/checkout.repository");
 jest.mock("../../src/modules/basket/basket.repository");
 jest.mock("../../src/modules/orders/order.repository");
+jest.mock("../../src/modules/promotions/promotion.repository");
 
 const mockCheckoutRepository = checkoutRepository as jest.Mocked<
   typeof checkoutRepository
@@ -20,15 +21,15 @@ const mockOrderRepository = orderRepository as jest.Mocked<
 
 const mockCategory = {
   id: "cat-cuid-1",
-  name: "Electronics",
-  slug: "electronics",
+  name: "Test Category",
+  slug: "test-category",
 };
 
 const mockProduct = {
   id: 1,
   name: "Test Product",
-  description: null,
-  price: 99.99,
+  description: null as string | null,
+  price: 50.0,
   categoryId: "cat-cuid-1",
   category: mockCategory,
   stock: 10,
@@ -51,12 +52,15 @@ const mockBasketWithItems = {
       product: mockProduct,
     },
   ],
-};
+} as any;
 
 const mockEmptyBasket = {
-  ...mockBasketWithItems,
+  id: "basket-cuid-1",
+  userId: 1,
+  createdAt: new Date(),
+  updatedAt: new Date(),
   items: [],
-};
+} as any;
 
 const shippingAddress = {
   street: "123 Rue Principale",
@@ -74,12 +78,25 @@ const mockCheckout = {
   billingAddress: null,
   paymentMethodId: null,
   total: 150.0,
-  items: [{ productId: 1, name: "Test Product", price: 50.0, quantity: 3 }],
+  items: [
+    {
+      productId: 1,
+      name: "Test Product",
+      price: 50.0,
+      finalPrice: 50.0,
+      quantity: 3,
+      originalPrice: 50.0,
+      discountApplied: false,
+      discountId: null,
+    },
+  ],
   orderId: null,
+  couponCodeId: null,
+  appliedCoupon: null,
   createdAt: new Date(),
   updatedAt: new Date(),
   user: { id: 1, username: "testuser", email: "test@example.com" },
-};
+} as any;
 
 const mockOrder = {
   id: "order-cuid-1",
@@ -90,13 +107,21 @@ const mockOrder = {
   paymentMethodId: null,
   notes: null,
   couponCode: null,
+  couponCodeId: null,
+  appliedCoupon: null,
   totalAmount: 150.0,
   discountedAmount: null,
   createdAt: new Date(),
   updatedAt: new Date(),
   items: [],
-  user: { id: 1, username: "testuser", email: "test@example.com" },
-};
+  user: {
+    id: 1,
+    username: "testuser",
+    email: "test@example.com",
+    firstName: "Test",
+    lastName: "User",
+  },
+} as any;
 
 const mockCreateDto = {
   basket_id: "basket-cuid-1",
@@ -118,7 +143,11 @@ describe("CheckoutService", () => {
         1,
         mockCreateDto,
         150.0,
-        [{ productId: 1, name: "Test Product", price: 50.0, quantity: 3 }],
+        150.0,
+        expect.arrayContaining([
+          expect.objectContaining({ productId: 1, quantity: 3 }),
+        ]),
+        undefined,
       );
       expect(result).toEqual(mockCheckout);
     });
@@ -150,7 +179,9 @@ describe("CheckoutService", () => {
         1,
         expect.anything(),
         150.0,
+        150.0,
         expect.anything(),
+        undefined,
       );
     });
   });
@@ -179,7 +210,7 @@ describe("CheckoutService", () => {
         ...mockCheckout,
         status: "COMPLETED",
         orderId: "order-cuid-1",
-      };
+      } as any;
       mockCheckoutRepository.findById.mockResolvedValue(mockCheckout);
       mockOrderRepository.create.mockResolvedValue(mockOrder);
       mockCheckoutRepository.complete.mockResolvedValue(completedCheckout);
@@ -204,7 +235,7 @@ describe("CheckoutService", () => {
     });
 
     it("should throw 403 if user does not own the checkout", async () => {
-      mockCheckoutRepository.findById.mockResolvedValue(mockCheckout); // userId: 1
+      mockCheckoutRepository.findById.mockResolvedValue(mockCheckout);
 
       await expect(
         checkoutService.complete("checkout-cuid-1", 99),
@@ -212,7 +243,7 @@ describe("CheckoutService", () => {
     });
 
     it("should throw 400 if checkout already completed", async () => {
-      const completedCheckout = { ...mockCheckout, status: "COMPLETED" };
+      const completedCheckout = { ...mockCheckout, status: "COMPLETED" } as any;
       mockCheckoutRepository.findById.mockResolvedValue(completedCheckout);
 
       await expect(
