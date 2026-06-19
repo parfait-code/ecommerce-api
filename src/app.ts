@@ -22,6 +22,7 @@ import shipmentRouter      from './modules/shipments/shipment.router'
 import addressRouter       from './modules/address/address.router'
 import dashboardRouter from './modules/dashboard/dashboard.router'
 import categoryRouter from './modules/categories/category.router'
+import promotionRouter from './modules/promotions/promotion.router'
 
 const app = express()
 
@@ -85,6 +86,7 @@ app.use(shipmentRouter)
 app.use(addressRouter)
 app.use(dashboardRouter)
 app.use(categoryRouter)
+app.use(promotionRouter)
 
 // ── Gestion d'erreurs (doit être le dernier middleware) ───────────────────────
 app.use(errorHandler)
