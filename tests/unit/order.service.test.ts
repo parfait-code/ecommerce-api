@@ -85,12 +85,13 @@ describe('OrderService', () => {
         shippingAddress,
       })
 
+      // Le service passe couponCodeId=undefined uniquement si couponCode est présent dans le dto
+      // Sans couponCode dans le dto, le 5ème argument n'est pas passé du tout
       expect(mockOrderRepository.create).toHaveBeenCalledWith(
         1,
         expect.anything(),
         150.00,
         [{ productId: 1, quantity: 2, price: 75.00 }],
-        undefined,
       )
       expect(result).toEqual(mockOrder)
     })
