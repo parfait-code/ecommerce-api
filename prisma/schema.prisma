@@ -96,19 +96,21 @@ model OrderItem {
 }
 
 model Checkout {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   userId          Int
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   basketId        String
-  status          String   @default("PENDING")
+  status          String      @default("PENDING")
   shippingAddress Json
   billingAddress  Json?
   paymentMethodId String?
-  total           Float    @default(0)
-  items           Json     @default("[]")
+  total           Float       @default(0)
+  items           Json        @default("[]")
   orderId         String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  couponCodeId    String?
+  appliedCoupon   CouponCode? @relation(fields: [couponCodeId], references: [id], onDelete: SetNull)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 }
 
 enum PaymentMethod {
@@ -329,6 +331,7 @@ model CouponCode {
   isActive     Boolean     @default(true)
   uses         CouponUse[]
   orders       Order[]     
+  checkouts Checkout[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 }
