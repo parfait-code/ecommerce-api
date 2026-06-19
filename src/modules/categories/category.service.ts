@@ -1,0 +1,153 @@
+import { categoryRepository } from './category.repository'
+import { CreateCategoryDto, UpdateCategoryDto } from './category.schema'
+import { AppError } from '../../shared/utils/app-error'
+import { cache } from '../../shared/utils/cache'
+import { businessLogger } from '../../shared/logger'
+
+const CACHE_KEYS = {
+  all:      'categories:all',
+  single:   (id: string)   => `categories:${id}`,
+  bySlug:   (slug: string) => `categories:slug:${slug}`,
+  products: (slug: string, page: number, limit: number) =>
+    `categories:${slug}:products:${page}:${limit}`,
+}
+
+export const categoryService = {
+  getAll: async () => {
+    const cached = await cache.get(CACHE_KEYS.all)
+    if (cached) return cached
+
+    const categories = await categoryRepository.findAll()
+    await cache.set(CACHE_KEYS.all, categories)
+    return categories
+  },
+
+  getById: async (id: string) => {
+    const cacheKey = CACHE_KEYS.single(id)
+    const cached   = await cache.get(cacheKey)
+    if (cached) return cached
+
+    const category = await categoryRepository.findById(id)
+    if (!category) throw new AppError('Category not found', 404)
+
+    await cache.set(cacheKey, category)
+    return category
+  },
+
+  getBySlug: async (slug: string) => {
+    const cacheKey = CACHE_KEYS.bySlug(slug)
+    const cached   = await cache.get(cacheKey)
+    if (cached) return cached
+
+    const category = await categoryRepository.findBySlug(slug)
+    if (!category) throw new AppError('Category not found', 404)
+
+    await cache.set(cacheKey, category)
+    return category
+  },
+
+  getProducts: async (
+    slug: string,
+    query: { page?: string; limit?: string },
+  ) => {
+    const page     = Number(query.page  ?? 1)
+    const limit    = Number(query.limit ?? 20)
+    const cacheKey = CACHE_KEYS.products(slug, page, limit)
+    const cached   = await cache.get(cacheKey)
+    if (cached) return cached
+
+    const category = await categoryRepository.findBySlug(slug)
+    if (!category) throw new AppError('Category not found', 404)
+
+    const [items, total] = await categoryRepository.findProducts(slug, query)
+    const result = {
+      category: { id: category.id, name: category.name, slug: category.slug },
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    }
+
+    await cache.set(cacheKey, result)
+    return result
+  },
+
+  create: async (dto: CreateCategoryDto) => {
+    const existingName = await categoryRepository.existsByName(dto.name)
+    if (existingName) throw new AppError('Category name already taken', 409)
+
+    const existingSlug = await categoryRepository.existsBySlug(dto.slug)
+    if (existingSlug) throw new AppError('Category slug already taken', 409)
+
+    if (dto.parentId) {
+      const parent = await categoryRepository.findById(dto.parentId)
+      if (!parent) throw new AppError('Parent category not found', 404)
+    }
+
+    const category = await categoryRepository.create(dto)
+    await cache.del(CACHE_KEYS.all)
+
+    businessLogger.log('PRODUCT_CREATED', {
+      service:  'categories',
+      actor:    { userId: null, role: 'ADMIN' },
+      target:   { productId: category.id },
+      metadata: { name: category.name, slug: category.slug },
+    })
+
+    return category
+  },
+
+  update: async (id: string, dto: UpdateCategoryDto) => {
+    const category = await categoryRepository.findById(id)
+    if (!category) throw new AppError('Category not found', 404)
+
+    if (dto.name && dto.name !== category.name) {
+      const existingName = await categoryRepository.existsByName(dto.name)
+      if (existingName) throw new AppError('Category name already taken', 409)
+    }
+
+    if (dto.slug && dto.slug !== category.slug) {
+      const existingSlug = await categoryRepository.existsBySlug(dto.slug)
+      if (existingSlug) throw new AppError('Category slug already taken', 409)
+    }
+
+    if (dto.parentId) {
+      if (dto.parentId === id)
+        throw new AppError('A category cannot be its own parent', 400)
+      const parent = await categoryRepository.findById(dto.parentId)
+      if (!parent) throw new AppError('Parent category not found', 404)
+    }
+
+    const updated = await categoryRepository.update(id, dto)
+
+    await cache.del(
+      CACHE_KEYS.single(id),
+      CACHE_KEYS.bySlug(category.slug),
+      CACHE_KEYS.all,
+    )
+
+    return updated
+  },
+
+  delete: async (id: string) => {
+    const category = await categoryRepository.findById(id)
+    if (!category) throw new AppError('Category not found', 404)
+
+    if (category._count.products > 0)
+      throw new AppError(
+        `Cannot delete category with ${category._count.products} product(s) attached`,
+        400,
+      )
+
+    await categoryRepository.delete(id)
+
+    await cache.del(
+      CACHE_KEYS.single(id),
+      CACHE_KEYS.bySlug(category.slug),
+      CACHE_KEYS.all,
+    )
+
+    return { message: 'Category deleted successfully' }
+  },
+}
