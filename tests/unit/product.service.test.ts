@@ -1,19 +1,37 @@
+// tests/unit/product.service.test.ts
 import { productService } from '../../src/modules/products/product.service'
 import { productRepository } from '../../src/modules/products/product.repository'
 import { AppError } from '../../src/shared/utils/app-error'
 
 jest.mock('../../src/modules/products/product.repository')
+jest.mock('../../src/shared/utils/cache', () => ({
+  cache: {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue(undefined),
+    del: jest.fn().mockResolvedValue(undefined),
+    delByPattern: jest.fn().mockResolvedValue(undefined),
+  },
+}))
 
 const mockProductRepository = productRepository as jest.Mocked<typeof productRepository>
 
 const mockCategory = {
-  id: 'cat-cuid-1', name: 'Electronics', slug: 'electronics',
+  id: 'cat-cuid-1',
+  name: 'Electronics',
+  slug: 'electronics',
 }
 
 const mockProduct = {
-  id: 1, name: 'Test Product', description: 'A test product',
-  price: 99.99, categoryId: 'cat-cuid-1', category: mockCategory,
-  stock: 10, images: [], createdAt: new Date(), updatedAt: new Date(),
+  id: 1,
+  name: 'Test Product',
+  description: 'A test product',
+  price: 99.99,
+  categoryId: 'cat-cuid-1',
+  category: mockCategory,
+  stock: 10,
+  images: [],
+  createdAt: new Date(),
+  updatedAt: new Date(),
 }
 
 describe('ProductService', () => {
@@ -38,8 +56,11 @@ describe('ProductService', () => {
     it('should create product with categoryId', async () => {
       mockProductRepository.create.mockResolvedValue(mockProduct)
       const result = await productService.create({
-        name: 'Test Product', price: 99.99,
-        categoryId: 'cat-cuid-1', stock: 10, images: [],
+        name: 'Test Product',
+        price: 99.99,
+        categoryId: 'cat-cuid-1',
+        stock: 10,
+        images: [],
       })
       expect(result).toEqual(mockProduct)
       expect(result).toHaveProperty('categoryId', 'cat-cuid-1')
@@ -80,6 +101,23 @@ describe('ProductService', () => {
       await productService.getAll({ categoryId: 'cat-cuid-1' })
       expect(mockProductRepository.findAll).toHaveBeenCalledWith(
         expect.objectContaining({ categoryId: 'cat-cuid-1' }),
+      )
+    })
+  })
+
+  describe('update', () => {
+    it('should update product and return updated', async () => {
+      const updated = { ...mockProduct, price: 149.99 }
+      mockProductRepository.findById.mockResolvedValue(mockProduct)
+      mockProductRepository.update.mockResolvedValue(updated)
+      const result = await productService.update(1, { price: 149.99 })
+      expect((result as typeof mockProduct).price).toBe(149.99)
+    })
+
+    it('should throw 404 if product not found', async () => {
+      mockProductRepository.findById.mockResolvedValue(null)
+      await expect(productService.update(999, { price: 50 })).rejects.toThrow(
+        new AppError('Product not found', 404),
       )
     })
   })

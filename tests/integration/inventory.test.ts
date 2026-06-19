@@ -1,3 +1,4 @@
+// tests/integration/inventory.test.ts
 import request from 'supertest'
 import app from '../../src/app'
 import { prisma } from '../../src/shared/config/database'
@@ -26,6 +27,7 @@ describe('Inventory Integration', () => {
   let adminToken: string
   let userToken: string
   let productId: number
+  let categoryId: string
   let warehouseId: string
   let warehouseId2: string
   let inventoryId: string
@@ -37,6 +39,12 @@ describe('Inventory Integration', () => {
     const userRes = await request(app).post('/signup').send(userCredentials)
     userToken = userRes.body.data.token
 
+    const catRes = await request(app)
+      .post('/categories')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: `Inventory Electronics ${timestamp}`, slug: `inventory-electronics-${timestamp}` })
+    categoryId = catRes.body.data.id
+
     const productRes = await request(app)
       .post('/product')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -44,7 +52,7 @@ describe('Inventory Integration', () => {
         name: 'Inventory Test Product',
         description: 'Product for inventory tests',
         price: 30.00,
-        category: 'Electronics',
+        categoryId,
         stock: 100,
       })
     productId = productRes.body.data.id
@@ -68,6 +76,7 @@ describe('Inventory Integration', () => {
     await prisma.warehouse.deleteMany({
       where: { name: { startsWith: 'Inventory Test Warehouse' } },
     })
+    await prisma.category.deleteMany({ where: { id: categoryId } })
     await prisma.user.deleteMany({
       where: {
         username: { in: [adminCredentials.username, userCredentials.username] },
@@ -139,24 +148,30 @@ describe('Inventory Integration', () => {
   })
 
   describe('GET /inventory', () => {
-    it('should return all inventory items when authenticated', async () => {
+    it('should return paginated inventory when authenticated', async () => {
       const res = await request(app)
         .get('/inventory')
         .set('Authorization', `Bearer ${userToken}`)
 
       expect(res.status).toBe(200)
       expect(res.body.status).toBe(true)
-      expect(Array.isArray(res.body.data)).toBe(true)
+      expect(res.body.data).toHaveProperty('items')
+      expect(res.body.data).toHaveProperty('total')
+      expect(res.body.data).toHaveProperty('page')
+      expect(res.body.data).toHaveProperty('limit')
+      expect(res.body.data).toHaveProperty('totalPages')
+      expect(Array.isArray(res.body.data.items)).toBe(true)
     })
 
     it('should filter by category', async () => {
       const res = await request(app)
-        .get('/inventory?category=Electronics')
+        .get(`/inventory?category=Inventory Electronics ${timestamp}`)
         .set('Authorization', `Bearer ${userToken}`)
 
       expect(res.status).toBe(200)
-      res.body.data.forEach((item: { product: { category: string } }) => {
-        expect(item.product.category).toBe('Electronics')
+      expect(res.body.data).toHaveProperty('items')
+      res.body.data.items.forEach((item: { product: { categoryId: string } }) => {
+        expect(item.product.categoryId).toBe(categoryId)
       })
     })
 
@@ -187,11 +202,16 @@ describe('Inventory Integration', () => {
 
   describe('GET /inventory/low-stock', () => {
     it('should return items below default threshold (10)', async () => {
-      // Create a low stock item
+      const catRes = await request(app)
+        .post('/categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: `Low Stock Cat ${timestamp}`, slug: `low-stock-cat-${timestamp}` })
+      const lowCatId = catRes.body.data.id
+
       const lowStockProduct = await request(app)
         .post('/product')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Low Stock Product', price: 10, category: 'Test', stock: 5 })
+        .send({ name: 'Low Stock Product', price: 10, categoryId: lowCatId, stock: 5 })
 
       await request(app)
         .post('/inventory')
@@ -211,6 +231,7 @@ describe('Inventory Integration', () => {
 
       await prisma.inventory.deleteMany({ where: { productId: lowStockProduct.body.data.id } })
       await prisma.product.deleteMany({ where: { id: lowStockProduct.body.data.id } })
+      await prisma.category.deleteMany({ where: { id: lowCatId } })
     })
   })
 
