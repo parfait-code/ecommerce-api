@@ -1,155 +1,186 @@
-import { prisma } from "../../shared/config/database";
+import { orderRepository } from "./order.repository";
+import { productRepository } from "../products/product.repository";
+import { loyaltyService } from "../loyalty/loyalty.service";
+import {
+  CreateOrderDto,
+  UpdateOrderDto,
+  UpdateOrderStatusDto,
+} from "./order.schema";
+import { AppError } from "../../shared/utils/app-error";
+import { cache } from "../../shared/utils/cache";
+import { businessLogger, auditLogger } from "../../shared/logger";
+import { OrderStatus } from "@prisma/client";
 
-export const dashboardService = {
-  getStats: async () => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+const CACHE_KEYS = {
+  all: (query: Record<string, string>) => `orders:all:${JSON.stringify(query)}`,
+  single: (id: string) => `orders:${id}`,
+};
 
-    const [
-      totalProducts,
-      addedThisMonth,
-      totalOrders,
-      ordersThisMonth,
-      ordersLastMonth,
-      totalUsers,
-      paymentsThisMonth,
-      paymentsLastMonth,
-      lowStockCount,
-      shipmentsInProgress,
-      shipmentsLastMonth,
-      activePromotions,
-      couponUsageThisMonth,
-      revenueFromCoupons,
-    ] = await Promise.all([
-      prisma.product.count(),
-      prisma.product.count({ where: { createdAt: { gte: startOfMonth } } }),
-      prisma.order.count(),
-      prisma.order.count({ where: { createdAt: { gte: startOfMonth } } }),
-      prisma.order.count({
-        where: { createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
-      }),
-      prisma.user.count(),
-      prisma.payment.aggregate({
-        where: { createdAt: { gte: startOfMonth }, status: "COMPLETED" },
-        _sum: { amount: true },
-      }),
-      prisma.payment.aggregate({
-        where: {
-          createdAt: { gte: startOfLastMonth, lt: startOfMonth },
-          status: "COMPLETED",
-        },
-        _sum: { amount: true },
-      }),
-      prisma.inventory.count({ where: { quantity: { lte: 10, gt: 0 } } }),
-      prisma.shipment.count({ where: { status: "IN_TRANSIT" } }),
-      prisma.shipment.count({
-        where: {
-          status: "IN_TRANSIT",
-          createdAt: { gte: startOfLastMonth, lt: startOfMonth },
-        },
-      }),
-      prisma.promotion.count({ where: { isActive: true, status: "ACTIVE" } }),
-      prisma.couponCode.aggregate({
-        where: { createdAt: { gte: startOfMonth } },
-        _sum: { usedCount: true },
-      }),
-      prisma.payment.aggregate({
-        where: {
-          createdAt: { gte: startOfMonth },
-          status: "COMPLETED",
-          order: { couponCodeId: { not: null } },
-        },
-        _sum: { amount: true },
-      }),
-    ]);
+export const orderService = {
+  getAll: async (query: {
+    status?: string;
+    customer?: string;
+    page?: string;
+    limit?: string;
+  }) => {
+    const cacheKey = CACHE_KEYS.all(query as Record<string, string>);
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
 
-    const calcTrend = (current: number, previous: number) =>
-      previous === 0 ? 0 : Math.round(((current - previous) / previous) * 100);
-
-    const paymentAmountThisMonth = paymentsThisMonth._sum.amount ?? 0;
-    const paymentAmountLastMonth = paymentsLastMonth._sum.amount ?? 0;
-
-    return {
-      products: {
-        total: totalProducts,
-        addedThisMonth,
-      },
-      orders: {
-        total: totalOrders,
-        thisMonth: ordersThisMonth,
-        trend: calcTrend(ordersThisMonth, ordersLastMonth),
-      },
-      users: {
-        total: totalUsers,
-        active: totalUsers,
-      },
-      payments: {
-        totalAmountThisMonth: paymentAmountThisMonth,
-        currency: "XAF",
-        trend: calcTrend(paymentAmountThisMonth, paymentAmountLastMonth),
-      },
-      inventory: {
-        lowStockCount,
-      },
-      shipments: {
-        inProgress: shipmentsInProgress,
-        trend: calcTrend(shipmentsInProgress, shipmentsLastMonth),
-      },
-      promotions: {
-        active: activePromotions,
-        couponUsageThisMonth: couponUsageThisMonth._sum.usedCount ?? 0,
-        revenueFromCouponsThisMonth: revenueFromCoupons._sum.amount ?? 0,
-        currency: "XAF",
-      },
+    const [items, total] = await orderRepository.findAll(query);
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    const result = {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     };
+
+    await cache.set(cacheKey, result);
+    return result;
   },
 
-  getSalesChart: async (query: { year?: string; period?: string }) => {
-    const year = Number(query.year ?? new Date().getFullYear());
-    const period = query.period ?? "monthly";
+  getById: async (id: string) => {
+    const cacheKey = CACHE_KEYS.single(id);
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
 
-    const MONTH_LABELS = [
-      "Jan",
-      "Fév",
-      "Mar",
-      "Avr",
-      "Mai",
-      "Jun",
-      "Jul",
-      "Aoû",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Déc",
-    ];
+    const order = await orderRepository.findById(id);
+    if (!order) throw new AppError("Order not found", 404);
 
-    const points = await Promise.all(
-      MONTH_LABELS.map(async (label, index) => {
-        const start = new Date(year, index, 1);
-        const end = new Date(year, index + 1, 1);
+    await cache.set(cacheKey, order);
+    return order;
+  },
 
-        const [agg, orderCount] = await Promise.all([
-          prisma.payment.aggregate({
-            where: {
-              createdAt: { gte: start, lt: end },
-              status: "COMPLETED",
-            },
-            _sum: { amount: true },
-          }),
-          prisma.order.count({
-            where: { createdAt: { gte: start, lt: end } },
-          }),
-        ]);
+  create: async (userId: number, dto: CreateOrderDto) => {
+    const orderItems: {
+      productId: number;
+      quantity: number;
+      price: number;
+      originalPrice: number;
+      discountAmount: number;
+    }[] = [];
+    let totalAmount = 0;
 
-        return {
-          label,
-          amount: agg._sum.amount ?? 0,
-          orderCount,
-        };
-      }),
+    for (const item of dto.items) {
+      const product = await productRepository.findById(Number(item.id));
+      if (!product) throw new AppError(`Product ${item.id} not found`, 404);
+
+      orderItems.push({
+        productId: product.id,
+        quantity: item.quantity,
+        price: product.price,
+        originalPrice: product.price,
+        discountAmount: 0,
+      });
+      totalAmount += product.price * item.quantity;
+    }
+
+    const order = await orderRepository.create(
+      userId,
+      dto,
+      totalAmount,
+      orderItems,
+    );
+    await cache.delByPattern("orders:all:*");
+
+    businessLogger.log("ORDER_CREATED", {
+      service: "orders",
+      actor: { userId, role: "CUSTOMER" },
+      target: { orderId: order.id },
+      metadata: { totalAmount, itemCount: orderItems.length },
+    });
+
+    return order;
+  },
+
+  update: async (id: string, dto: UpdateOrderDto) => {
+    const order = await orderRepository.findById(id);
+    if (!order) throw new AppError("Order not found", 404);
+
+    const updated = await orderRepository.update(id, dto);
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("orders:all:*");
+    return updated;
+  },
+
+  getByUser: async (
+    userId: number,
+    query: { page?: string; limit?: string },
+  ) => {
+    const [items, total] = await orderRepository.findByUser(userId, query);
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 10);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  },
+
+  updateStatus: async (
+    id: string,
+    dto: UpdateOrderStatusDto,
+    changedBy: number | null,
+  ) => {
+    const order = await orderRepository.findById(id);
+    if (!order) throw new AppError("Order not found", 404);
+
+    const oldStatus = order.status;
+    const updated = await orderRepository.updateStatus(
+      id,
+      dto.status,
+      changedBy,
+      dto.reason,
     );
 
-    return { period, year, points, currency: "XAF" };
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("orders:all:*");
+
+    businessLogger.log("ORDER_STATUS_CHANGED", {
+      service: "orders",
+      actor: { userId: order.userId, role: "ADMIN" },
+      target: { orderId: id },
+      metadata: { oldStatus, newStatus: dto.status },
+    });
+
+    auditLogger.log("ORDER_STATUS_CHANGED", {
+      service: "orders",
+      actor: { userId: order.userId, role: "ADMIN" },
+      target: { orderId: id },
+      metadata: { oldStatus, newStatus: dto.status },
+    });
+
+    if (
+      dto.status === OrderStatus.DELIVERED &&
+      oldStatus !== OrderStatus.DELIVERED
+    ) {
+      await loyaltyService.earnFromOrder(order.userId, id, order.totalAmount);
+    }
+
+    return updated;
+  },
+
+  delete: async (id: string) => {
+    const order = await orderRepository.findById(id);
+    if (!order) throw new AppError("Order not found", 404);
+
+    await orderRepository.delete(id);
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("orders:all:*");
+
+    businessLogger.log("ORDER_CANCELLED", {
+      service: "orders",
+      actor: { userId: order.userId, role: "CUSTOMER" },
+      target: { orderId: id },
+      metadata: { totalAmount: order.totalAmount },
+    });
+
+    auditLogger.log("ORDER_CANCELLED", {
+      service: "orders",
+      actor: { userId: order.userId, role: "CUSTOMER" },
+      target: { orderId: id },
+      metadata: { totalAmount: order.totalAmount },
+    });
+
+    return { message: "Order cancelled successfully" };
   },
 };

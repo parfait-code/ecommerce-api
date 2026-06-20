@@ -18,6 +18,9 @@ export const dashboardService = {
       lowStockCount,
       shipmentsInProgress,
       shipmentsLastMonth,
+      activePromotions,
+      couponUsageThisMonth,
+      revenueFromCoupons,
     ] = await Promise.all([
       prisma.product.count(),
       prisma.product.count({ where: { createdAt: { gte: startOfMonth } } }),
@@ -92,6 +95,12 @@ export const dashboardService = {
       shipments: {
         inProgress: shipmentsInProgress,
         trend: calcTrend(shipmentsInProgress, shipmentsLastMonth),
+      },
+      promotions: {
+        active: activePromotions,
+        couponUsageThisMonth: couponUsageThisMonth._sum.usedCount ?? 0,
+        revenueFromCouponsThisMonth: revenueFromCoupons._sum.amount ?? 0,
+        currency: "XAF",
       },
     };
   },
