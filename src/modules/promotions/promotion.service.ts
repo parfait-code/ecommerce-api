@@ -41,13 +41,6 @@ export const promotionService = {
 
     const promotion = await promotionRepository.create(dto);
 
-    businessLogger.log("PRODUCT_CREATED", {
-      service: "promotions",
-      actor: { userId: null, role: "ADMIN" },
-      target: { productId: promotion.id },
-      metadata: { name: promotion.name, slug: promotion.slug },
-    });
-
     businessLogger.log("PROMOTION_CREATED", {
       service: "promotions",
       actor: { userId: null, role: "ADMIN" },
@@ -61,6 +54,7 @@ export const promotionService = {
       target: { promotionId: promotion.id },
       metadata: { name: promotion.name, slug: promotion.slug },
     });
+
     return promotion;
   },
 
@@ -78,7 +72,16 @@ export const promotionService = {
         throw new AppError("endDate must be after startDate", 400);
     }
 
-    return promotionRepository.update(id, dto);
+    const updated = await promotionRepository.update(id, dto);
+
+    businessLogger.log("PROMOTION_UPDATED", {
+      service: "promotions",
+      actor: { userId: null, role: "ADMIN" },
+      target: { promotionId: id },
+      metadata: { fields: Object.keys(dto) },
+    });
+
+    return updated;
   },
 
   toggle: async (id: string) => {
@@ -86,13 +89,6 @@ export const promotionService = {
     if (!promotion) throw new AppError("Promotion not found", 404);
 
     const updated = await promotionRepository.toggle(id, !promotion.isActive);
-
-    businessLogger.log("PRODUCT_UPDATED", {
-      service: "promotions",
-      actor: { userId: null, role: "ADMIN" },
-      target: { productId: id },
-      metadata: { isActive: updated.isActive },
-    });
 
     businessLogger.log("PROMOTION_TOGGLED", {
       service: "promotions",
@@ -129,6 +125,7 @@ export const promotionService = {
       target: { promotionId: id },
       metadata: { name: promotion.name },
     });
+
     return { message: "Promotion deleted successfully" };
   },
 
@@ -209,6 +206,13 @@ export const promotionService = {
       throw new AppError("Discount does not belong to this promotion", 400);
 
     await promotionRepository.deleteDiscount(discountId);
+
+    businessLogger.log("DISCOUNT_DELETED", {
+      service: "promotions",
+      actor: { userId: null, role: "ADMIN" },
+      target: { promotionId, discountId },
+    });
+
     return { message: "Discount deleted successfully" };
   },
 
@@ -246,6 +250,13 @@ export const promotionService = {
       throw new AppError("Coupon does not belong to this promotion", 400);
 
     await promotionRepository.deleteCoupon(couponId);
+
+    businessLogger.log("COUPON_DELETED", {
+      service: "promotions",
+      actor: { userId: null, role: "ADMIN" },
+      target: { promotionId, couponId },
+    });
+
     return { message: "Coupon deleted successfully" };
   },
 
@@ -253,9 +264,7 @@ export const promotionService = {
     const coupon = await promotionRepository.findCouponByCode(dto.code);
 
     if (!coupon) throw new AppError("Invalid coupon code", 404);
-
     if (!coupon.isActive) throw new AppError("This coupon is not active", 400);
-
     if (!coupon.promotion.isActive)
       throw new AppError(
         "The promotion linked to this coupon is not active",
@@ -282,6 +291,13 @@ export const promotionService = {
         "You have already used this coupon the maximum number of times",
         400,
       );
+
+    businessLogger.log("COUPON_APPLIED", {
+      service: "promotions",
+      actor: { userId, role: "CUSTOMER" },
+      target: { couponId: coupon.id },
+      metadata: { code: coupon.code, promotionId: coupon.promotionId },
+    });
 
     return {
       valid: true,

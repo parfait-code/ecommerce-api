@@ -84,7 +84,7 @@ export const paymentService = {
       notes: dto.notes,
     });
 
-    await orderRepository.updateStatus(dto.order_id, "CONFIRMED");
+    await orderRepository.updateStatus(dto.order_id, "CONFIRMED", null);
 
     businessLogger.log("PAYMENT_SUCCESS", {
       service: "payment",
@@ -124,7 +124,7 @@ export const paymentService = {
     const limit = Number(query.limit ?? 20);
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
-  
+
   getById: async (id: string) => {
     const payment = await paymentRepository.findById(id);
     if (!payment) throw new AppError("Payment not found", 404);
@@ -134,5 +134,4 @@ export const paymentService = {
   getByOrderId: async (orderId: string) => {
     return paymentRepository.findByOrderId(orderId);
   },
-  
 };

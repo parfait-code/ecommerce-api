@@ -88,13 +88,6 @@ export const categoryService = {
     const category = await categoryRepository.create(dto);
     await cache.del(CACHE_KEYS.all);
 
-    businessLogger.log("PRODUCT_CREATED", {
-      service: "categories",
-      actor: { userId: null, role: "ADMIN" },
-      target: { productId: category.id },
-      metadata: { name: category.name, slug: category.slug },
-    });
-
     businessLogger.log("CATEGORY_CREATED", {
       service: "categories",
       actor: { userId: null, role: "ADMIN" },
@@ -175,7 +168,7 @@ export const categoryService = {
       CACHE_KEYS.bySlug(category.slug),
       CACHE_KEYS.all,
     );
-    // dans delete()
+
     businessLogger.log("CATEGORY_DELETED", {
       service: "categories",
       actor: { userId: null, role: "ADMIN" },

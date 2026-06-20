@@ -1,7 +1,5 @@
 // ─── Actor ───────────────────────────────────────────────────────────────────
 
-import { wishlistController } from "../../modules/wishlist/wishlist.controller";
-
 export type ActorRole =
   | "CUSTOMER"
   | "ADMIN"
@@ -37,6 +35,7 @@ export interface Target {
   promotionId?: string;
   discountId?: string;
   couponId?: string;
+  returnRequestId?: string;
   [key: string]: unknown;
 }
 
@@ -64,7 +63,7 @@ export interface RequestContext {
   userAgent: string;
 }
 
-// ─── Business Events (section 15) ────────────────────────────────────────────
+// ─── Business Events ──────────────────────────────────────────────────────────
 
 export type AuthEvent =
   | "USER_REGISTERED"
@@ -146,6 +145,27 @@ export type ReturnEvent =
   | "RETURN_REJECTED"
   | "RETURN_COMPLETED";
 
+export type CategoryEvent =
+  | "CATEGORY_CREATED"
+  | "CATEGORY_UPDATED"
+  | "CATEGORY_DELETED";
+
+export type PromotionEvent =
+  | "PROMOTION_CREATED"
+  | "PROMOTION_UPDATED"
+  | "PROMOTION_TOGGLED"
+  | "PROMOTION_DELETED";
+
+export type DiscountEvent = "DISCOUNT_CREATED" | "DISCOUNT_DELETED";
+
+export type CouponEvent =
+  | "COUPON_CREATED"
+  | "COUPON_DELETED"
+  | "COUPON_APPLIED"
+  | "COUPON_USAGE_RECORDED";
+
+export type WishlistEvent = "WISHLIST_ITEM_ADDED" | "WISHLIST_ITEM_REMOVED";
+
 export type BusinessEvent =
   | AuthEvent
   | ProductEvent
@@ -159,12 +179,12 @@ export type BusinessEvent =
   | WarehouseEvent
   | ReviewEvent
   | AddressEvent
+  | ReturnEvent
   | CategoryEvent
   | PromotionEvent
   | DiscountEvent
   | CouponEvent
-  | WishlistEvent
-  | ReturnEvent;
+  | WishlistEvent;
 
 // ─── Audit Events (section 14) ────────────────────────────────────────────────
 
@@ -225,7 +245,7 @@ export type SystemEvent =
   | "CACHE_MISS"
   | "CACHE_ERROR";
 
-// ─── Error Events (section 6) ────────────────────────────────────────────────
+// ─── Error Events ────────────────────────────────────────────────────────────
 
 export type ErrorEvent =
   | "DATABASE_ERROR"
@@ -236,26 +256,3 @@ export type ErrorEvent =
   | "NOT_FOUND_ERROR"
   | "FORBIDDEN_ERROR"
   | "INTERNAL_ERROR";
-
-// ─── Category Events (section 7) ────────────────────────────────────────────────
-
-export type CategoryEvent =
-  | "CATEGORY_CREATED"
-  | "CATEGORY_UPDATED"
-  | "CATEGORY_DELETED";
-
-export type PromotionEvent =
-  | "PROMOTION_CREATED"
-  | "PROMOTION_UPDATED"
-  | "PROMOTION_TOGGLED"
-  | "PROMOTION_DELETED";
-
-export type DiscountEvent = "DISCOUNT_CREATED" | "DISCOUNT_DELETED";
-
-export type CouponEvent =
-  | "COUPON_CREATED"
-  | "COUPON_DELETED"
-  | "COUPON_APPLIED"
-  | "COUPON_USAGE_RECORDED";
-
-export type WishlistEvent = "WISHLIST_ITEM_ADDED" | "WISHLIST_ITEM_REMOVED";
