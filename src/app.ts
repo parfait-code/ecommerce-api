@@ -22,6 +22,8 @@ import addressRouter from "./modules/address/address.router";
 import dashboardRouter from "./modules/dashboard/dashboard.router";
 import categoryRouter from "./modules/categories/category.router";
 import promotionRouter from "./modules/promotions/promotion.router";
+import attributeRouter from "./modules/attributes/attribute.router";
+import variantRouter from "./modules/variants/variant.router";
 
 const app = express();
 
@@ -65,6 +67,7 @@ app.use(auditMiddleware);
 app.use(authRouter);
 app.use(userRouter);
 app.use(productRouter);
+app.use("/product/:productId/variants", variantRouter);
 app.use(basketRouter);
 app.use(orderRouter);
 app.use(paymentRouter);
@@ -76,6 +79,7 @@ app.use(addressRouter);
 app.use(dashboardRouter);
 app.use(categoryRouter);
 app.use(promotionRouter);
+app.use(attributeRouter);
 
 app.use(errorHandler);
 

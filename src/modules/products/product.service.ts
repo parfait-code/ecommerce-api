@@ -1,152 +1,178 @@
-import { productRepository } from './product.repository'
-import { CreateProductDto, UpdateProductDto } from './product.schema'
-import { AppError } from '../../shared/utils/app-error'
-import { cache } from '../../shared/utils/cache'
-import { uploadImage, deleteImage } from '../../shared/utils/upload'
-import { businessLogger, auditLogger } from '../../shared/logger'
+import { productRepository } from "./product.repository";
+import { variantRepository } from "../variants/variant.repository";
+import { CreateProductDto, UpdateProductDto } from "./product.schema";
+import { AppError } from "../../shared/utils/app-error";
+import { cache } from "../../shared/utils/cache";
+import { uploadImage, deleteImage } from "../../shared/utils/upload";
+import { businessLogger, auditLogger } from "../../shared/logger";
 
 const CACHE_KEYS = {
-  all:    (page: number, limit: number, categoryId?: string) =>
-    `products:all:${page}:${limit}${categoryId ? `:${categoryId}` : ''}`,
+  all: (page: number, limit: number, categoryId?: string) =>
+    `products:all:${page}:${limit}${categoryId ? `:${categoryId}` : ""}`,
   single: (id: number) => `products:${id}`,
-}
+};
 
 export const productService = {
-  getAll: async (query: { page?: string; limit?: string; categoryId?: string }) => {
-    const page       = Number(query.page  ?? 1)
-    const limit      = Number(query.limit ?? 20)
-    const cacheKey   = CACHE_KEYS.all(page, limit, query.categoryId)
+  getAll: async (query: {
+    page?: string;
+    limit?: string;
+    categoryId?: string;
+  }) => {
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    const cacheKey = CACHE_KEYS.all(page, limit, query.categoryId);
 
-    const cached = await cache.get(cacheKey)
-    if (cached) return cached
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
 
-    const [items, total] = await productRepository.findAll(query)
-    const result = { items, total, page, limit, totalPages: Math.ceil(total / limit) }
+    const [items, total] = await productRepository.findAll(query);
+    const result = {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
 
-    await cache.set(cacheKey, result)
-    return result
+    await cache.set(cacheKey, result);
+    return result;
   },
 
   getById: async (id: number) => {
-    const cacheKey = CACHE_KEYS.single(id)
-    const cached   = await cache.get(cacheKey)
-    if (cached) return cached
+    const cacheKey = CACHE_KEYS.single(id);
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
 
-    const product = await productRepository.findById(id)
-    if (!product) throw new AppError('Product not found', 404)
+    const product = await productRepository.findById(id);
+    if (!product) throw new AppError("Product not found", 404);
 
-    await cache.set(cacheKey, product)
-    return product
+    await cache.set(cacheKey, product);
+    return product;
   },
 
   create: async (dto: CreateProductDto) => {
-    const product = await productRepository.create(dto)
-    await cache.delByPattern('products:all:*')
+    const product = await productRepository.create(dto);
+    await cache.delByPattern("products:all:*");
 
-    businessLogger.log('PRODUCT_CREATED', {
-      service:  'products',
-      actor:    { userId: null, role: 'ADMIN' },
-      target:   { productId: product.id },
-      metadata: { name: product.name, price: product.price, categoryId: dto.categoryId },
-    })
+    businessLogger.log("PRODUCT_CREATED", {
+      service: "products",
+      actor: { userId: null, role: "ADMIN" },
+      target: { productId: product.id },
+      metadata: {
+        name: product.name,
+        price: product.price,
+        categoryId: dto.categoryId,
+      },
+    });
 
-    auditLogger.log('PRODUCT_CREATED', {
-      service:  'products',
-      actor:    { userId: null, role: 'ADMIN' },
-      target:   { productId: product.id },
+    auditLogger.log("PRODUCT_CREATED", {
+      service: "products",
+      actor: { userId: null, role: "ADMIN" },
+      target: { productId: product.id },
       metadata: { name: product.name, price: product.price },
-    })
+    });
 
-    return product
+    return product;
   },
 
   update: async (id: number, dto: UpdateProductDto) => {
-    const product = await productRepository.findById(id)
-    if (!product) throw new AppError('Product not found', 404)
+    const product = await productRepository.findById(id);
+    if (!product) throw new AppError("Product not found", 404);
 
-    const priceChanged = dto.price !== undefined && dto.price !== product.price
-    const updated      = await productRepository.update(id, dto)
+    const priceChanged = dto.price !== undefined && dto.price !== product.price;
+    const updated = await productRepository.update(id, dto);
 
-    await cache.del(CACHE_KEYS.single(id))
-    await cache.delByPattern('products:all:*')
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("products:all:*");
 
-    businessLogger.log('PRODUCT_UPDATED', {
-      service:  'products',
-      actor:    { userId: null, role: 'ADMIN' },
-      target:   { productId: id },
+    businessLogger.log("PRODUCT_UPDATED", {
+      service: "products",
+      actor: { userId: null, role: "ADMIN" },
+      target: { productId: id },
       metadata: { fields: Object.keys(dto) },
-    })
+    });
 
     if (priceChanged) {
-      auditLogger.log('PRICE_CHANGED', {
-        service:  'products',
-        actor:    { userId: null, role: 'ADMIN' },
-        target:   { productId: id },
+      auditLogger.log("PRICE_CHANGED", {
+        service: "products",
+        actor: { userId: null, role: "ADMIN" },
+        target: { productId: id },
         metadata: { oldPrice: product.price, newPrice: dto.price },
-      })
+      });
     }
 
-    auditLogger.log('PRODUCT_UPDATED', {
-      service:  'products',
-      actor:    { userId: null, role: 'ADMIN' },
-      target:   { productId: id },
+    auditLogger.log("PRODUCT_UPDATED", {
+      service: "products",
+      actor: { userId: null, role: "ADMIN" },
+      target: { productId: id },
       metadata: { fields: Object.keys(dto) },
-    })
+    });
 
-    return updated
+    return updated;
   },
 
   delete: async (id: number) => {
-    const product = await productRepository.findById(id)
-    if (!product) throw new AppError('Product not found', 404)
+    const product = await productRepository.findById(id);
+    if (!product) throw new AppError("Product not found", 404);
 
-    await productRepository.delete(id)
-    await cache.del(CACHE_KEYS.single(id))
-    await cache.delByPattern('products:all:*')
+    await productRepository.delete(id);
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("products:all:*");
 
-    businessLogger.log('PRODUCT_DELETED', {
-      service:  'products',
-      actor:    { userId: null, role: 'ADMIN' },
-      target:   { productId: id },
+    businessLogger.log("PRODUCT_DELETED", {
+      service: "products",
+      actor: { userId: null, role: "ADMIN" },
+      target: { productId: id },
       metadata: { name: product.name },
-    })
+    });
 
-    auditLogger.log('PRODUCT_DELETED', {
-      service:  'products',
-      actor:    { userId: null, role: 'ADMIN' },
-      target:   { productId: id },
+    auditLogger.log("PRODUCT_DELETED", {
+      service: "products",
+      actor: { userId: null, role: "ADMIN" },
+      target: { productId: id },
       metadata: { name: product.name },
-    })
+    });
 
-    return { numberOfProductsDeleted: 1 }
+    return { numberOfProductsDeleted: 1 };
   },
 
-  uploadImages: async (id: number, files: Express.Multer.File[]) => {
-    const product = await productRepository.findById(id)
-    if (!product) throw new AppError('Product not found', 404)
+  uploadImages: async (
+    id: number,
+    files: Express.Multer.File[],
+    variantId?: string,
+  ) => {
+    const product = await productRepository.findById(id);
+    if (!product) throw new AppError("Product not found", 404);
 
-    const uploadedUrls = await Promise.all(files.map((file) => uploadImage(file)))
-    const images       = [...product.images, ...uploadedUrls]
-    const updated      = await productRepository.update(id, { images })
+    if (variantId) {
+      const variant = await variantRepository.findById(variantId);
+      if (!variant || variant.productId !== id)
+        throw new AppError("Variant not found on this product", 404);
+    }
 
-    await cache.del(CACHE_KEYS.single(id))
-    await cache.delByPattern('products:all:*')
-    return updated
+    const uploadedUrls = await Promise.all(files.map((f) => uploadImage(f)));
+    await productRepository.addImages(id, uploadedUrls, variantId);
+
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("products:all:*");
+
+    return productRepository.findById(id);
   },
 
-  deleteImage: async (id: number, imageUrl: string) => {
-    const product = await productRepository.findById(id)
-    if (!product) throw new AppError('Product not found', 404)
+  deleteImage: async (id: number, imageId: string) => {
+    const product = await productRepository.findById(id);
+    if (!product) throw new AppError("Product not found", 404);
 
-    const images = product.images.filter((img) => img !== imageUrl)
-    if (images.length === product.images.length)
-      throw new AppError('Image not found', 404)
+    const image = await productRepository.findImageById(imageId);
+    if (!image || image.productId !== id)
+      throw new AppError("Image not found", 404);
 
-    await deleteImage(imageUrl)
-    const updated = await productRepository.update(id, { images })
+    await deleteImage(image.url);
+    await productRepository.deleteImage(imageId);
 
-    await cache.del(CACHE_KEYS.single(id))
-    await cache.delByPattern('products:all:*')
-    return updated
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("products:all:*");
+
+    return productRepository.findById(id);
   },
-}
+};

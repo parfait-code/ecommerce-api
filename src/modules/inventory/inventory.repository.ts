@@ -5,6 +5,15 @@ import { paginate } from "../../shared/utils/pagination";
 const inventoryInclude = {
   product: true,
   warehouse: true,
+  variant: {
+    include: {
+      attributeValues: {
+        include: {
+          attributeDefinition: { select: { id: true, name: true, slug: true } },
+        },
+      },
+    },
+  },
 };
 
 export const inventoryRepository = {
@@ -42,11 +51,28 @@ export const inventoryRepository = {
   findById: (id: string) =>
     prisma.inventory.findUnique({ where: { id }, include: inventoryInclude }),
 
-  findByProductAndWarehouse: (productId: number, warehouseId: string) =>
-    prisma.inventory.findUnique({
-      where: { productId_warehouseId: { productId, warehouseId } },
+  findByProductAndWarehouse: (
+    productId: number,
+    warehouseId: string,
+    variantId?: string,
+  ) => {
+    if (variantId) {
+      return prisma.inventory.findUnique({
+        where: {
+          productId_warehouseId_variantId: {
+            productId,
+            warehouseId,
+            variantId,
+          },
+        },
+        include: inventoryInclude,
+      });
+    }
+    return prisma.inventory.findFirst({
+      where: { productId, warehouseId, variantId: null },
       include: inventoryInclude,
-    }),
+    });
+  },
 
   findLowStock: (threshold: number) =>
     prisma.inventory.findMany({
@@ -71,6 +97,7 @@ export const inventoryRepository = {
       data: {
         productId: data.product_id,
         warehouseId: data.warehouse_id,
+        variantId: data.variant_id ?? null,
         quantity: data.quantity,
       },
       include: inventoryInclude,

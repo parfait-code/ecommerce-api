@@ -21,6 +21,14 @@ enum ProductStatus {
   ARCHIVED
 }
 
+enum AttributeType {
+  TEXT
+  NUMBER
+  COLOR
+  BOOLEAN
+  SELECT
+}
+
 enum OrderStatus {
   PENDING
   CONFIRMED
@@ -81,19 +89,19 @@ enum ReturnStatus {
 // ─── User ─────────────────────────────────────────────────────────────────────
 
 model User {
-  id            Int            @id @default(autoincrement())
-  username      String         @unique
-  email         String         @unique
-  password      String
-  firstName     String
-  lastName      String
-  dateOfBirth   DateTime?
-  phone         String?
-  role          UserRole       @default(USER)
-  isActive      Boolean        @default(true)
-  deletedAt     DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id          Int      @id @default(autoincrement())
+  username    String   @unique
+  email       String   @unique
+  password    String
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime?
+  phone       String?
+  role        UserRole  @default(USER)
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   profile        UserProfile?
   baskets        Basket[]
@@ -133,33 +141,75 @@ model Category {
   children    Category[] @relation("subcategories")
   products    Product[]
   discounts   Discount[]
+  attributes  AttributeDefinition[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+}
+
+// ─── AttributeDefinition ──────────────────────────────────────────────────────
+
+model AttributeDefinition {
+  id           String        @id @default(cuid())
+  categoryId   String
+  category     Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name         String
+  slug         String
+  type         AttributeType
+  unit         String?
+  isVariant    Boolean       @default(false)
+  isFilterable Boolean       @default(true)
+  isRequired   Boolean       @default(false)
+  position     Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  options              AttributeOption[]
+  productValues        ProductAttributeValue[]
+  variantValues        VariantAttributeValue[]
+
+  @@unique([categoryId, slug])
+  @@index([categoryId])
+}
+
+// ─── AttributeOption ──────────────────────────────────────────────────────────
+
+model AttributeOption {
+  id                    String              @id @default(cuid())
+  attributeDefinitionId String
+  attributeDefinition   AttributeDefinition @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
+  value                 String
+  colorHex              String?
+  position              Int                 @default(0)
+
+  @@unique([attributeDefinitionId, value])
+  @@index([attributeDefinitionId])
 }
 
 // ─── Product ──────────────────────────────────────────────────────────────────
 
 model Product {
-  id          Int             @id @default(autoincrement())
-  sku         String          @unique
+  id          Int           @id @default(autoincrement())
+  sku         String        @unique
   name        String
   description String?
   price       Float
   categoryId  String
-  category    Category        @relation(fields: [categoryId], references: [id])
-  status      ProductStatus   @default(DRAFT)
+  category    Category      @relation(fields: [categoryId], references: [id])
+  status      ProductStatus @default(DRAFT)
   weight      Float?
   deletedAt   DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
-  images        ProductImage[]
-  basketItems   BasketItem[]
-  orderItems    OrderItem[]
-  reviews       Review[]
-  inventory     Inventory[]
-  discounts     DiscountProduct[]
-  wishlistItems WishlistItem[]
+  images          ProductImage[]
+  variants        ProductVariant[]
+  attributeValues ProductAttributeValue[]
+  basketItems     BasketItem[]
+  orderItems      OrderItem[]
+  reviews         Review[]
+  inventory       Inventory[]
+  discounts       DiscountProduct[]
+  wishlistItems   WishlistItem[]
 
   @@index([categoryId])
   @@index([status])
@@ -172,6 +222,8 @@ model ProductImage {
   id        String   @id @default(cuid())
   productId Int
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   url       String
   altText   String?
   position  Int      @default(0)
@@ -179,6 +231,59 @@ model ProductImage {
   createdAt DateTime @default(now())
 
   @@index([productId])
+  @@index([variantId])
+}
+
+// ─── ProductAttributeValue ────────────────────────────────────────────────────
+
+model ProductAttributeValue {
+  id                    String              @id @default(cuid())
+  productId             Int
+  product               Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attributeDefinitionId String
+  attributeDefinition   AttributeDefinition @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
+  value                 String
+
+  @@unique([productId, attributeDefinitionId])
+  @@index([productId])
+  @@index([attributeDefinitionId, value])
+}
+
+// ─── ProductVariant ───────────────────────────────────────────────────────────
+
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku       String   @unique
+  price     Float?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attributeValues VariantAttributeValue[]
+  inventory       Inventory[]
+  basketItems     BasketItem[]
+  orderItems      OrderItem[]
+  wishlistItems   WishlistItem[]
+  images          ProductImage[]
+
+  @@index([productId])
+}
+
+// ─── VariantAttributeValue ────────────────────────────────────────────────────
+
+model VariantAttributeValue {
+  id                    String              @id @default(cuid())
+  variantId             String
+  variant               ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  attributeDefinitionId String
+  attributeDefinition   AttributeDefinition @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
+  value                 String
+
+  @@unique([variantId, attributeDefinitionId])
+  @@index([variantId])
+  @@index([attributeDefinitionId, value])
 }
 
 // ─── Basket ───────────────────────────────────────────────────────────────────
@@ -193,15 +298,18 @@ model Basket {
 }
 
 model BasketItem {
-  id        String  @id @default(cuid())
+  id        String          @id @default(cuid())
   basketId  String
-  basket    Basket  @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  basket    Basket          @relation(fields: [basketId], references: [id], onDelete: Cascade)
   productId Int
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   quantity  Int
 
-  @@unique([basketId, productId])
+  @@unique([basketId, productId, variantId])
   @@index([productId])
+  @@index([variantId])
 }
 
 // ─── Order ────────────────────────────────────────────────────────────────────
@@ -240,21 +348,24 @@ model Order {
 // ─── OrderItem ────────────────────────────────────────────────────────────────
 
 model OrderItem {
-  id             String   @id @default(cuid())
+  id             String          @id @default(cuid())
   orderId        String
-  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId      Int
-  product        Product  @relation(fields: [productId], references: [id])
+  product        Product         @relation(fields: [productId], references: [id])
+  variantId      String?
+  variant        ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   quantity       Int
   price          Float
   originalPrice  Float
-  discountAmount Float    @default(0)
+  discountAmount Float           @default(0)
 
   reviews     Review[]
   returnItems ReturnItem[]
 
   @@index([orderId])
   @@index([productId])
+  @@index([variantId])
 }
 
 // ─── OrderStatusHistory ───────────────────────────────────────────────────────
@@ -328,17 +439,20 @@ model Warehouse {
 // ─── Inventory ────────────────────────────────────────────────────────────────
 
 model Inventory {
-  id          String    @id @default(cuid())
+  id          String          @id @default(cuid())
   productId   Int
-  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   warehouseId String
-  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  quantity    Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  warehouse   Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  quantity    Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
-  @@unique([productId, warehouseId])
+  @@unique([productId, warehouseId, variantId])
   @@index([productId])
+  @@index([variantId])
   @@index([warehouseId])
 }
 
@@ -430,16 +544,19 @@ model Wishlist {
 }
 
 model WishlistItem {
-  id         String   @id @default(cuid())
+  id         String          @id @default(cuid())
   wishlistId String
-  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  wishlist   Wishlist        @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
   productId  Int
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  addedAt    DateTime @default(now())
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId  String?
+  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  addedAt    DateTime        @default(now())
 
-  @@unique([wishlistId, productId])
+  @@unique([wishlistId, productId, variantId])
   @@index([wishlistId])
   @@index([productId])
+  @@index([variantId])
 }
 
 // ─── ReturnRequest ────────────────────────────────────────────────────────────
