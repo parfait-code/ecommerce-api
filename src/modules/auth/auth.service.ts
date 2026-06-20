@@ -15,7 +15,17 @@ export const authService = {
     if (existingEmail) throw new AppError('Email already taken', 409)
 
     const password = await bcrypt.hash(dto.password, 10)
-    const user = await authRepository.createUser({ ...dto, password })
+
+    const user = await authRepository.createUser({
+      username:    dto.username,
+      email:       dto.email,
+      password,
+      firstName:   dto.firstName,
+      lastName:    dto.lastName,
+      dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+      phone:       dto.phone ?? null,
+      role:        dto.role,
+    })
 
     const token = jwt.sign(
       { userId: user.id, username: user.username, role: user.role },
@@ -25,15 +35,9 @@ export const authService = {
 
     businessLogger.log('USER_REGISTERED', {
       service: 'auth',
-      actor: {
-        userId: user.id,
-        role:   'CUSTOMER',
-      },
-      target: { userId: user.id },
-      metadata: {
-        username: user.username,
-        email:    user.email,
-      },
+      actor:   { userId: user.id, role: 'CUSTOMER' },
+      target:  { userId: user.id },
+      metadata: { username: user.username, email: user.email },
     })
 
     const { password: _, ...userWithoutPassword } = user
@@ -46,10 +50,19 @@ export const authService = {
     if (!user) {
       securityLogger.log('FAILED_LOGIN', {
         service: 'auth',
-        actor: { userId: null, role: 'ANONYMOUS' },
+        actor:   { userId: null, role: 'ANONYMOUS' },
         metadata: { username: dto.username, reason: 'User not found' },
       })
       throw new AppError(`Could not find any user with username: \`${dto.username}\`.`, 400)
+    }
+
+    if (!user.isActive) {
+      securityLogger.log('FAILED_LOGIN', {
+        service: 'auth',
+        actor:   { userId: user.id, role: 'CUSTOMER' },
+        metadata: { username: dto.username, reason: 'Account inactive' },
+      })
+      throw new AppError('This account has been deactivated.', 403)
     }
 
     const valid = await bcrypt.compare(dto.password, user.password)
@@ -57,7 +70,7 @@ export const authService = {
     if (!valid) {
       securityLogger.log('FAILED_LOGIN', {
         service: 'auth',
-        actor: { userId: user.id, role: 'CUSTOMER' },
+        actor:   { userId: user.id, role: 'CUSTOMER' },
         metadata: { username: dto.username, reason: 'Wrong password' },
       })
       throw new AppError('Provided username and password did not match.', 400)
@@ -71,11 +84,8 @@ export const authService = {
 
     businessLogger.log('USER_LOGIN', {
       service: 'auth',
-      actor: {
-        userId: user.id,
-        role:   user.role === 'admin' ? 'ADMIN' : 'CUSTOMER',
-      },
-      target: { userId: user.id },
+      actor:   { userId: user.id, role: user.role === 'ADMIN' ? 'ADMIN' : 'CUSTOMER' },
+      target:  { userId: user.id },
       metadata: { username: user.username },
     })
 

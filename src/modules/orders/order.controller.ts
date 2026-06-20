@@ -61,6 +61,7 @@ export const orderController = {
       const result = await orderService.updateStatus(
         req.params.orderId as string,
         req.body,
+        req.user!.userId,
       );
       respond(res, result);
     } catch (err) {

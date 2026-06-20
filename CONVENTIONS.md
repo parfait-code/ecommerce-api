@@ -2,19 +2,20 @@
 
 ## Langue
 
-| Contexte | Langue |
-|---|---|
-| Code (variables, fonctions, classes, fichiers) | Anglais |
-| Commentaires dans le code | Anglais |
-| Documentation projet (ces fichiers .md) | Français |
-| Messages d'erreur API (valeur `message`) | Anglais |
-| Commits Git | Anglais |
+| Contexte                                       | Langue   |
+| ---------------------------------------------- | -------- |
+| Code (variables, fonctions, classes, fichiers) | Anglais  |
+| Commentaires dans le code                      | Anglais  |
+| Documentation projet (ces fichiers .md)        | Français |
+| Messages d'erreur API (valeur `message`)       | Anglais  |
+| Commits Git                                    | Anglais  |
 
 ---
 
 ## Nommage
 
 ### Fichiers et dossiers
+
 ```
 kebab-case pour tout
 src/modules/product-catalog/
@@ -22,6 +23,7 @@ src/shared/middlewares/auth-guard.ts
 ```
 
 ### Dans le code TypeScript
+
 ```ts
 // Variables et fonctions → camelCase
 const accessToken = ...
@@ -47,6 +49,7 @@ enum OrderStatus {
 ```
 
 ### Routes Express
+
 ```
 kebab-case, pluriel pour les ressources
 /users, /products, /payment-methods
@@ -75,6 +78,7 @@ src/modules/<nom>/
 ## Gestion des erreurs
 
 ### Classe d'erreur métier
+
 ```ts
 // src/shared/utils/app-error.ts
 export class AppError extends Error {
@@ -82,28 +86,30 @@ export class AppError extends Error {
     public message: string,
     public statusCode: number = 500,
   ) {
-    super(message)
+    super(message);
   }
 }
 ```
 
 ### Middleware global d'erreur
+
 ```ts
 // src/shared/middlewares/error-handler.ts
 app.use((err, req, res, next) => {
-  const status = err.statusCode ?? 500
+  const status = err.statusCode ?? 500;
   res.status(status).json({
     status: false,
-    error: { message: err.message ?? 'Internal server error' },
-  })
-})
+    error: { message: err.message ?? "Internal server error" },
+  });
+});
 ```
 
 ### Usage dans les services
+
 ```ts
 // Lancer une erreur métier
-throw new AppError('User not found', 404)
-throw new AppError('Invalid credentials', 400)
+throw new AppError("User not found", 404);
+throw new AppError("Invalid credentials", 400);
 ```
 
 ---
@@ -115,13 +121,13 @@ Toujours utiliser l'helper `respond` :
 ```ts
 // src/shared/utils/response.ts
 export const respond = (res: Response, data: unknown, status = 200) =>
-  res.status(status).json({ status: true, data })
+  res.status(status).json({ status: true, data });
 ```
 
 ```ts
 // Dans un controller
-respond(res, { user, token })           // 200
-respond(res, createdProduct, 201)       // 201
+respond(res, { user, token }); // 200
+respond(res, createdProduct, 201); // 201
 ```
 
 ---
@@ -130,32 +136,32 @@ respond(res, createdProduct, 201)       // 201
 
 ```ts
 // product.schema.ts
-import { z } from 'zod'
+import { z } from "zod";
 
 export const createProductSchema = z.object({
   name: z.string().min(2).max(200),
   price: z.number().positive(),
   category: z.string(),
   stock: z.number().int().min(0).default(0),
-})
+});
 
-export type CreateProductDto = z.infer<typeof createProductSchema>
+export type CreateProductDto = z.infer<typeof createProductSchema>;
 ```
 
 ```ts
 // middleware de validation
 // src/shared/middlewares/validate.ts
 export const validate = (schema: ZodSchema) => (req, res, next) => {
-  const result = schema.safeParse(req.body)
+  const result = schema.safeParse(req.body);
   if (!result.success) {
     return res.status(400).json({
       status: false,
-      error: { message: 'Validation failed', details: result.error.flatten() },
-    })
+      error: { message: "Validation failed", details: result.error.flatten() },
+    });
   }
-  req.body = result.data
-  next()
-}
+  req.body = result.data;
+  next();
+};
 ```
 
 ---
@@ -174,8 +180,8 @@ export const validate = (schema: ZodSchema) => (req, res, next) => {
 
 ```ts
 // Usage dans un router
-router.get('/user/all', authGuard, adminGuard, getAllUsers)
-router.patch('/user', authGuard, validate(updateUserSchema), updateUser)
+router.get("/user/all", authGuard, adminGuard, getAllUsers);
+router.patch("/user", authGuard, validate(updateUserSchema), updateUser);
 ```
 
 ---
@@ -183,11 +189,13 @@ router.patch('/user', authGuard, validate(updateUserSchema), updateUser)
 ## Pagination
 
 Toutes les routes de liste acceptent :
+
 ```
 GET /products?page=1&limit=20
 ```
 
 Helper standard :
+
 ```ts
 // src/shared/utils/pagination.ts
 export const paginate = (query: { page?: string; limit?: string }) => ({
@@ -214,15 +222,15 @@ export const paginate = (query: { page?: string; limit?: string }) => ({
 
 Format : `<type>(<scope>): <description>`
 
-| Type | Usage |
-|---|---|
-| `feat` | Nouvelle fonctionnalité |
-| `fix` | Correction de bug |
+| Type       | Usage                                       |
+| ---------- | ------------------------------------------- |
+| `feat`     | Nouvelle fonctionnalité                     |
+| `fix`      | Correction de bug                           |
 | `refactor` | Refactoring sans changement de comportement |
-| `test` | Ajout ou modification de tests |
-| `docs` | Documentation uniquement |
-| `chore` | Config, dépendances, CI |
-| `perf` | Amélioration de performance |
+| `test`     | Ajout ou modification de tests              |
+| `docs`     | Documentation uniquement                    |
+| `chore`    | Config, dépendances, CI                     |
+| `perf`     | Amélioration de performance                 |
 
 ```
 feat(auth): add JWT refresh token endpoint
@@ -242,18 +250,18 @@ chore(docker): update postgres to 16-alpine
 
 ```ts
 // src/shared/config/env.ts
-import { z } from 'zod'
+import { z } from "zod";
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']),
+  NODE_ENV: z.enum(["development", "test", "production"]),
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string(),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.coerce.number().default(3600),
-})
+});
 
-export const env = envSchema.parse(process.env)
+export const env = envSchema.parse(process.env);
 ```
 
 ---
@@ -284,3 +292,8 @@ describe('ProductService', () => {
 - Pas de logique métier dans les controllers
 - Pas de requêtes Prisma directes dans les controllers ou services — passer par les repositories
 - Pas de `DELETE` quand la suppression est logique — utiliser un champ `status` ou un `POST /cancel`
+
+## Commande pour les migrations Prisma
+
+npx prisma migrate resolve --applied 20260613_add_shipments
+npx prisma generate

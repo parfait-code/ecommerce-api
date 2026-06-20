@@ -1,15 +1,17 @@
-import { z } from 'zod'
+import { z } from "zod";
+import { ProductStatus } from "@prisma/client";
 
 export const createProductSchema = z.object({
+  sku: z.string().min(1).max(100),
   name: z.string().min(2).max(200),
   description: z.string().optional(),
   price: z.number().positive(),
   categoryId: z.string(),
-  stock: z.number().int().min(0).default(0),
-  images: z.array(z.string()).default([]),
-})
+  status: z.nativeEnum(ProductStatus).default(ProductStatus.DRAFT),
+  weight: z.number().positive().optional(),
+});
 
-export const updateProductSchema = createProductSchema.partial()
+export const updateProductSchema = createProductSchema.partial();
 
-export type CreateProductDto = z.infer<typeof createProductSchema>
-export type UpdateProductDto = z.infer<typeof updateProductSchema>
+export type CreateProductDto = z.infer<typeof createProductSchema>;
+export type UpdateProductDto = z.infer<typeof updateProductSchema>;

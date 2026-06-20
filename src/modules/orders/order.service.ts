@@ -8,6 +8,7 @@ import {
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
 import { businessLogger, auditLogger } from "../../shared/logger";
+import { OrderStatus } from "@prisma/client";
 
 const CACHE_KEYS = {
   all: (query: Record<string, string>) => `orders:all:${JSON.stringify(query)}`,
@@ -53,17 +54,25 @@ export const orderService = {
   },
 
   create: async (userId: number, dto: CreateOrderDto) => {
-    const orderItems: { productId: number; quantity: number; price: number }[] =
-      [];
+    const orderItems: {
+      productId: number;
+      quantity: number;
+      price: number;
+      originalPrice: number;
+      discountAmount: number;
+    }[] = [];
     let totalAmount = 0;
 
     for (const item of dto.items) {
       const product = await productRepository.findById(Number(item.id));
       if (!product) throw new AppError(`Product ${item.id} not found`, 404);
+
       orderItems.push({
         productId: product.id,
         quantity: item.quantity,
         price: product.price,
+        originalPrice: product.price,
+        discountAmount: 0,
       });
       totalAmount += product.price * item.quantity;
     }
@@ -106,12 +115,21 @@ export const orderService = {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
-  updateStatus: async (id: string, dto: UpdateOrderStatusDto) => {
+  updateStatus: async (
+    id: string,
+    dto: UpdateOrderStatusDto,
+    changedBy: number | null,
+  ) => {
     const order = await orderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
 
     const oldStatus = order.status;
-    const updated = await orderRepository.updateStatus(id, dto.status);
+    const updated = await orderRepository.updateStatus(
+      id,
+      dto.status,
+      changedBy,
+      dto.reason,
+    );
 
     await cache.del(CACHE_KEYS.single(id));
     await cache.delByPattern("orders:all:*");

@@ -1,14 +1,19 @@
-import { userRepository } from './user.repository'
-import { UpdateUserDto, ChangeRoleDto, AdminCreateUserDto } from './user.schema'
-import { AppError } from '../../shared/utils/app-error'
-import { businessLogger, auditLogger } from '../../shared/logger'
-import bcrypt from 'bcryptjs'
-import { authRepository } from '../auth/auth.repository'
+import { userRepository } from "./user.repository";
+import {
+  UpdateUserDto,
+  ChangeRoleDto,
+  AdminCreateUserDto,
+} from "./user.schema";
+import { AppError } from "../../shared/utils/app-error";
+import { businessLogger, auditLogger } from "../../shared/logger";
+import { authRepository } from "../auth/auth.repository";
+import { UserRole } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const strip = (user: Record<string, unknown>) => {
-  const { password: _, ...rest } = user
-  return rest
-}
+  const { password: _, ...rest } = user;
+  return rest;
+};
 
 export const userService = {
   adminCreateUser: async (dto: AdminCreateUserDto) => {
@@ -19,7 +24,16 @@ export const userService = {
     if (existingEmail) throw new AppError("Email already taken", 409);
 
     const password = await bcrypt.hash(dto.password, 10);
-    const user = await authRepository.createUser({ ...dto, password });
+    const user = await authRepository.createUser({
+      username: dto.username,
+      email: dto.email,
+      password,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+      phone: dto.phone ?? null,
+      role: dto.role,
+    });
 
     auditLogger.log("USER_CREATED", {
       service: "users",
@@ -40,7 +54,11 @@ export const userService = {
   updateProfile: async (userId: number, dto: UpdateUserDto) => {
     const user = await userRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
-    const updated = await userRepository.update(userId, dto);
+
+    const updated = await userRepository.update(userId, {
+      ...dto,
+      dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+    });
 
     businessLogger.log("USER_UPDATED", {
       service: "users",
@@ -84,6 +102,7 @@ export const userService = {
   deleteUser: async (userId: number) => {
     const user = await userRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
+
     await userRepository.delete(userId);
 
     businessLogger.log("USER_DELETED", {
