@@ -22,9 +22,9 @@ export const createOrderSchema = z.object({
   shippingAddress: addressSchema,
   billingAddressId: z.string().optional(),
   billingAddress: addressSchema.optional(),
+  shippingMethodId: z.string().optional(),
   paymentMethodId: z.string().optional(),
   notes: z.string().optional(),
-  couponCode: z.string().optional(),
 });
 
 export const updateOrderSchema = z.object({
@@ -32,6 +32,7 @@ export const updateOrderSchema = z.object({
   shippingAddress: addressSchema.optional(),
   billingAddressId: z.string().optional(),
   billingAddress: addressSchema.optional(),
+  shippingMethodId: z.string().optional(),
   notes: z.string().optional(),
 });
 

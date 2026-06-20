@@ -32,20 +32,12 @@ export const basketRepository = {
     quantity: number,
     variantId?: string,
   ) => {
-    if (variantId) {
-      return prisma.basketItem.upsert({
-        where: {
-          basketId_productId_variantId: { basketId, productId, variantId },
-        },
-        create: { basketId, productId, quantity, variantId },
-        update: { quantity: { increment: quantity } },
-      });
-    }
+    const vId = variantId ?? null;
     return prisma.basketItem.upsert({
       where: {
-        basketId_productId_variantId: { basketId, productId, variantId: "" },
+        basketId_productId_variantId: { basketId, productId, variantId: vId },
       },
-      create: { basketId, productId, quantity },
+      create: { basketId, productId, quantity, variantId: vId },
       update: { quantity: { increment: quantity } },
     });
   },
@@ -56,30 +48,17 @@ export const basketRepository = {
     quantity: number,
     variantId?: string,
   ) => {
-    if (variantId) {
-      return prisma.basketItem.update({
-        where: {
-          basketId_productId_variantId: { basketId, productId, variantId },
-        },
-        data: { quantity },
-      });
-    }
+    const vId = variantId ?? null;
     return prisma.basketItem.updateMany({
-      where: { basketId, productId, variantId: null },
+      where: { basketId, productId, variantId: vId },
       data: { quantity },
     });
   },
 
   removeItem: (basketId: string, productId: number, variantId?: string) => {
-    if (variantId) {
-      return prisma.basketItem.delete({
-        where: {
-          basketId_productId_variantId: { basketId, productId, variantId },
-        },
-      });
-    }
+    const vId = variantId ?? null;
     return prisma.basketItem.deleteMany({
-      where: { basketId, productId, variantId: null },
+      where: { basketId, productId, variantId: vId },
     });
   },
 };

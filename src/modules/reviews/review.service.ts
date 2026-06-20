@@ -1,6 +1,5 @@
 import { reviewRepository } from "./review.repository";
 import { productRepository } from "../products/product.repository";
-import { orderRepository } from "../orders/order.repository";
 import { CreateReviewDto, UpdateReviewDto } from "./review.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
@@ -34,9 +33,14 @@ export const reviewService = {
     const product = await productRepository.findById(dto.product_id);
     if (!product) throw new AppError("Product not found", 404);
 
-    // Vérifier que l'orderItem appartient à une commande de cet utilisateur
-    const order = await orderRepository.findById(""); // on cherche via orderItem ci-dessous
-    void order; // non utilisé directement
+    const orderItem = await reviewRepository.findOrderItem(dto.order_item_id);
+    if (!orderItem) throw new AppError("Order item not found", 404);
+    if (orderItem.order.userId !== userId) throw new AppError("Forbidden", 403);
+    if (orderItem.productId !== dto.product_id)
+      throw new AppError(
+        "This order item does not match the given product",
+        400,
+      );
 
     const existingReview = await reviewRepository.findByOrderItemAndUser(
       dto.order_item_id,

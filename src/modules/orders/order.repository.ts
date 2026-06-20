@@ -25,6 +25,9 @@ const orderInclude = {
       promotion: { select: { id: true, name: true, slug: true } },
     },
   },
+  shippingMethod: {
+    select: { id: true, name: true, estimatedDays: true },
+  },
   statusHistory: {
     orderBy: { createdAt: "desc" as const },
     take: 10,
@@ -78,6 +81,7 @@ export const orderRepository = {
         shippingAddressSnapshot: data.shippingAddress as object,
         billingAddressId: data.billingAddressId ?? null,
         billingAddressSnapshot: (data.billingAddress as object) ?? null,
+        shippingMethodId: data.shippingMethodId ?? null,
         paymentMethodId: data.paymentMethodId,
         notes: data.notes,
         ...(couponCodeId && { couponCodeId }),
@@ -123,6 +127,9 @@ export const orderRepository = {
         }),
         ...(data.billingAddress && {
           billingAddressSnapshot: data.billingAddress as object,
+        }),
+        ...(data.shippingMethodId && {
+          shippingMethodId: data.shippingMethodId,
         }),
         ...(data.notes && { notes: data.notes }),
       },

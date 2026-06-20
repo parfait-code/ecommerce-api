@@ -29,6 +29,12 @@ export const promotionService = {
     return promotion;
   },
 
+  getCoupons: async (promotionId: string) => {
+    const promotion = await promotionRepository.findById(promotionId);
+    if (!promotion) throw new AppError("Promotion not found", 404);
+    return promotionRepository.findCouponsByPromotion(promotionId);
+  },
+
   create: async (dto: CreatePromotionDto) => {
     const existing = await promotionRepository.existsBySlug(dto.slug);
     if (existing) throw new AppError("Promotion slug already taken", 409);

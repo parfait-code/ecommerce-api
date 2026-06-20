@@ -27,6 +27,7 @@ import variantRouter from "./modules/variants/variant.router";
 import tagRouter from "./modules/tags/tag.router";
 import shippingMethodRouter from "./modules/shipping-methods/shipping-method.router";
 import loyaltyRouter from "./modules/loyalty/loyalty.router";
+import wishlistRouter from "./modules/wishlist/wishlist.router";
 
 const app = express();
 
@@ -86,6 +87,7 @@ app.use(attributeRouter);
 app.use(tagRouter);
 app.use(shippingMethodRouter);
 app.use(loyaltyRouter);
+app.use(wishlistRouter);
 
 app.use(errorHandler);
 

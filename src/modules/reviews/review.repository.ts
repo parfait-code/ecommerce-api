@@ -23,6 +23,16 @@ export const reviewRepository = {
       where: { orderItemId_userId: { orderItemId, userId } },
     }),
 
+  findOrderItem: (orderItemId: string) =>
+    prisma.orderItem.findUnique({
+      where: { id: orderItemId },
+      select: {
+        id: true,
+        productId: true,
+        order: { select: { userId: true } },
+      },
+    }),
+
   create: (userId: number, dto: CreateReviewDto) =>
     prisma.review.create({
       data: {

@@ -7,12 +7,12 @@
  *   import { businessLogger, auditLogger, securityLogger, ... } from '@/shared/config/logger'
  */
 
-export { accessLogger }    from './access.logger'
-export { businessLogger }  from './business.logger'
-export { auditLogger }     from './audit.logger'
-export { securityLogger }  from './security.logger'
-export { errorLogger }     from './error.logger'
-export { systemLogger }    from './system.logger'
+export { accessLogger } from "./access.logger";
+export { businessLogger } from "./business.logger";
+export { auditLogger } from "./audit.logger";
+export { securityLogger } from "./security.logger";
+export { errorLogger } from "./error.logger";
+export { systemLogger } from "./system.logger";
 
 // Ré-export des types pour éviter des imports profonds dans les modules
 export type {
@@ -38,4 +38,5 @@ export type {
   WarehouseEvent,
   ReviewEvent,
   AddressEvent,
-} from './logger.types'
+  WishlistEvent,
+} from "./logger.types";

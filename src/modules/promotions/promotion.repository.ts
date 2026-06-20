@@ -1,8 +1,10 @@
-import { prisma } from '../../shared/config/database'
+import { prisma } from "../../shared/config/database";
 import {
-  CreatePromotionDto, UpdatePromotionDto,
-  CreateDiscountDto, CreateCouponDto,
-} from './promotion.schema'
+  CreatePromotionDto,
+  UpdatePromotionDto,
+  CreateDiscountDto,
+  CreateCouponDto,
+} from "./promotion.schema";
 
 const promotionInclude = {
   discounts: {
@@ -10,32 +12,41 @@ const promotionInclude = {
       category: { select: { id: true, name: true, slug: true } },
       products: {
         include: {
-          product: { select: { id: true, name: true, images: true, price: true } },
+          product: {
+            select: { id: true, name: true, images: true, price: true },
+          },
         },
       },
     },
   },
   coupons: {
     select: {
-      id: true, code: true, maxUses: true,
-      usedCount: true, perUserLimit: true,
-      startDate: true, endDate: true, isActive: true,
+      id: true,
+      code: true,
+      maxUses: true,
+      usedCount: true,
+      perUserLimit: true,
+      startDate: true,
+      endDate: true,
+      isActive: true,
     },
   },
   _count: { select: { coupons: true, discounts: true } },
-}
+};
 
 export const promotionRepository = {
   findAll: (query: { status?: string; isActive?: string }) => {
     const where = {
-      ...(query.status   && { status:   query.status as any }),
-      ...(query.isActive !== undefined && { isActive: query.isActive === 'true' }),
-    }
+      ...(query.status && { status: query.status as any }),
+      ...(query.isActive !== undefined && {
+        isActive: query.isActive === "true",
+      }),
+    };
     return prisma.promotion.findMany({
       where,
       include: promotionInclude,
-      orderBy: { createdAt: 'desc' },
-    })
+      orderBy: { createdAt: "desc" },
+    });
   },
 
   findById: (id: string) =>
@@ -50,13 +61,13 @@ export const promotionRepository = {
   create: (data: CreatePromotionDto) =>
     prisma.promotion.create({
       data: {
-        name:        data.name,
-        slug:        data.slug,
+        name: data.name,
+        slug: data.slug,
         description: data.description,
-        startDate:   new Date(data.startDate),
-        endDate:     new Date(data.endDate),
-        isActive:    data.isActive,
-        status:      new Date(data.startDate) <= new Date() ? 'ACTIVE' : 'SCHEDULED',
+        startDate: new Date(data.startDate),
+        endDate: new Date(data.endDate),
+        isActive: data.isActive,
+        status: new Date(data.startDate) <= new Date() ? "ACTIVE" : "SCHEDULED",
       },
       include: promotionInclude,
     }),
@@ -65,12 +76,14 @@ export const promotionRepository = {
     prisma.promotion.update({
       where: { id },
       data: {
-        ...(data.name        && { name:        data.name }),
-        ...(data.slug        && { slug:        data.slug }),
-        ...(data.description !== undefined && { description: data.description }),
-        ...(data.startDate   && { startDate:   new Date(data.startDate) }),
-        ...(data.endDate     && { endDate:     new Date(data.endDate) }),
-        ...(data.isActive    !== undefined && { isActive:    data.isActive }),
+        ...(data.name && { name: data.name }),
+        ...(data.slug && { slug: data.slug }),
+        ...(data.description !== undefined && {
+          description: data.description,
+        }),
+        ...(data.startDate && { startDate: new Date(data.startDate) }),
+        ...(data.endDate && { endDate: new Date(data.endDate) }),
+        ...(data.isActive !== undefined && { isActive: data.isActive }),
       },
       include: promotionInclude,
     }),
@@ -78,27 +91,28 @@ export const promotionRepository = {
   toggle: (id: string, isActive: boolean) =>
     prisma.promotion.update({
       where: { id },
-      data:  { isActive },
+      data: { isActive },
       include: promotionInclude,
     }),
 
-  updateStatus: (id: string, status: 'SCHEDULED' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED') =>
-    prisma.promotion.update({ where: { id }, data: { status } }),
+  updateStatus: (
+    id: string,
+    status: "SCHEDULED" | "ACTIVE" | "EXPIRED" | "CANCELLED",
+  ) => prisma.promotion.update({ where: { id }, data: { status } }),
 
-  delete: (id: string) =>
-    prisma.promotion.delete({ where: { id } }),
+  delete: (id: string) => prisma.promotion.delete({ where: { id } }),
 
   addImages: (id: string, images: string[]) =>
     prisma.promotion.update({
       where: { id },
-      data:  { images: { push: images } },
+      data: { images: { push: images } },
       include: promotionInclude,
     }),
 
   removeImage: (id: string, images: string[]) =>
     prisma.promotion.update({
       where: { id },
-      data:  { images },
+      data: { images },
       include: promotionInclude,
     }),
 
@@ -108,11 +122,11 @@ export const promotionRepository = {
     const discount = await prisma.discount.create({
       data: {
         promotionId,
-        type:       data.type,
-        value:      data.value,
+        type: data.type,
+        value: data.value,
         categoryId: data.categoryId,
       },
-    })
+    });
 
     if (data.productIds && data.productIds.length > 0) {
       await prisma.discountProduct.createMany({
@@ -120,7 +134,7 @@ export const promotionRepository = {
           discountId: discount.id,
           productId,
         })),
-      })
+      });
     }
 
     return prisma.discount.findUnique({
@@ -129,11 +143,13 @@ export const promotionRepository = {
         category: { select: { id: true, name: true, slug: true } },
         products: {
           include: {
-            product: { select: { id: true, name: true, images: true, price: true } },
+            product: {
+              select: { id: true, name: true, images: true, price: true },
+            },
           },
         },
       },
-    })
+    });
   },
 
   findDiscountById: (id: string) =>
@@ -149,8 +165,7 @@ export const promotionRepository = {
       },
     }),
 
-  deleteDiscount: (id: string) =>
-    prisma.discount.delete({ where: { id } }),
+  deleteDiscount: (id: string) => prisma.discount.delete({ where: { id } }),
 
   // ── Coupons ────────────────────────────────────────────────────────────────
 
@@ -158,18 +173,18 @@ export const promotionRepository = {
     prisma.couponCode.create({
       data: {
         promotionId,
-        code:         data.code,
-        maxUses:      data.maxUses,
+        code: data.code,
+        maxUses: data.maxUses,
         perUserLimit: data.perUserLimit,
-        startDate:    data.startDate ? new Date(data.startDate) : null,
-        endDate:      data.endDate   ? new Date(data.endDate)   : null,
-        isActive:     data.isActive,
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        endDate: data.endDate ? new Date(data.endDate) : null,
+        isActive: data.isActive,
       },
     }),
 
   findCouponByCode: (code: string) =>
     prisma.couponCode.findUnique({
-      where:   { code: code.toUpperCase() },
+      where: { code: code.toUpperCase() },
       include: {
         promotion: {
           include: {
@@ -187,18 +202,32 @@ export const promotionRepository = {
 
   findCouponById: (id: string) =>
     prisma.couponCode.findUnique({ where: { id } }),
+  findCouponsByPromotion: (promotionId: string) =>
+    prisma.couponCode.findMany({
+      where: { promotionId },
+      select: {
+        id: true,
+        code: true,
+        maxUses: true,
+        usedCount: true,
+        perUserLimit: true,
+        startDate: true,
+        endDate: true,
+        isActive: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
 
-  deleteCoupon: (id: string) =>
-    prisma.couponCode.delete({ where: { id } }),
+  deleteCoupon: (id: string) => prisma.couponCode.delete({ where: { id } }),
 
   incrementCouponUsage: (id: string) =>
     prisma.couponCode.update({
       where: { id },
-      data:  { usedCount: { increment: 1 } },
+      data: { usedCount: { increment: 1 } },
     }),
 
   createCouponUse: (couponId: string, userId: number, orderId: string) =>
     prisma.couponUse.create({
       data: { couponId, userId, orderId },
     }),
-}
+};
