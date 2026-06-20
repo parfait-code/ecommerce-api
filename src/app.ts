@@ -24,6 +24,9 @@ import categoryRouter from "./modules/categories/category.router";
 import promotionRouter from "./modules/promotions/promotion.router";
 import attributeRouter from "./modules/attributes/attribute.router";
 import variantRouter from "./modules/variants/variant.router";
+import tagRouter from "./modules/tags/tag.router";
+import shippingMethodRouter from "./modules/shipping-methods/shipping-method.router";
+import loyaltyRouter from "./modules/loyalty/loyalty.router";
 
 const app = express();
 
@@ -80,6 +83,9 @@ app.use(dashboardRouter);
 app.use(categoryRouter);
 app.use(promotionRouter);
 app.use(attributeRouter);
+app.use(tagRouter);
+app.use(shippingMethodRouter);
+app.use(loyaltyRouter);
 
 app.use(errorHandler);
 

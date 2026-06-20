@@ -86,12 +86,19 @@ enum ReturnStatus {
   COMPLETED
 }
 
+enum LoyaltyEventType {
+  EARNED
+  REDEEMED
+  EXPIRED
+  ADJUSTED
+}
+
 // ─── User ─────────────────────────────────────────────────────────────────────
 
 model User {
-  id          Int      @id @default(autoincrement())
-  username    String   @unique
-  email       String   @unique
+  id          Int       @id @default(autoincrement())
+  username    String    @unique
+  email       String    @unique
   password    String
   firstName   String
   lastName    String
@@ -103,16 +110,17 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  profile        UserProfile?
-  baskets        Basket[]
-  orders         Order[]
-  payments       Payment[]
-  reviews        Review[]
-  pickupRequests PickupRequest[]
-  addresses      Address[]
-  couponUses     CouponUse[]
-  wishlist       Wishlist?
-  returns        ReturnRequest[]
+  profile             UserProfile?
+  baskets             Basket[]
+  orders              Order[]
+  payments            Payment[]
+  reviews             Review[]
+  pickupRequests      PickupRequest[]
+  addresses           Address[]
+  couponUses          CouponUse[]
+  wishlist            Wishlist?
+  returns             ReturnRequest[]
+  loyaltyTransactions LoyaltyTransaction[]
 }
 
 // ─── UserProfile ──────────────────────────────────────────────────────────────
@@ -132,18 +140,23 @@ model UserProfile {
 // ─── Category ─────────────────────────────────────────────────────────────────
 
 model Category {
-  id          String     @id @default(cuid())
-  name        String     @unique
-  slug        String     @unique
-  description String?
-  parentId    String?
-  parent      Category?  @relation("subcategories", fields: [parentId], references: [id])
-  children    Category[] @relation("subcategories")
-  products    Product[]
-  discounts   Discount[]
-  attributes  AttributeDefinition[]
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id              String     @id @default(cuid())
+  name            String     @unique
+  slug            String     @unique
+  description     String?
+  imageUrl        String?
+  iconUrl         String?
+  metaTitle       String?
+  metaDescription String?
+  isActive        Boolean    @default(true)
+  parentId        String?
+  parent          Category?  @relation("subcategories", fields: [parentId], references: [id])
+  children        Category[] @relation("subcategories")
+  products        Product[]
+  discounts       Discount[]
+  attributes      AttributeDefinition[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 }
 
 // ─── AttributeDefinition ──────────────────────────────────────────────────────
@@ -163,9 +176,9 @@ model AttributeDefinition {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  options              AttributeOption[]
-  productValues        ProductAttributeValue[]
-  variantValues        VariantAttributeValue[]
+  options         AttributeOption[]
+  productValues   ProductAttributeValue[]
+  variantValues   VariantAttributeValue[]
 
   @@unique([categoryId, slug])
   @@index([categoryId])
@@ -188,18 +201,21 @@ model AttributeOption {
 // ─── Product ──────────────────────────────────────────────────────────────────
 
 model Product {
-  id          Int           @id @default(autoincrement())
-  sku         String        @unique
-  name        String
-  description String?
-  price       Float
-  categoryId  String
-  category    Category      @relation(fields: [categoryId], references: [id])
-  status      ProductStatus @default(DRAFT)
-  weight      Float?
-  deletedAt   DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              Int           @id @default(autoincrement())
+  sku             String        @unique
+  name            String
+  description     String?
+  price           Float
+  categoryId      String
+  category        Category      @relation(fields: [categoryId], references: [id])
+  status          ProductStatus @default(DRAFT)
+  weight          Float?
+  brand           String?
+  metaTitle       String?
+  metaDescription String?
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   images          ProductImage[]
   variants        ProductVariant[]
@@ -210,6 +226,7 @@ model Product {
   inventory       Inventory[]
   discounts       DiscountProduct[]
   wishlistItems   WishlistItem[]
+  tags            ProductTag[]
 
   @@index([categoryId])
   @@index([status])
@@ -219,16 +236,16 @@ model Product {
 // ─── ProductImage ─────────────────────────────────────────────────────────────
 
 model ProductImage {
-  id        String   @id @default(cuid())
+  id        String         @id @default(cuid())
   productId Int
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
   variantId String?
   variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   url       String
   altText   String?
-  position  Int      @default(0)
-  isPrimary Boolean  @default(false)
-  createdAt DateTime @default(now())
+  position  Int            @default(0)
+  isPrimary Boolean        @default(false)
+  createdAt DateTime       @default(now())
 
   @@index([productId])
   @@index([variantId])
@@ -286,6 +303,42 @@ model VariantAttributeValue {
   @@index([attributeDefinitionId, value])
 }
 
+// ─── Tag ──────────────────────────────────────────────────────────────────────
+
+model Tag {
+  id       String       @id @default(cuid())
+  name     String       @unique
+  slug     String       @unique
+  products ProductTag[]
+}
+
+model ProductTag {
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+  @@index([tagId])
+}
+
+// ─── ShippingMethod ───────────────────────────────────────────────────────────
+
+model ShippingMethod {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  estimatedDays Int
+  basePrice     Float
+  pricePerKg    Float    @default(0)
+  isActive      Boolean  @default(true)
+  zones         String[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orders Order[]
+}
+
 // ─── Basket ───────────────────────────────────────────────────────────────────
 
 model Basket {
@@ -315,34 +368,38 @@ model BasketItem {
 // ─── Order ────────────────────────────────────────────────────────────────────
 
 model Order {
-  id                      String      @id @default(cuid())
+  id                      String          @id @default(cuid())
   userId                  Int
-  user                    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status                  OrderStatus @default(PENDING)
+  user                    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status                  OrderStatus     @default(PENDING)
   shippingAddressId       String?
-  shippingAddress         Address?    @relation("shippingAddress", fields: [shippingAddressId], references: [id], onDelete: SetNull)
+  shippingAddress         Address?        @relation("shippingAddress", fields: [shippingAddressId], references: [id], onDelete: SetNull)
   shippingAddressSnapshot Json
   billingAddressId        String?
-  billingAddress          Address?    @relation("billingAddress", fields: [billingAddressId], references: [id], onDelete: SetNull)
+  billingAddress          Address?        @relation("billingAddress", fields: [billingAddressId], references: [id], onDelete: SetNull)
   billingAddressSnapshot  Json?
+  shippingMethodId        String?
+  shippingMethod          ShippingMethod? @relation(fields: [shippingMethodId], references: [id], onDelete: SetNull)
   paymentMethodId         String?
   notes                   String?
   couponCodeId            String?
-  appliedCoupon           CouponCode? @relation(fields: [couponCodeId], references: [id], onDelete: SetNull)
+  appliedCoupon           CouponCode?     @relation(fields: [couponCodeId], references: [id], onDelete: SetNull)
   totalAmount             Float
   discountedAmount        Float?
-  createdAt               DateTime    @default(now())
-  updatedAt               DateTime    @updatedAt
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 
-  items         OrderItem[]
-  payments      Payment[]
-  statusHistory OrderStatusHistory[]
-  returns       ReturnRequest[]
+  items               OrderItem[]
+  payments            Payment[]
+  statusHistory       OrderStatusHistory[]
+  returns             ReturnRequest[]
+  loyaltyTransactions LoyaltyTransaction[]
 
   @@index([userId])
   @@index([status])
   @@index([userId, status])
   @@index([couponCodeId])
+  @@index([shippingMethodId])
 }
 
 // ─── OrderItem ────────────────────────────────────────────────────────────────
@@ -590,6 +647,22 @@ model ReturnItem {
 
   @@index([returnRequestId])
   @@index([orderItemId])
+}
+
+// ─── LoyaltyTransaction ───────────────────────────────────────────────────────
+
+model LoyaltyTransaction {
+  id        String           @id @default(cuid())
+  userId    Int
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String?
+  order     Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  points    Int
+  type      LoyaltyEventType
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([orderId])
 }
 
 // ─── Promotion ────────────────────────────────────────────────────────────────
