@@ -1,6 +1,7 @@
 import { orderRepository } from "./order.repository";
 import { productRepository } from "../products/product.repository";
 import { loyaltyService } from "../loyalty/loyalty.service";
+import { promotionRepository } from "../promotions/promotion.repository";
 import {
   CreateOrderDto,
   UpdateOrderDto,
@@ -14,6 +15,34 @@ import { OrderStatus } from "@prisma/client";
 const CACHE_KEYS = {
   all: (query: Record<string, string>) => `orders:all:${JSON.stringify(query)}`,
   single: (id: string) => `orders:${id}`,
+};
+
+const resolveCoupon = async (code: string, userId: number) => {
+  const coupon = await promotionRepository.findCouponByCode(code);
+  if (!coupon) throw new AppError("Invalid coupon code", 404);
+  if (!coupon.isActive) throw new AppError("This coupon is not active", 400);
+  if (!coupon.promotion.isActive)
+    throw new AppError(
+      "The promotion linked to this coupon is not active",
+      400,
+    );
+
+  const now = new Date();
+  if (coupon.startDate && now < coupon.startDate)
+    throw new AppError("This coupon is not yet valid", 400);
+  if (coupon.endDate && now > coupon.endDate)
+    throw new AppError("This coupon has expired", 400);
+  if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses)
+    throw new AppError("This coupon has reached its maximum usage limit", 400);
+
+  const userUseCount = coupon.uses.filter((u) => u.userId === userId).length;
+  if (userUseCount >= coupon.perUserLimit)
+    throw new AppError(
+      "You have already used this coupon the maximum number of times",
+      400,
+    );
+
+  return coupon;
 };
 
 export const orderService = {
@@ -78,12 +107,30 @@ export const orderService = {
       totalAmount += product.price * item.quantity;
     }
 
+    const coupon = dto.couponCode
+      ? await resolveCoupon(dto.couponCode, userId)
+      : null;
+
     const order = await orderRepository.create(
       userId,
       dto,
       totalAmount,
       orderItems,
+      coupon?.id,
     );
+
+    if (coupon) {
+      await promotionRepository.incrementCouponUsage(coupon.id);
+      await promotionRepository.createCouponUse(coupon.id, userId, order.id);
+
+      businessLogger.log("COUPON_APPLIED", {
+        service: "orders",
+        actor: { userId, role: "CUSTOMER" },
+        target: { orderId: order.id, couponId: coupon.id },
+        metadata: { code: coupon.code },
+      });
+    }
+
     await cache.delByPattern("orders:all:*");
 
     businessLogger.log("ORDER_CREATED", {
