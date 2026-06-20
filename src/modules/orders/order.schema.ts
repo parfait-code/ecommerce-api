@@ -25,6 +25,7 @@ export const createOrderSchema = z.object({
   shippingMethodId: z.string().optional(),
   paymentMethodId: z.string().optional(),
   notes: z.string().optional(),
+  couponCode: z.string().optional(),
 });
 
 export const updateOrderSchema = z.object({
