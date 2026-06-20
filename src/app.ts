@@ -28,6 +28,7 @@ import tagRouter from "./modules/tags/tag.router";
 import shippingMethodRouter from "./modules/shipping-methods/shipping-method.router";
 import loyaltyRouter from "./modules/loyalty/loyalty.router";
 import wishlistRouter from "./modules/wishlist/wishlist.router";
+import returnRouter from "./modules/returns/return.router";
 
 const app = express();
 
@@ -88,6 +89,7 @@ app.use(tagRouter);
 app.use(shippingMethodRouter);
 app.use(loyaltyRouter);
 app.use(wishlistRouter);
+app.use(returnRouter);
 
 app.use(errorHandler);
 

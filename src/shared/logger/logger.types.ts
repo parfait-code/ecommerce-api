@@ -140,6 +140,12 @@ export type AddressEvent =
   | "ADDRESS_UPDATED"
   | "ADDRESS_DELETED";
 
+export type ReturnEvent =
+  | "RETURN_REQUESTED"
+  | "RETURN_APPROVED"
+  | "RETURN_REJECTED"
+  | "RETURN_COMPLETED";
+
 export type BusinessEvent =
   | AuthEvent
   | ProductEvent
@@ -156,7 +162,9 @@ export type BusinessEvent =
   | CategoryEvent
   | PromotionEvent
   | DiscountEvent
-  | CouponEvent;
+  | CouponEvent
+  | WishlistEvent
+  | ReturnEvent;
 
 // ─── Audit Events (section 14) ────────────────────────────────────────────────
 

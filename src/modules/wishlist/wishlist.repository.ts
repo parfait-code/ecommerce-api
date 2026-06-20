@@ -26,18 +26,22 @@ export const wishlistRepository = {
   create: (userId: number) =>
     prisma.wishlist.create({ data: { userId }, include: wishlistInclude }),
 
-  addItem: (wishlistId: string, productId: number, variantId?: string) =>
-    prisma.wishlistItem.upsert({
-      where: {
-        wishlistId_productId_variantId: {
-          wishlistId,
-          productId,
-          variantId: variantId ?? null,
-        },
-      },
-      create: { wishlistId, productId, variantId: variantId ?? null },
-      update: {},
-    }),
+  addItem: async (
+    wishlistId: string,
+    productId: number,
+    variantId?: string,
+  ) => {
+    const vId = variantId ?? null;
+    const existing = await prisma.wishlistItem.findFirst({
+      where: { wishlistId, productId, variantId: vId },
+    });
+
+    if (existing) return existing;
+
+    return prisma.wishlistItem.create({
+      data: { wishlistId, productId, variantId: vId },
+    });
+  },
 
   removeItem: (wishlistId: string, productId: number, variantId?: string) =>
     prisma.wishlistItem.deleteMany({

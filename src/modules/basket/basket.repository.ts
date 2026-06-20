@@ -26,19 +26,26 @@ export const basketRepository = {
   findById: (id: string) =>
     prisma.basket.findUnique({ where: { id }, include: basketInclude }),
 
-  addItem: (
+  addItem: async (
     basketId: string,
     productId: number,
     quantity: number,
     variantId?: string,
   ) => {
     const vId = variantId ?? null;
-    return prisma.basketItem.upsert({
-      where: {
-        basketId_productId_variantId: { basketId, productId, variantId: vId },
-      },
-      create: { basketId, productId, quantity, variantId: vId },
-      update: { quantity: { increment: quantity } },
+    const existing = await prisma.basketItem.findFirst({
+      where: { basketId, productId, variantId: vId },
+    });
+
+    if (existing) {
+      return prisma.basketItem.update({
+        where: { id: existing.id },
+        data: { quantity: { increment: quantity } },
+      });
+    }
+
+    return prisma.basketItem.create({
+      data: { basketId, productId, quantity, variantId: vId },
     });
   },
 
