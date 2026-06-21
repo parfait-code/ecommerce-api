@@ -75,7 +75,9 @@ describe("warehouseService.getById", () => {
   it("retourne le cache si présent", async () => {
     mockedCacheGet.mockResolvedValue(makeWarehouse());
 
-    const result = await warehouseService.getById("wh_1");
+    const result = (await warehouseService.getById("wh_1")) as ReturnType<
+      typeof makeWarehouse
+    >;
 
     expect(result.id).toBe("wh_1");
     expect(mockedRepo.findById).not.toHaveBeenCalled();
@@ -94,7 +96,9 @@ describe("warehouseService.getById", () => {
     mockedCacheGet.mockResolvedValue(null);
     mockedRepo.findById.mockResolvedValue(makeWarehouse());
 
-    const result = await warehouseService.getById("wh_1");
+    const result = (await warehouseService.getById("wh_1")) as ReturnType<
+      typeof makeWarehouse
+    >;
 
     expect(result.id).toBe("wh_1");
     expect(mockedCacheSet).toHaveBeenCalledWith(

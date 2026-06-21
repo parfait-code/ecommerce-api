@@ -4,7 +4,6 @@ import {
   shipmentRepository,
   pickupRepository,
 } from "../../src/modules/shipments/shipment.repository";
-import { AppError } from "../../src/shared/utils/app-error";
 
 jest.mock("../../src/modules/shipments/shipment.repository");
 jest.mock("../../src/shared/logger", () => ({
@@ -18,16 +17,20 @@ const mockedPickupRepo = pickupRepository as jest.Mocked<
   typeof pickupRepository
 >;
 
-const makeShipment = (overrides: Partial<any> = {}) => ({
+const makeShipment = (overrides: Partial<any> = {}): any => ({
   id: "ship_1",
   trackingNumber: "ABC123XYZ",
   estimatedDeliveryDate: "2026-07-01",
   status: "PENDING",
+  orderId: null,           
+  dimensions: null,        
   senderName: "Alice",
   senderAddress: "Douala",
   recipientName: "Bob",
   recipientAddress: "Yaoundé",
   weight: 2,
+  createdAt: new Date(),   
+  updatedAt: new Date(),   
   trackingEvents: [],
   label: null,
   ...overrides,
@@ -150,7 +153,7 @@ describe("shipmentService.addTrackingEvent", () => {
       "ship_1",
       "IN_TRANSIT",
     );
-    expect(result.status).toBe("IN_TRANSIT");
+    expect(result!.status).toBe("IN_TRANSIT");
   });
 
   it("logge SHIPMENT_DELIVERED quand le statut passe à DELIVERED", async () => {

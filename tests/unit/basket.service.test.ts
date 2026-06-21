@@ -90,7 +90,7 @@ describe("basketService.addProduct", () => {
       2,
       undefined,
     );
-    expect(result.items).toHaveLength(1);
+    expect(result!.items).toHaveLength(1);
   });
 });
 
@@ -142,7 +142,7 @@ describe("basketService.updateQuantity", () => {
       5,
       undefined,
     );
-    expect(result.items[0].quantity).toBe(5);
+    expect(result!.items[0].quantity).toBe(5);
   });
 
   it("distingue les variants — un item avec variant_id différent ne matche pas", async () => {
@@ -190,6 +190,6 @@ describe("basketService.removeProduct", () => {
       1,
       undefined,
     );
-    expect(result.items).toHaveLength(0);
+    expect(result!!.items).toHaveLength(0);
   });
 });
