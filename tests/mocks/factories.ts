@@ -85,3 +85,137 @@ export const makeCoupon = (overrides: Partial<any> = {}) => ({
   uses: [],
   ...overrides,
 });
+
+export const makeProductImage = (overrides: Partial<any> = {}) => ({
+  id: "img_1",
+  productId: 1,
+  variantId: null,
+  url: "https://r2.example.com/products/img_1.jpg",
+  altText: null,
+  position: 0,
+  isPrimary: true,
+  createdAt: new Date(),
+  ...overrides,
+});
+
+export const makeWarehouse = (overrides: Partial<any> = {}) => ({
+  id: "wh_1",
+  name: "Entrepôt Douala",
+  location: "Douala",
+  capacity: 1000,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  ...overrides,
+});
+
+export const makeInventoryItem = (overrides: Partial<any> = {}) => ({
+  id: "inv_1",
+  productId: 1,
+  variantId: null,
+  warehouseId: "wh_1",
+  quantity: 50,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  product: { id: 1, name: "Test Product" },
+  warehouse: { id: "wh_1", name: "Entrepôt Douala" },
+  variant: null,
+  ...overrides,
+});
+export const makeReview = (overrides: Partial<any> = {}) => ({
+  id: "review_1",
+  orderItemId: "item_1",
+  productId: 1,
+  userId: 1,
+  rating: 5,
+  comment: "Très bon produit",
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  user: { id: 1, username: "johndoe", firstName: "John", lastName: "Doe" },
+  ...overrides,
+});
+
+export const makeOrderItemForReview = (overrides: Partial<any> = {}) => ({
+  id: "item_1",
+  productId: 1,
+  order: { userId: 1 },
+  ...overrides,
+});
+
+export const makeLoyaltyTransaction = (overrides: Partial<any> = {}) => ({
+  id: "lt_1",
+  userId: 1,
+  orderId: null,
+  points: 100,
+  type: "EARNED",
+  createdAt: new Date(),
+  ...overrides,
+});
+
+export const makeBasketItem = (overrides: Partial<any> = {}) => ({
+  id: "bi_1",
+  basketId: "basket_1",
+  productId: 1,
+  variantId: null,
+  quantity: 2,
+  product: { id: 1, name: "Test Product", price: 1000 },
+  variant: null,
+  ...overrides,
+});
+
+export const makeBasket = (overrides: Partial<any> = {}) => ({
+  id: "basket_1",
+  userId: 1,
+  items: [],
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  ...overrides,
+});
+
+export const makeVariant = (overrides: Partial<any> = {}) => ({
+  id: "variant_1",
+  productId: 1,
+  sku: "SKU-VAR-1",
+  price: 1500,
+  isActive: true,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  attributeValues: [],
+  inventory: [],
+  images: [],
+  ...overrides,
+});
+
+export const makeAttributeDefinition = (overrides: Partial<any> = {}) => ({
+  id: "attr_1",
+  categoryId: "cat_1",
+  name: "Couleur",
+  slug: "couleur",
+  type: "SELECT",
+  unit: null,
+  isVariant: true,
+  isFilterable: true,
+  isRequired: false,
+  position: 0,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  ...overrides,
+});
+
+export const makeCategory = (overrides: Partial<any> = {}) => ({
+  id: "cat_1",
+  name: "Électronique",
+  slug: "electronique",
+  description: null,
+  imageUrl: null,
+  iconUrl: null,
+  metaTitle: null,
+  metaDescription: null,
+  isActive: true,
+  parentId: null,
+  parent: null,
+  children: [],
+  _count: { products: 0 },
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  ...overrides,
+});
