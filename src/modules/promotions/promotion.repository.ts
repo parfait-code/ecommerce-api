@@ -58,6 +58,33 @@ export const promotionRepository = {
   existsBySlug: (slug: string) =>
     prisma.promotion.findUnique({ where: { slug } }),
 
+  // ── Pricing (nouveau) ──────────────────────────────────────────────────────
+
+  findActiveDiscounts: () => {
+    const now = new Date();
+    return prisma.discount.findMany({
+      where: {
+        promotion: {
+          isActive: true,
+          status: "ACTIVE",
+          startDate: { lte: now },
+          endDate: { gte: now },
+        },
+      },
+      include: {
+        promotion: {
+          select: {
+            isActive: true,
+            status: true,
+            startDate: true,
+            endDate: true,
+          },
+        },
+        products: { select: { productId: true } },
+      },
+    });
+  },
+
   create: (data: CreatePromotionDto) =>
     prisma.promotion.create({
       data: {

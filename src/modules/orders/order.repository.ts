@@ -77,6 +77,7 @@ export const orderRepository = {
       discountAmount: number;
     }[],
     couponCodeId?: string,
+    discountedAmount?: number,
   ) =>
     prisma.order.create({
       data: {
@@ -90,6 +91,7 @@ export const orderRepository = {
         notes: data.notes,
         ...(couponCodeId && { couponCodeId }),
         totalAmount,
+        ...(discountedAmount !== undefined && { discountedAmount }),
         items: { create: items },
         statusHistory: {
           create: {

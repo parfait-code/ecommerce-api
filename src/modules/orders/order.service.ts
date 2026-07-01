@@ -2,6 +2,7 @@ import { orderRepository } from "./order.repository";
 import { productRepository } from "../products/product.repository";
 import { loyaltyService } from "../loyalty/loyalty.service";
 import { promotionRepository } from "../promotions/promotion.repository";
+import { getBestPricing } from "../promotions/promotion.pricing";
 import {
   CreateOrderDto,
   UpdateOrderDto,
@@ -90,6 +91,8 @@ export const orderService = {
   },
 
   create: async (userId: number, dto: CreateOrderDto) => {
+    const activeDiscounts = await promotionRepository.findActiveDiscounts();
+
     const orderItems: {
       productId: number;
       quantity: number;
@@ -97,25 +100,40 @@ export const orderService = {
       originalPrice: number;
       discountAmount: number;
     }[] = [];
+
     let totalAmount = 0;
+    let totalOriginalAmount = 0;
 
     for (const item of dto.items) {
       const product = await productRepository.findById(Number(item.id));
       if (!product) throw new AppError(`Product ${item.id} not found`, 404);
 
+      const pricing = getBestPricing(product, activeDiscounts as any);
+
       orderItems.push({
         productId: product.id,
         quantity: item.quantity,
-        price: product.price,
+        price: pricing.finalPrice,
         originalPrice: product.price,
-        discountAmount: 0,
+        discountAmount:
+          Math.round(pricing.discountAmount * item.quantity * 100) / 100,
       });
-      totalAmount += product.price * item.quantity;
+
+      totalAmount += pricing.finalPrice * item.quantity;
+      totalOriginalAmount += product.price * item.quantity;
     }
+
+    totalAmount = Math.round(totalAmount * 100) / 100;
+    totalOriginalAmount = Math.round(totalOriginalAmount * 100) / 100;
 
     const coupon = dto.couponCode
       ? await resolveCoupon(dto.couponCode, userId)
       : null;
+
+    const discountedAmount =
+      totalOriginalAmount > totalAmount
+        ? Math.round((totalOriginalAmount - totalAmount) * 100) / 100
+        : undefined;
 
     const order = await orderRepository.create(
       userId,
@@ -123,6 +141,7 @@ export const orderService = {
       totalAmount,
       orderItems,
       coupon?.id,
+      discountedAmount,
     );
 
     if (coupon) {

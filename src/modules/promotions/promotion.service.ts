@@ -1,314 +1,235 @@
-import { promotionRepository } from "./promotion.repository";
-import { categoryRepository } from "../categories/category.repository";
 import { productRepository } from "../products/product.repository";
-import {
-  CreatePromotionDto,
-  UpdatePromotionDto,
-  CreateDiscountDto,
-  CreateCouponDto,
-  ValidateCouponDto,
-} from "./promotion.schema";
+import { variantRepository } from "../variants/variant.repository";
+import { promotionRepository } from "../promotions/promotion.repository";
+import { getBestPricing } from "../promotions/promotion.pricing";
+import { CreateProductDto, UpdateProductDto } from "../products/product.schema";
 import { AppError } from "../../shared/utils/app-error";
+import { cache } from "../../shared/utils/cache";
+import { uploadImage, deleteImage } from "../../shared/utils/upload";
 import { businessLogger, auditLogger } from "../../shared/logger";
 
-export const promotionService = {
-  // ── Promotions ─────────────────────────────────────────────────────────────
+type ProductQuery = {
+  page?: string;
+  limit?: string;
+  categoryId?: string;
+  search?: string;
+};
 
-  getAll: (query: { status?: string; isActive?: string }) =>
-    promotionRepository.findAll(query),
+type ProductService = {
+  getAll: (query: ProductQuery) => Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>;
+  getById: (id: number) => Promise<any>;
+  create: (dto: CreateProductDto) => Promise<any>;
+  update: (id: number, dto: UpdateProductDto) => Promise<any>;
+  delete: (id: number) => Promise<{ numberOfProductsDeleted: number }>;
+  uploadImages: (
+    id: number,
+    files: Express.Multer.File[],
+    variantId?: string,
+  ) => Promise<any>;
+  deleteImage: (id: number, imageId: string) => Promise<any>;
+};
 
-  getById: async (id: string) => {
-    const promotion = await promotionRepository.findById(id);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-    return promotion;
+const CACHE_KEYS = {
+  all: (page: number, limit: number, categoryId?: string, search?: string) =>
+    `products:all:${page}:${limit}${categoryId ? `:${categoryId}` : ""}${search ? `:${search}` : ""}`,
+  single: (id: number) => `products:${id}`,
+};
+
+export const productService: ProductService = {
+  getAll: async (
+    query: ProductQuery,
+  ): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> => {
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    const cacheKey = CACHE_KEYS.all(
+      page,
+      limit,
+      query.categoryId,
+      query.search,
+    );
+
+    const cached = (await cache.get(cacheKey)) as {
+      items: any[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    } | null;
+    if (cached) return cached;
+
+    const [items, total] = await productRepository.findAll(query);
+    const activeDiscounts = await promotionRepository.findActiveDiscounts();
+
+    const itemsWithPricing = items.map((item: any) => ({
+      ...item,
+      pricing: getBestPricing(item, activeDiscounts as any),
+    }));
+
+    const result = {
+      items: itemsWithPricing,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+
+    await cache.set(cacheKey, result);
+    return result;
   },
 
-  getBySlug: async (slug: string) => {
-    const promotion = await promotionRepository.findBySlug(slug);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-    return promotion;
+  getById: async (id: number) => {
+    const cacheKey = CACHE_KEYS.single(id);
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
+
+    const product = await productRepository.findById(id);
+    if (!product) throw new AppError("Product not found", 404);
+
+    const activeDiscounts = await promotionRepository.findActiveDiscounts();
+    const productWithPricing = {
+      ...product,
+      pricing: getBestPricing(product, activeDiscounts as any),
+    };
+
+    await cache.set(cacheKey, productWithPricing);
+    return productWithPricing;
   },
 
-  getCoupons: async (promotionId: string) => {
-    const promotion = await promotionRepository.findById(promotionId);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-    return promotionRepository.findCouponsByPromotion(promotionId);
-  },
+  create: async (dto: CreateProductDto) => {
+    const product = await productRepository.create(dto);
+    await cache.delByPattern("products:all:*");
 
-  create: async (dto: CreatePromotionDto) => {
-    const existing = await promotionRepository.existsBySlug(dto.slug);
-    if (existing) throw new AppError("Promotion slug already taken", 409);
-
-    const promotion = await promotionRepository.create(dto);
-
-    businessLogger.log("PROMOTION_CREATED", {
-      service: "promotions",
+    businessLogger.log("PRODUCT_CREATED", {
+      service: "products",
       actor: { userId: null, role: "ADMIN" },
-      target: { promotionId: promotion.id },
-      metadata: { name: promotion.name, slug: promotion.slug },
+      target: { productId: product.id },
+      metadata: {
+        name: product.name,
+        price: product.price,
+        categoryId: dto.categoryId,
+      },
     });
 
-    auditLogger.log("PROMOTION_CREATED", {
-      service: "promotions",
+    auditLogger.log("PRODUCT_CREATED", {
+      service: "products",
       actor: { userId: null, role: "ADMIN" },
-      target: { promotionId: promotion.id },
-      metadata: { name: promotion.name, slug: promotion.slug },
+      target: { productId: product.id },
+      metadata: { name: product.name, price: product.price },
     });
 
-    return promotion;
+    return product;
   },
 
-  update: async (id: string, dto: UpdatePromotionDto) => {
-    const promotion = await promotionRepository.findById(id);
-    if (!promotion) throw new AppError("Promotion not found", 404);
+  update: async (id: number, dto: UpdateProductDto) => {
+    const product = await productRepository.findById(id);
+    if (!product) throw new AppError("Product not found", 404);
 
-    if (dto.slug && dto.slug !== promotion.slug) {
-      const existing = await promotionRepository.existsBySlug(dto.slug);
-      if (existing) throw new AppError("Promotion slug already taken", 409);
-    }
+    const priceChanged = dto.price !== undefined && dto.price !== product.price;
+    const updated = await productRepository.update(id, dto);
 
-    if (dto.startDate && dto.endDate) {
-      if (new Date(dto.endDate) <= new Date(dto.startDate))
-        throw new AppError("endDate must be after startDate", 400);
-    }
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("products:all:*");
 
-    const updated = await promotionRepository.update(id, dto);
-
-    businessLogger.log("PROMOTION_UPDATED", {
-      service: "promotions",
+    businessLogger.log("PRODUCT_UPDATED", {
+      service: "products",
       actor: { userId: null, role: "ADMIN" },
-      target: { promotionId: id },
+      target: { productId: id },
+      metadata: { fields: Object.keys(dto) },
+    });
+
+    if (priceChanged) {
+      auditLogger.log("PRICE_CHANGED", {
+        service: "products",
+        actor: { userId: null, role: "ADMIN" },
+        target: { productId: id },
+        metadata: { oldPrice: product.price, newPrice: dto.price },
+      });
+    }
+
+    auditLogger.log("PRODUCT_UPDATED", {
+      service: "products",
+      actor: { userId: null, role: "ADMIN" },
+      target: { productId: id },
       metadata: { fields: Object.keys(dto) },
     });
 
     return updated;
   },
 
-  toggle: async (id: string) => {
-    const promotion = await promotionRepository.findById(id);
-    if (!promotion) throw new AppError("Promotion not found", 404);
+  delete: async (id: number) => {
+    const product = await productRepository.findById(id);
+    if (!product) throw new AppError("Product not found", 404);
 
-    const updated = await promotionRepository.toggle(id, !promotion.isActive);
+    await productRepository.delete(id);
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("products:all:*");
 
-    businessLogger.log("PROMOTION_TOGGLED", {
-      service: "promotions",
+    businessLogger.log("PRODUCT_DELETED", {
+      service: "products",
       actor: { userId: null, role: "ADMIN" },
-      target: { promotionId: id },
-      metadata: { isActive: updated.isActive },
+      target: { productId: id },
+      metadata: { name: product.name },
     });
 
-    auditLogger.log("PROMOTION_TOGGLED", {
-      service: "promotions",
+    auditLogger.log("PRODUCT_DELETED", {
+      service: "products",
       actor: { userId: null, role: "ADMIN" },
-      target: { promotionId: id },
-      metadata: { isActive: updated.isActive },
+      target: { productId: id },
+      metadata: { name: product.name },
     });
 
-    return updated;
+    return { numberOfProductsDeleted: 1 };
   },
 
-  delete: async (id: string) => {
-    const promotion = await promotionRepository.findById(id);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-    await promotionRepository.delete(id);
+  uploadImages: async (
+    id: number,
+    files: Express.Multer.File[],
+    variantId?: string,
+  ) => {
+    const product = await productRepository.findById(id);
+    if (!product) throw new AppError("Product not found", 404);
 
-    businessLogger.log("PROMOTION_DELETED", {
-      service: "promotions",
-      actor: { userId: null, role: "ADMIN" },
-      target: { promotionId: id },
-      metadata: { name: promotion.name },
-    });
+    if (variantId) {
+      const variant = await variantRepository.findById(variantId);
+      if (!variant || variant.productId !== id)
+        throw new AppError("Variant not found on this product", 404);
+    }
 
-    auditLogger.log("PROMOTION_DELETED", {
-      service: "promotions",
-      actor: { userId: null, role: "ADMIN" },
-      target: { promotionId: id },
-      metadata: { name: promotion.name },
-    });
+    const uploadedUrls = await Promise.all(files.map((f) => uploadImage(f)));
+    await productRepository.addImages(id, uploadedUrls, variantId);
 
-    return { message: "Promotion deleted successfully" };
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("products:all:*");
+
+    return productRepository.findById(id);
   },
 
-  uploadImages: async (id: string, files: Express.Multer.File[]) => {
-    const promotion = await promotionRepository.findById(id);
-    if (!promotion) throw new AppError("Promotion not found", 404);
+  deleteImage: async (id: number, imageId: string) => {
+    const product = await productRepository.findById(id);
+    if (!product) throw new AppError("Product not found", 404);
 
-    const { uploadImage } = await import("../../shared/utils/upload");
-    const uploadedUrls = await Promise.all(
-      files.map((f) => uploadImage(f, "promotions")),
-    );
-
-    return promotionRepository.addImages(id, uploadedUrls);
-  },
-
-  deleteImage: async (id: string, imageUrl: string) => {
-    const promotion = await promotionRepository.findById(id);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-
-    const images = promotion.images.filter((img) => img !== imageUrl);
-    if (images.length === promotion.images.length)
+    const image = await productRepository.findImageById(imageId);
+    if (!image || image.productId !== id)
       throw new AppError("Image not found", 404);
 
-    const { deleteImage } = await import("../../shared/utils/upload");
-    await deleteImage(imageUrl);
+    await deleteImage(image.url);
+    await productRepository.deleteImage(imageId);
 
-    return promotionRepository.removeImage(id, images);
-  },
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("products:all:*");
 
-  // ── Discounts ──────────────────────────────────────────────────────────────
-
-  createDiscount: async (promotionId: string, dto: CreateDiscountDto) => {
-    const promotion = await promotionRepository.findById(promotionId);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-
-    if (dto.type === "PERCENTAGE" && dto.value > 100)
-      throw new AppError("Percentage discount cannot exceed 100%", 400);
-
-    if (dto.categoryId) {
-      const category = await categoryRepository.findById(dto.categoryId);
-      if (!category) throw new AppError("Category not found", 404);
-    }
-
-    if (dto.productIds && dto.productIds.length > 0) {
-      for (const productId of dto.productIds) {
-        const product = await productRepository.findById(productId);
-        if (!product) throw new AppError(`Product ${productId} not found`, 404);
-      }
-    }
-
-    const discount = await promotionRepository.createDiscount(promotionId, dto);
-
-    businessLogger.log("DISCOUNT_CREATED", {
-      service: "promotions",
-      actor: { userId: null, role: "ADMIN" },
-      target: { promotionId, discountId: discount?.id },
-      metadata: { type: dto.type, value: dto.value },
-    });
-
-    auditLogger.log("DISCOUNT_CREATED", {
-      service: "promotions",
-      actor: { userId: null, role: "ADMIN" },
-      target: { promotionId, discountId: discount?.id },
-      metadata: { type: dto.type, value: dto.value },
-    });
-
-    return discount;
-  },
-
-  deleteDiscount: async (promotionId: string, discountId: string) => {
-    const promotion = await promotionRepository.findById(promotionId);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-
-    const discount = await promotionRepository.findDiscountById(discountId);
-    if (!discount) throw new AppError("Discount not found", 404);
-
-    if (discount.promotionId !== promotionId)
-      throw new AppError("Discount does not belong to this promotion", 400);
-
-    await promotionRepository.deleteDiscount(discountId);
-
-    businessLogger.log("DISCOUNT_DELETED", {
-      service: "promotions",
-      actor: { userId: null, role: "ADMIN" },
-      target: { promotionId, discountId },
-    });
-
-    return { message: "Discount deleted successfully" };
-  },
-
-  // ── Coupons ────────────────────────────────────────────────────────────────
-
-  createCoupon: async (promotionId: string, dto: CreateCouponDto) => {
-    const promotion = await promotionRepository.findById(promotionId);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-
-    if (dto.startDate && dto.endDate) {
-      if (new Date(dto.endDate) <= new Date(dto.startDate))
-        throw new AppError("Coupon endDate must be after startDate", 400);
-    }
-
-    const coupon = await promotionRepository.createCoupon(promotionId, dto);
-
-    businessLogger.log("COUPON_CREATED", {
-      service: "promotions",
-      actor: { userId: null, role: "ADMIN" },
-      target: { promotionId, couponId: coupon.id },
-      metadata: { code: coupon.code, maxUses: dto.maxUses },
-    });
-
-    return coupon;
-  },
-
-  deleteCoupon: async (promotionId: string, couponId: string) => {
-    const promotion = await promotionRepository.findById(promotionId);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-
-    const coupon = await promotionRepository.findCouponById(couponId);
-    if (!coupon) throw new AppError("Coupon not found", 404);
-
-    if (coupon.promotionId !== promotionId)
-      throw new AppError("Coupon does not belong to this promotion", 400);
-
-    await promotionRepository.deleteCoupon(couponId);
-
-    businessLogger.log("COUPON_DELETED", {
-      service: "promotions",
-      actor: { userId: null, role: "ADMIN" },
-      target: { promotionId, couponId },
-    });
-
-    return { message: "Coupon deleted successfully" };
-  },
-
-  validateCoupon: async (dto: ValidateCouponDto, userId: number) => {
-    const coupon = await promotionRepository.findCouponByCode(dto.code);
-
-    if (!coupon) throw new AppError("Invalid coupon code", 404);
-    if (!coupon.isActive) throw new AppError("This coupon is not active", 400);
-    if (!coupon.promotion.isActive)
-      throw new AppError(
-        "The promotion linked to this coupon is not active",
-        400,
-      );
-
-    const now = new Date();
-
-    if (coupon.startDate && now < coupon.startDate)
-      throw new AppError("This coupon is not yet valid", 400);
-
-    if (coupon.endDate && now > coupon.endDate)
-      throw new AppError("This coupon has expired", 400);
-
-    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses)
-      throw new AppError(
-        "This coupon has reached its maximum usage limit",
-        400,
-      );
-
-    const userUseCount = coupon.uses.filter((u) => u.userId === userId).length;
-    if (userUseCount >= coupon.perUserLimit)
-      throw new AppError(
-        "You have already used this coupon the maximum number of times",
-        400,
-      );
-
-    businessLogger.log("COUPON_APPLIED", {
-      service: "promotions",
-      actor: { userId, role: "CUSTOMER" },
-      target: { couponId: coupon.id },
-      metadata: { code: coupon.code, promotionId: coupon.promotionId },
-    });
-
-    return {
-      valid: true,
-      couponId: coupon.id,
-      code: coupon.code,
-      promotion: {
-        id: coupon.promotion.id,
-        name: coupon.promotion.name,
-        slug: coupon.promotion.slug,
-      },
-      discounts: coupon.promotion.discounts,
-    };
+    return productRepository.findById(id);
   },
 };
