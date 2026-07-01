@@ -33,11 +33,18 @@ export const productRepository = {
     page?: string;
     limit?: string;
     categoryId?: string;
+    search?: string;
   }) => {
     const { skip, take } = paginate(query);
     const where = {
       deletedAt: null,
       ...(query.categoryId && { categoryId: query.categoryId }),
+      ...(query.search && {
+        OR: [
+          { name: { contains: query.search, mode: "insensitive" as const } },
+          { sku: { contains: query.search, mode: "insensitive" as const } },
+        ],
+      }),
     };
     const [items, total] = await Promise.all([
       prisma.product.findMany({

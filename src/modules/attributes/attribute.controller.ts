@@ -76,6 +76,18 @@ export const attributeController = {
     }
   },
 
+  updateOption: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await attributeService.updateOption(
+        req.params.optionId as string,
+        req.body,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   deleteOption: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await attributeService.deleteOption(

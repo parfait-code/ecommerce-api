@@ -7,6 +7,7 @@ import {
   createAttributeDefinitionSchema,
   updateAttributeDefinitionSchema,
   createAttributeOptionSchema,
+  updateAttributeOptionSchema,
   setProductAttributesSchema,
 } from "./attribute.schema";
 
@@ -55,6 +56,14 @@ router.post(
   adminGuard,
   validate(createAttributeOptionSchema),
   attributeController.createOption,
+);
+
+router.patch(
+  "/attributes/options/:optionId",
+  authGuard,
+  adminGuard,
+  validate(updateAttributeOptionSchema),
+  attributeController.updateOption,
 );
 
 router.delete(

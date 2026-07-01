@@ -7,6 +7,7 @@
   "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
   "build": "tsc",
   "start": "node dist/server.js",
+  "seed:admin": "tsx scripts/create-admin.ts",
   "test": "dotenv -e .env.test jest --runInBand",
   "test:unit": "dotenv -e .env.test jest --runInBand tests/unit",
   "test:integration": "dotenv -e .env.test jest --runInBand tests/integration",

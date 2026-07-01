@@ -131,6 +131,17 @@ export const shipmentService = {
       pickupAddress: dto.pickup_address,
     }),
 
+  getAllPickupRequests: async (query: {
+    page?: string;
+    limit?: string;
+    status?: string;
+  }) => {
+    const [items, total] = await pickupRepository.findAll(query);
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  },
+
   getPickupRequest: async (id: string) => {
     const request = await pickupRepository.findById(id);
     if (!request) throw new AppError("Pickup request not found", 404);

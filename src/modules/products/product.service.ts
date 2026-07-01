@@ -6,23 +6,63 @@ import { cache } from "../../shared/utils/cache";
 import { uploadImage, deleteImage } from "../../shared/utils/upload";
 import { businessLogger, auditLogger } from "../../shared/logger";
 
+type ProductQuery = {
+  page?: string;
+  limit?: string;
+  categoryId?: string;
+  search?: string;
+};
+
+type ProductService = {
+  getAll: (query: ProductQuery) => Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>;
+  getById: (id: number) => Promise<any>;
+  create: (dto: CreateProductDto) => Promise<any>;
+  update: (id: number, dto: UpdateProductDto) => Promise<any>;
+  delete: (id: number) => Promise<{ numberOfProductsDeleted: number }>;
+  uploadImages: (
+    id: number,
+    files: Express.Multer.File[],
+    variantId?: string,
+  ) => Promise<any>;
+  deleteImage: (id: number, imageId: string) => Promise<any>;
+};
+
 const CACHE_KEYS = {
-  all: (page: number, limit: number, categoryId?: string) =>
-    `products:all:${page}:${limit}${categoryId ? `:${categoryId}` : ""}`,
+  all: (page: number, limit: number, categoryId?: string, search?: string) =>
+    `products:all:${page}:${limit}${categoryId ? `:${categoryId}` : ""}${search ? `:${search}` : ""}`,
   single: (id: number) => `products:${id}`,
 };
 
-export const productService = {
-  getAll: async (query: {
-    page?: string;
-    limit?: string;
-    categoryId?: string;
-  }) => {
+export const productService: ProductService = {
+  getAll: async (query: ProductQuery): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> => {
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
-    const cacheKey = CACHE_KEYS.all(page, limit, query.categoryId);
+    const cacheKey = CACHE_KEYS.all(
+      page,
+      limit,
+      query.categoryId,
+      query.search,
+    );
 
-    const cached = await cache.get(cacheKey);
+    const cached = await cache.get(cacheKey) as {
+      items: any[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    } | null;
     if (cached) return cached;
 
     const [items, total] = await productRepository.findAll(query);

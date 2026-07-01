@@ -3,6 +3,7 @@ import {
   CreateAttributeDefinitionDto,
   UpdateAttributeDefinitionDto,
   CreateAttributeOptionDto,
+  UpdateAttributeOptionDto,
   SetProductAttributesDto,
 } from "./attribute.schema";
 
@@ -55,6 +56,12 @@ export const attributeRepository = {
     data: CreateAttributeOptionDto,
   ) =>
     prisma.attributeOption.create({ data: { attributeDefinitionId, ...data } }),
+
+  findOptionById: (id: string) =>
+    prisma.attributeOption.findUnique({ where: { id } }),
+
+  updateOption: (id: string, data: UpdateAttributeOptionDto) =>
+    prisma.attributeOption.update({ where: { id }, data }),
 
   deleteOption: (id: string) =>
     prisma.attributeOption.delete({ where: { id } }),

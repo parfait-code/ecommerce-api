@@ -30,6 +30,9 @@ export const createAttributeOptionSchema = z.object({
   position: z.number().int().min(0).default(0),
 });
 
+export const updateAttributeOptionSchema =
+  createAttributeOptionSchema.partial();
+
 export const setProductAttributesSchema = z.object({
   attributes: z.array(
     z.object({
@@ -47,6 +50,9 @@ export type UpdateAttributeDefinitionDto = z.infer<
 >;
 export type CreateAttributeOptionDto = z.infer<
   typeof createAttributeOptionSchema
+>;
+export type UpdateAttributeOptionDto = z.infer<
+  typeof updateAttributeOptionSchema
 >;
 export type SetProductAttributesDto = z.infer<
   typeof setProductAttributesSchema

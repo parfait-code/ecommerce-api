@@ -71,13 +71,19 @@ export const orderService = {
     return result;
   },
 
-  getById: async (id: string) => {
+  getById: async (id: string, userId: number, isAdmin: boolean) => {
     const cacheKey = CACHE_KEYS.single(id);
-    const cached = await cache.get(cacheKey);
-    if (cached) return cached;
+    const cached = await cache.get<{ userId: number }>(cacheKey);
+    if (cached) {
+      if (!isAdmin && cached.userId !== userId)
+        throw new AppError("Forbidden", 403);
+      return cached;
+    }
 
     const order = await orderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
+    if (!isAdmin && order.userId !== userId)
+      throw new AppError("Forbidden", 403);
 
     await cache.set(cacheKey, order);
     return order;
@@ -143,9 +149,16 @@ export const orderService = {
     return order;
   },
 
-  update: async (id: string, dto: UpdateOrderDto) => {
+  update: async (
+    id: string,
+    dto: UpdateOrderDto,
+    userId: number,
+    isAdmin: boolean,
+  ) => {
     const order = await orderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
+    if (!isAdmin && order.userId !== userId)
+      throw new AppError("Forbidden", 403);
 
     const updated = await orderRepository.update(id, dto);
     await cache.del(CACHE_KEYS.single(id));
@@ -206,9 +219,11 @@ export const orderService = {
     return updated;
   },
 
-  delete: async (id: string) => {
+  delete: async (id: string, userId: number, isAdmin: boolean) => {
     const order = await orderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
+    if (!isAdmin && order.userId !== userId)
+      throw new AppError("Forbidden", 403);
 
     await orderRepository.delete(id);
     await cache.del(CACHE_KEYS.single(id));

@@ -44,7 +44,11 @@ export const orderRepository = {
     const { skip, take } = paginate(query);
     const where = {
       ...(query.status && { status: query.status as OrderStatus }),
-      ...(query.customer && { user: { email: query.customer } }),
+      ...(query.customer && {
+        user: {
+          email: { contains: query.customer, mode: "insensitive" as const },
+        },
+      }),
     };
     return Promise.all([
       prisma.order.findMany({

@@ -16,7 +16,12 @@ export const orderController = {
 
   getById: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await orderService.getById(req.params.orderId as string);
+      const isAdmin = req.user!.role === "ADMIN";
+      const result = await orderService.getById(
+        req.params.orderId as string,
+        req.user!.userId,
+        isAdmin,
+      );
       respond(res, result);
     } catch (err) {
       next(err);
@@ -46,9 +51,12 @@ export const orderController = {
 
   update: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await orderService.update(
         req.params.orderId as string,
         req.body,
+        req.user!.userId,
+        isAdmin,
       );
       respond(res, result);
     } catch (err) {
@@ -71,7 +79,12 @@ export const orderController = {
 
   delete: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await orderService.delete(req.params.orderId as string);
+      const isAdmin = req.user!.role === "ADMIN";
+      const result = await orderService.delete(
+        req.params.orderId as string,
+        req.user!.userId,
+        isAdmin,
+      );
       respond(res, result);
     } catch (err) {
       next(err);

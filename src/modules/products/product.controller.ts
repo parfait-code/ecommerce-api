@@ -7,7 +7,12 @@ export const productController = {
   getAll: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await productService.getAll(
-        req.query as { page?: string; limit?: string; categoryId?: string },
+        req.query as {
+          page?: string;
+          limit?: string;
+          categoryId?: string;
+          search?: string;
+        },
       );
       respond(res, result);
     } catch (err) {

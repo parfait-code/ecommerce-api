@@ -5,6 +5,7 @@ import {
   CreateAttributeDefinitionDto,
   UpdateAttributeDefinitionDto,
   CreateAttributeOptionDto,
+  UpdateAttributeOptionDto,
   SetProductAttributesDto,
 } from "./attribute.schema";
 import { AppError } from "../../shared/utils/app-error";
@@ -75,6 +76,12 @@ export const attributeService = {
       await attributeRepository.findDefinitionById(definitionId);
     if (!definition) throw new AppError("Attribute definition not found", 404);
     return attributeRepository.createOption(definitionId, dto);
+  },
+
+  updateOption: async (optionId: string, dto: UpdateAttributeOptionDto) => {
+    const option = await attributeRepository.findOptionById(optionId);
+    if (!option) throw new AppError("Option not found", 404);
+    return attributeRepository.updateOption(optionId, dto);
   },
 
   deleteOption: async (optionId: string) => {

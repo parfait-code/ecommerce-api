@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { UserRole } from "@prisma/client";
 
 export const signupSchema = z.object({
   username: z.string().min(3).max(50),
@@ -9,7 +8,6 @@ export const signupSchema = z.object({
   lastName: z.string().min(2).max(50),
   dateOfBirth: z.string().datetime().optional(),
   phone: z.string().optional(),
-  role: z.nativeEnum(UserRole).default(UserRole.USER),
 });
 
 export const loginSchema = z.object({

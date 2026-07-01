@@ -78,6 +78,22 @@ export const pickupRepository = {
 
   findById: (id: string) => prisma.pickupRequest.findUnique({ where: { id } }),
 
+  findAll: (query: { page?: string; limit?: string; status?: string }) => {
+    const { skip, take } = paginate(query);
+    const where = {
+      ...(query.status && { status: query.status as any }),
+    };
+    return Promise.all([
+      prisma.pickupRequest.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.pickupRequest.count({ where }),
+    ]);
+  },
+
   cancel: (id: string) =>
     prisma.pickupRequest.update({
       where: { id },

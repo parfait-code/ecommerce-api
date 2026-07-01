@@ -104,6 +104,21 @@ export const shipmentController = {
     }
   },
 
+  getAllPickupRequests: async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const result = await shipmentService.getAllPickupRequests(
+        req.query as Record<string, string>,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   getPickupRequest: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await shipmentService.getPickupRequest(
