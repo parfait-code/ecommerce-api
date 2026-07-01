@@ -40,7 +40,9 @@ const CACHE_KEYS = {
 };
 
 export const productService: ProductService = {
-  getAll: async (query: ProductQuery): Promise<{
+  getAll: async (
+    query: ProductQuery,
+  ): Promise<{
     items: any[];
     total: number;
     page: number;
@@ -56,7 +58,7 @@ export const productService: ProductService = {
       query.search,
     );
 
-    const cached = await cache.get(cacheKey) as {
+    const cached = (await cache.get(cacheKey)) as {
       items: any[];
       total: number;
       page: number;
