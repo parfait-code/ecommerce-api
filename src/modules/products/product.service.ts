@@ -1,5 +1,7 @@
 import { productRepository } from "./product.repository";
 import { variantRepository } from "../variants/variant.repository";
+import { promotionRepository } from "../promotions/promotion.repository";
+import { getBestPricing } from "../promotions/promotion.pricing";
 import { CreateProductDto, UpdateProductDto } from "./product.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
@@ -13,42 +15,14 @@ type ProductQuery = {
   search?: string;
 };
 
-type ProductService = {
-  getAll: (query: ProductQuery) => Promise<{
-    items: any[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }>;
-  getById: (id: number) => Promise<any>;
-  create: (dto: CreateProductDto) => Promise<any>;
-  update: (id: number, dto: UpdateProductDto) => Promise<any>;
-  delete: (id: number) => Promise<{ numberOfProductsDeleted: number }>;
-  uploadImages: (
-    id: number,
-    files: Express.Multer.File[],
-    variantId?: string,
-  ) => Promise<any>;
-  deleteImage: (id: number, imageId: string) => Promise<any>;
-};
-
 const CACHE_KEYS = {
   all: (page: number, limit: number, categoryId?: string, search?: string) =>
     `products:all:${page}:${limit}${categoryId ? `:${categoryId}` : ""}${search ? `:${search}` : ""}`,
   single: (id: number) => `products:${id}`,
 };
 
-export const productService: ProductService = {
-  getAll: async (
-    query: ProductQuery,
-  ): Promise<{
-    items: any[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }> => {
+export const productService = {
+  getAll: async (query: ProductQuery) => {
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
     const cacheKey = CACHE_KEYS.all(
@@ -58,18 +32,25 @@ export const productService: ProductService = {
       query.search,
     );
 
-    const cached = (await cache.get(cacheKey)) as {
+    const cached = await cache.get<{
       items: any[];
       total: number;
       page: number;
       limit: number;
       totalPages: number;
-    } | null;
+    }>(cacheKey);
     if (cached) return cached;
 
     const [items, total] = await productRepository.findAll(query);
+    const activeDiscounts = await promotionRepository.findActiveDiscounts();
+
+    const itemsWithPricing = items.map((item: any) => ({
+      ...item,
+      pricing: getBestPricing(item, activeDiscounts as any),
+    }));
+
     const result = {
-      items,
+      items: itemsWithPricing,
       total,
       page,
       limit,
@@ -88,8 +69,14 @@ export const productService: ProductService = {
     const product = await productRepository.findById(id);
     if (!product) throw new AppError("Product not found", 404);
 
-    await cache.set(cacheKey, product);
-    return product;
+    const activeDiscounts = await promotionRepository.findActiveDiscounts();
+    const productWithPricing = {
+      ...product,
+      pricing: getBestPricing(product, activeDiscounts as any),
+    };
+
+    await cache.set(cacheKey, productWithPricing);
+    return productWithPricing;
   },
 
   create: async (dto: CreateProductDto) => {
