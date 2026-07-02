@@ -73,8 +73,22 @@ export const shipmentRepository = {
 export const pickupRepository = {
   create: (
     userId: number,
-    data: { pickupDate: string; pickupAddress: string },
-  ) => prisma.pickupRequest.create({ data: { userId, ...data } }),
+    data: {
+      pickupDate: string;
+      pickupAddress: string;
+      orderId?: string;
+      shipmentId?: string;
+    },
+  ) =>
+    prisma.pickupRequest.create({
+      data: {
+        userId,
+        pickupDate: data.pickupDate,
+        pickupAddress: data.pickupAddress,
+        orderId: data.orderId ?? null,
+        shipmentId: data.shipmentId ?? null,
+      },
+    }),
 
   findById: (id: string) => prisma.pickupRequest.findUnique({ where: { id } }),
 

@@ -129,6 +129,8 @@ export const shipmentService = {
     pickupRepository.create(userId, {
       pickupDate: dto.pickup_date,
       pickupAddress: dto.pickup_address,
+      orderId: dto.order_id,
+      shipmentId: dto.shipment_id,
     }),
 
   getAllPickupRequests: async (query: {

@@ -8,7 +8,7 @@ export const createProductSchema = z.object({
   price: z.number().positive(),
   categoryId: z.string(),
   status: z.nativeEnum(ProductStatus).default(ProductStatus.DRAFT),
-  weight: z.number().positive().optional(),
+  weight: z.number().positive(), // désormais obligatoire
 });
 
 export const updateProductSchema = createProductSchema.partial();

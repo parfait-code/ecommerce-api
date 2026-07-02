@@ -10,7 +10,15 @@ import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
 
 export const basketService = {
-  create: (userId: number) => basketRepository.create(userId),
+  // Idempotent : un seul panier par utilisateur, créé au premier appel
+  getOrCreateForUser: async (userId: number) => {
+    const existing = await basketRepository.findByUserId(userId);
+    if (existing) return existing;
+    return basketRepository.create(userId);
+  },
+
+  // Conservé pour compat avec l'ancienne route POST /basket — désormais idempotent
+  create: (userId: number) => basketService.getOrCreateForUser(userId),
 
   getById: async (basketId: string) => {
     const basket = await basketRepository.findById(basketId);

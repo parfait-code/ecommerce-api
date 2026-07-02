@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import { promotionService } from "./promotion.service";
 import { respond } from "../../shared/utils/response";
 import { AppError } from "../../shared/utils/app-error";
+import { productRepository } from "../products/product.repository";
+import { getBestPricing } from "./promotion.pricing";
 
 export const promotionController = {
   // ── Promotions ─────────────────────────────────────────────────────────────
@@ -174,15 +176,83 @@ export const promotionController = {
     }
   },
 
-  validateCoupon: async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const result = await promotionService.validateCoupon(
-        req.body,
-        req.user!.userId,
+  validateCoupon: async (dto: ValidateCouponDto, userId: number) => {
+    const coupon = await promotionRepository.findCouponByCode(dto.code);
+    if (!coupon) throw new AppError("Invalid coupon code", 404);
+    if (!coupon.isActive) throw new AppError("This coupon is not active", 400);
+    if (!coupon.promotion.isActive)
+      throw new AppError(
+        "The promotion linked to this coupon is not active",
+        400,
       );
-      respond(res, result);
-    } catch (err) {
-      next(err);
+
+    const now = new Date();
+    if (coupon.startDate && now < coupon.startDate)
+      throw new AppError("This coupon is not yet valid", 400);
+    if (coupon.endDate && now > coupon.endDate)
+      throw new AppError("This coupon has expired", 400);
+    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses)
+      throw new AppError(
+        "This coupon has reached its maximum usage limit",
+        400,
+      );
+
+    const userUseCount = coupon.uses.filter((u) => u.userId === userId).length;
+    if (userUseCount >= coupon.perUserLimit)
+      throw new AppError(
+        "You have already used this coupon the maximum number of times",
+        400,
+      );
+
+    // ── Preview optionnel : calcule le total réel si items fourni ──
+    let preview:
+      | {
+          totalAmount: number;
+          meetsMinimum: boolean;
+          minOrderAmount: number | null;
+        }
+      | undefined;
+
+    if (dto.items && dto.items.length > 0) {
+      const activeDiscounts = await promotionRepository.findActiveDiscounts();
+      let totalAmount = 0;
+
+      for (const item of dto.items) {
+        const product = await productRepository.findById(Number(item.id));
+        if (!product) continue;
+        const pricing = getBestPricing(product, activeDiscounts as any);
+        totalAmount += pricing.finalPrice * item.quantity;
+      }
+      totalAmount = Math.round(totalAmount * 100) / 100;
+
+      const meetsMinimum =
+        coupon.minOrderAmount === null || totalAmount >= coupon.minOrderAmount;
+
+      preview = {
+        totalAmount,
+        meetsMinimum,
+        minOrderAmount: coupon.minOrderAmount,
+      };
+
+      if (!meetsMinimum) {
+        throw new AppError(
+          `This coupon requires a minimum order amount of ${coupon.minOrderAmount}`,
+          400,
+        );
+      }
     }
+
+    return {
+      valid: true as const,
+      couponId: coupon.id,
+      code: coupon.code,
+      promotion: {
+        id: coupon.promotion.id,
+        name: coupon.promotion.name,
+        slug: coupon.promotion.slug,
+      },
+      discounts: coupon.promotion.discounts,
+      ...(preview && { preview }),
+    };
   },
 };

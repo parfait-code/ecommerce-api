@@ -38,6 +38,8 @@ export const shippingCostSchema = z.object({
 export const createPickupRequestSchema = z.object({
   pickup_date: z.string().datetime(),
   pickup_address: z.string(),
+  order_id: z.string().optional(),
+  shipment_id: z.string().optional(),
 });
 
 export type CreateShipmentDto = z.infer<typeof createShipmentSchema>;

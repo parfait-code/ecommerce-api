@@ -9,24 +9,31 @@ const addressSchema = z.object({
   postalCode: z.string(),
 });
 
-export const createOrderSchema = z.object({
-  items: z
-    .array(
-      z.object({
-        id: z.string(),
-        quantity: z.number().int().positive(),
-      }),
-    )
-    .min(1),
-  shippingAddressId: z.string().optional(),
-  shippingAddress: addressSchema,
-  billingAddressId: z.string().optional(),
-  billingAddress: addressSchema.optional(),
-  shippingMethodId: z.string().optional(),
-  paymentMethodId: z.string().optional(),
-  notes: z.string().optional(),
-  couponCode: z.string().optional(),
-});
+export const createOrderSchema = z
+  .object({
+    items: z
+      .array(
+        z.object({
+          id: z.string(),
+          variantId: z.string().optional(),
+          quantity: z.number().int().positive(),
+        }),
+      )
+      .optional(),
+    basketId: z.string().optional(),
+    shippingAddressId: z.string().optional(),
+    shippingAddress: addressSchema,
+    billingAddressId: z.string().optional(),
+    billingAddress: addressSchema.optional(),
+    shippingMethodId: z.string().optional(),
+    paymentMethodId: z.string().optional(),
+    notes: z.string().optional(),
+    couponCode: z.string().optional(),
+  })
+  .refine((data) => (data.items && data.items.length > 0) || !!data.basketId, {
+    message: "Either items or basketId must be provided",
+    path: ["items"],
+  });
 
 export const updateOrderSchema = z.object({
   shippingAddressId: z.string().optional(),

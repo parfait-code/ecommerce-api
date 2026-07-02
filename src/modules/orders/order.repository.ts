@@ -7,6 +7,23 @@ const orderInclude = {
   items: {
     include: {
       product: { select: { id: true, name: true, sku: true } },
+      variant: {
+        select: {
+          id: true,
+          sku: true,
+          price: true,
+          attributeValues: {
+            include: {
+              attributeDefinition: {
+                select: { id: true, name: true, slug: true },
+              },
+            },
+          },
+        },
+      },
+      reviews: {
+        select: { id: true, rating: true, comment: true, createdAt: true },
+      },
     },
   },
   user: {
@@ -35,20 +52,26 @@ const orderInclude = {
 };
 
 export const orderRepository = {
-  findAll: (query: {
-    status?: string;
-    customer?: string;
-    page?: string;
-    limit?: string;
-  }) => {
+  findAll: (
+    query: {
+      status?: string;
+      customer?: string;
+      page?: string;
+      limit?: string;
+    },
+    userId?: number,
+  ) => {
     const { skip, take } = paginate(query);
     const where = {
+      ...(userId !== undefined && { userId }),
       ...(query.status && { status: query.status as OrderStatus }),
-      ...(query.customer && {
-        user: {
-          email: { contains: query.customer, mode: "insensitive" as const },
-        },
-      }),
+      // "customer" reste réservé à l'admin — ignoré si userId est fourni (scope non-admin)
+      ...(query.customer &&
+        userId === undefined && {
+          user: {
+            email: { contains: query.customer, mode: "insensitive" as const },
+          },
+        }),
     };
     return Promise.all([
       prisma.order.findMany({
@@ -71,6 +94,7 @@ export const orderRepository = {
     totalAmount: number,
     items: {
       productId: number;
+      variantId?: string | null;
       quantity: number;
       price: number;
       originalPrice: number;

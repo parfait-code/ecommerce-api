@@ -1,50 +1,71 @@
-import { Request, Response, NextFunction } from 'express'
-import { basketService } from './basket.service'
-import { respond } from '../../shared/utils/response'
+import { Request, Response, NextFunction } from "express";
+import { basketService } from "./basket.service";
+import { respond } from "../../shared/utils/response";
 
 export const basketController = {
+  // GET /user/basket — récupère (ou crée) le panier unique de l'utilisateur connecté
+  getMine: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await basketService.getOrCreateForUser(req.user!.userId);
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   create: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await basketService.create(req.user!.userId)
-      respond(res, result, 201)
+      const result = await basketService.create(req.user!.userId);
+      respond(res, result, 201);
     } catch (err) {
-      next(err)
+      next(err);
     }
   },
 
   getById: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await basketService.getById(req.params.basket_id as string)
-      respond(res, result)
+      const result = await basketService.getById(
+        req.params.basket_id as string,
+      );
+      respond(res, result);
     } catch (err) {
-      next(err)
+      next(err);
     }
   },
 
   addProduct: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await basketService.addProduct(req.params.basket_id as string, req.body)
-      respond(res, result)
+      const result = await basketService.addProduct(
+        req.params.basket_id as string,
+        req.body,
+      );
+      respond(res, result);
     } catch (err) {
-      next(err)
+      next(err);
     }
   },
 
   updateQuantity: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await basketService.updateQuantity(req.params.basket_id as string, req.body)
-      respond(res, result)
+      const result = await basketService.updateQuantity(
+        req.params.basket_id as string,
+        req.body,
+      );
+      respond(res, result);
     } catch (err) {
-      next(err)
+      next(err);
     }
   },
 
   removeProduct: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await basketService.removeProduct(req.params.basket_id as string, req.body)
-      respond(res, result)
+      const result = await basketService.removeProduct(
+        req.params.basket_id as string,
+        req.body,
+      );
+      respond(res, result);
     } catch (err) {
-      next(err)
+      next(err);
     }
   },
-}
+};

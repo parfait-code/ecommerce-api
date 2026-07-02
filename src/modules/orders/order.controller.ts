@@ -5,8 +5,11 @@ import { respond } from "../../shared/utils/response";
 export const orderController = {
   getAll: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await orderService.getAll(
         req.query as Record<string, string>,
+        req.user!.userId,
+        isAdmin,
       );
       respond(res, result);
     } catch (err) {

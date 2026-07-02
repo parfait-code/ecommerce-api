@@ -8,8 +8,6 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "seed:admin": "tsx scripts/create-admin.ts",
-    "seed:product-weight": "tsx scripts/backfill-product-weight.ts",
-    "seed:dedupe-baskets": "tsx scripts/dedupe-baskets.ts",
     "test": "dotenv -e .env.test jest --runInBand",
     "test:unit": "dotenv -e .env.test jest --runInBand tests/unit",
     "test:integration": "dotenv -e .env.test jest --runInBand tests/integration",

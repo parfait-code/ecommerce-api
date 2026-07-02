@@ -1,5 +1,7 @@
 import { orderRepository } from "./order.repository";
 import { productRepository } from "../products/product.repository";
+import { variantRepository } from "../variants/variant.repository";
+import { basketRepository } from "../basket/basket.repository";
 import { loyaltyService } from "../loyalty/loyalty.service";
 import { promotionRepository } from "../promotions/promotion.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
@@ -18,7 +20,11 @@ const CACHE_KEYS = {
   single: (id: string) => `orders:${id}`,
 };
 
-const resolveCoupon = async (code: string, userId: number) => {
+const resolveCoupon = async (
+  code: string,
+  userId: number,
+  orderTotal: number,
+) => {
   const coupon = await promotionRepository.findCouponByCode(code);
   if (!coupon) throw new AppError("Invalid coupon code", 404);
   if (!coupon.isActive) throw new AppError("This coupon is not active", 400);
@@ -35,6 +41,11 @@ const resolveCoupon = async (code: string, userId: number) => {
     throw new AppError("This coupon has expired", 400);
   if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses)
     throw new AppError("This coupon has reached its maximum usage limit", 400);
+  if (coupon.minOrderAmount !== null && orderTotal < coupon.minOrderAmount)
+    throw new AppError(
+      `This coupon requires a minimum order amount of ${coupon.minOrderAmount}`,
+      400,
+    );
 
   const userUseCount = coupon.uses.filter((u) => u.userId === userId).length;
   if (userUseCount >= coupon.perUserLimit)
@@ -47,17 +58,27 @@ const resolveCoupon = async (code: string, userId: number) => {
 };
 
 export const orderService = {
-  getAll: async (query: {
-    status?: string;
-    customer?: string;
-    page?: string;
-    limit?: string;
-  }) => {
-    const cacheKey = CACHE_KEYS.all(query as Record<string, string>);
+  getAll: async (
+    query: {
+      status?: string;
+      customer?: string;
+      page?: string;
+      limit?: string;
+    },
+    userId: number,
+    isAdmin: boolean,
+  ) => {
+    const cacheKey = CACHE_KEYS.all({
+      ...query,
+      scope: isAdmin ? "all" : String(userId),
+    } as Record<string, string>);
     const cached = await cache.get(cacheKey);
     if (cached) return cached;
 
-    const [items, total] = await orderRepository.findAll(query);
+    const [items, total] = await orderRepository.findAll(
+      query,
+      isAdmin ? undefined : userId,
+    );
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
     const result = {
@@ -93,8 +114,32 @@ export const orderService = {
   create: async (userId: number, dto: CreateOrderDto) => {
     const activeDiscounts = await promotionRepository.findActiveDiscounts();
 
+    // ── Résolution des items : soit fournis directement, soit depuis le panier serveur ──
+    let sourceItems: { id: string; variantId?: string; quantity: number }[];
+    let basketToClear: string | undefined;
+
+    if (dto.items && dto.items.length > 0) {
+      sourceItems = dto.items;
+    } else {
+      if (!dto.basketId)
+        throw new AppError("Either items or basketId must be provided", 400);
+
+      const basket = await basketRepository.findById(dto.basketId);
+      if (!basket) throw new AppError("Basket not found", 404);
+      if (basket.userId !== userId) throw new AppError("Forbidden", 403);
+      if (basket.items.length === 0) throw new AppError("Basket is empty", 400);
+
+      sourceItems = basket.items.map((i) => ({
+        id: String(i.productId),
+        variantId: i.variantId ?? undefined,
+        quantity: i.quantity,
+      }));
+      basketToClear = basket.id;
+    }
+
     const orderItems: {
       productId: number;
+      variantId?: string | null;
       quantity: number;
       price: number;
       originalPrice: number;
@@ -104,30 +149,48 @@ export const orderService = {
     let totalAmount = 0;
     let totalOriginalAmount = 0;
 
-    for (const item of dto.items) {
+    for (const item of sourceItems) {
       const product = await productRepository.findById(Number(item.id));
       if (!product) throw new AppError(`Product ${item.id} not found`, 404);
 
-      const pricing = getBestPricing(product, activeDiscounts as any);
+      let unitPrice = product.price;
+
+      if (item.variantId) {
+        const variant = await variantRepository.findById(item.variantId);
+        if (!variant || variant.productId !== product.id)
+          throw new AppError(
+            `Variant ${item.variantId} not found on product ${item.id}`,
+            404,
+          );
+        if (!variant.isActive)
+          throw new AppError(`Variant ${item.variantId} is not available`, 400);
+        if (variant.price !== null) unitPrice = variant.price;
+      }
+
+      const pricing = getBestPricing(
+        { ...product, price: unitPrice },
+        activeDiscounts as any,
+      );
 
       orderItems.push({
         productId: product.id,
+        variantId: item.variantId ?? null,
         quantity: item.quantity,
         price: pricing.finalPrice,
-        originalPrice: product.price,
+        originalPrice: unitPrice,
         discountAmount:
           Math.round(pricing.discountAmount * item.quantity * 100) / 100,
       });
 
       totalAmount += pricing.finalPrice * item.quantity;
-      totalOriginalAmount += product.price * item.quantity;
+      totalOriginalAmount += unitPrice * item.quantity;
     }
 
     totalAmount = Math.round(totalAmount * 100) / 100;
     totalOriginalAmount = Math.round(totalOriginalAmount * 100) / 100;
 
     const coupon = dto.couponCode
-      ? await resolveCoupon(dto.couponCode, userId)
+      ? await resolveCoupon(dto.couponCode, userId, totalAmount)
       : null;
 
     const discountedAmount =
@@ -154,6 +217,11 @@ export const orderService = {
         target: { orderId: order.id, couponId: coupon.id },
         metadata: { code: coupon.code },
       });
+    }
+
+    // ── Vidage du panier serveur si la commande venait d'un basketId ──
+    if (basketToClear) {
+      await basketRepository.clearItems(basketToClear);
     }
 
     await cache.delByPattern("orders:all:*");

@@ -26,6 +26,12 @@ export const basketRepository = {
   findById: (id: string) =>
     prisma.basket.findUnique({ where: { id }, include: basketInclude }),
 
+  findByUserId: (userId: number) =>
+    prisma.basket.findUnique({ where: { userId }, include: basketInclude }),
+
+  clearItems: (basketId: string) =>
+    prisma.basketItem.deleteMany({ where: { basketId } }),
+
   addItem: async (
     basketId: string,
     productId: number,
