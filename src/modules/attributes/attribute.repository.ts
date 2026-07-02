@@ -32,6 +32,11 @@ export const attributeRepository = {
     prisma.attributeDefinition.findUnique({
       where: { categoryId_slug: { categoryId, slug } },
     }),
+  findRequiredByCategory: (categoryId: string) =>
+    prisma.attributeDefinition.findMany({
+      where: { categoryId, isVariant: false, isRequired: true },
+      select: { id: true, name: true, slug: true },
+    }),
 
   createDefinition: (categoryId: string, data: CreateAttributeDefinitionDto) =>
     prisma.attributeDefinition.create({

@@ -1,5 +1,6 @@
 import { productRepository } from "./product.repository";
 import { variantRepository } from "../variants/variant.repository";
+import { attributeRepository } from "../attributes/attribute.repository";
 import { promotionRepository } from "../promotions/promotion.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
 import { CreateProductDto, UpdateProductDto } from "./product.schema";
@@ -7,6 +8,7 @@ import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
 import { uploadImage, deleteImage } from "../../shared/utils/upload";
 import { businessLogger, auditLogger } from "../../shared/logger";
+import { ProductStatus } from "@prisma/client";
 
 type ProductQuery = {
   page?: string;
@@ -19,6 +21,35 @@ const CACHE_KEYS = {
   all: (page: number, limit: number, categoryId?: string, search?: string) =>
     `products:all:${page}:${limit}${categoryId ? `:${categoryId}` : ""}${search ? `:${search}` : ""}`,
   single: (id: number) => `products:${id}`,
+};
+
+/**
+ * Un produit ne peut passer ACTIVE que si tous les attributs produit
+ * (isVariant: false) marqués isRequired: true sur sa catégorie sont renseignés.
+ * Les attributs de variante ne sont pas concernés par ce contrôle.
+ */
+const assertReadyForActivation = async (product: {
+  categoryId: string;
+  attributeValues: { attributeDefinitionId: string }[];
+}) => {
+  const required = await attributeRepository.findRequiredByCategory(
+    product.categoryId,
+  );
+  if (required.length === 0) return;
+
+  const setIds = new Set(
+    product.attributeValues.map((v) => v.attributeDefinitionId),
+  );
+  const missing = required.filter((r) => !setIds.has(r.id));
+
+  if (missing.length > 0) {
+    throw new AppError(
+      `Cannot activate product: missing required attributes (${missing
+        .map((m) => m.name)
+        .join(", ")})`,
+      400,
+    );
+  }
 };
 
 export const productService = {
@@ -80,7 +111,13 @@ export const productService = {
   },
 
   create: async (dto: CreateProductDto) => {
-    const product = await productRepository.create(dto);
+    // Un produit naît toujours en DRAFT — il ne peut avoir d'attributs
+    // renseignés avant d'exister, donc jamais ACTIVE à la création,
+    // quelle que soit la valeur envoyée par le client.
+    const product = await productRepository.create({
+      ...dto,
+      status: ProductStatus.DRAFT,
+    });
     await cache.delByPattern("products:all:*");
 
     businessLogger.log("PRODUCT_CREATED", {
@@ -107,6 +144,10 @@ export const productService = {
   update: async (id: number, dto: UpdateProductDto) => {
     const product = await productRepository.findById(id);
     if (!product) throw new AppError("Product not found", 404);
+
+    if (dto.status === ProductStatus.ACTIVE) {
+      await assertReadyForActivation(product);
+    }
 
     const priceChanged = dto.price !== undefined && dto.price !== product.price;
     const updated = await productRepository.update(id, dto);

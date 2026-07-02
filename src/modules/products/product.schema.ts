@@ -8,10 +8,13 @@ export const createProductSchema = z.object({
   price: z.number().positive(),
   categoryId: z.string(),
   status: z.nativeEnum(ProductStatus).default(ProductStatus.DRAFT),
-  weight: z.number().positive(), // désormais obligatoire
+  weight: z.number().positive(),
 });
 
-export const updateProductSchema = createProductSchema.partial();
+// categoryId exclu — immuable après création (voir product.service.ts)
+export const updateProductSchema = createProductSchema
+  .omit({ categoryId: true })
+  .partial();
 
 export const uploadImagesSchema = z.object({
   variantId: z.string().optional(),
