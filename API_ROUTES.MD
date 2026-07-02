@@ -1,1897 +1,367 @@
 # API Reference — E-Commerce API
 
-> **Base URL** : `http://localhost:3000`  
-> **Content-Type** : `application/json`  
+> **Base URL** : `http://localhost:3000`
+> **Content-Type** : `application/json` (sauf upload → `multipart/form-data`)
 > **Authentication** : `Authorization: Bearer <token>` (JWT)
-
----
+> **Devise** : XAF pour tous les montants
 
 ## Conventions
 
 ### Réponse succès
+
 ```json
 { "status": true, "data": { ... } }
 ```
 
 ### Réponse erreur
+
 ```json
 { "status": false, "error": { "message": "..." } }
 ```
 
-### Pagination (paramètres query communs)
-| Paramètre | Type | Défaut | Description |
-|-----------|------|--------|-------------|
-| `page` | number | 1 | Numéro de page |
-| `limit` | number | 20 | Nombre d'éléments par page |
-
 ### Réponse paginée
+
 ```json
-{
-  "status": true,
-  "data": {
-    "items": [...],
-    "total": 100,
-    "page": 1,
-    "limit": 20,
-    "totalPages": 5
-  }
-}
+{ "items": [...], "total": 100, "page": 1, "limit": 20, "totalPages": 5 }
 ```
+
+Paramètres `page` (défaut 1) et `limit` (défaut 20) sur toutes les routes paginées.
 
 ### Rôles
-| Rôle | Description |
-|------|-------------|
-| `USER` | Utilisateur standard |
-| `ADMIN` | Administrateur |
-| `MANAGER` | Manager |
-| `SUPPORT` | Support |
+
+`USER` · `ADMIN` · `MANAGER` · `SUPPORT` (seul `ADMIN` est vérifié par `adminGuard` actuellement — `MANAGER`/`SUPPORT` n'ont aucun privilège différencié dans le code actuel).
 
 ---
 
-## Auth
+## 1. Auth
 
-### `POST /signup`
-Créer un compte utilisateur.  
-**Auth** : ❌
+| Méthode | Route     | Auth | Body                                                                                           | Notes                                                                                                                                                                                                                                                                                                |
+| ------- | --------- | ---- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST    | `/signup` | ❌   | `username(3-50), email, password(min6), firstName(2-50), lastName(2-50), dateOfBirth?, phone?` | ⚠️ **CORRECTION** : le schema Zod de `/signup` n'accepte **pas** de champ `role` — toute valeur envoyée est silencieusement ignorée et le rôle est toujours forcé à `USER` côté service (`auth.service.ts`). Le risque d'auto-promotion admin mentionné dans les anciens warnings n'existe donc pas. |
+| POST    | `/login`  | ❌   | `username, password`                                                                           | 400 si identifiants invalides ou compte inexistant, 403 si compte désactivé (`isActive:false`)                                                                                                                                                                                                       |
 
-**Body**
-```json
+Réponse `/signup` et `/login` : `{ user (sans password), token }`.
+
+---
+
+## 2. Utilisateurs (`/user`)
+
+| Méthode | Route                       | Auth     | Body                                                                                       |
+| ------- | --------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| GET     | `/user`                     | ✅       | —                                                                                          |
+| PATCH   | `/user`                     | ✅       | `email?, firstName?, lastName?, dateOfBirth?, phone?`                                      |
+| GET     | `/user/all`                 | 🔒 ADMIN | —                                                                                          |
+| GET     | `/user/:userId`             | 🔒 ADMIN | —                                                                                          |
+| POST    | `/user`                     | 🔒 ADMIN | `username, email, password, firstName, lastName, dateOfBirth?, phone?, role?(défaut USER)` |
+| PATCH   | `/user/change-role/:userId` | 🔒 ADMIN | `role`                                                                                     |
+| DELETE  | `/user/:userId`             | 🔒 ADMIN | — → `{ numberOfUsersDeleted: 1 }` (soft delete)                                            |
+
+⚠️ Les routes statiques (`/user/all`, `/user` POST) sont déclarées **avant** `/user/:userId` dans le router — ordre obligatoire en Express.
+
+---
+
+## 3. Produits (`/product`)
+
+| Méthode | Route                        | Auth     | Notes                                                                                                                                                                                                                      |
+| ------- | ---------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/product`                   | ❌       | Query : `page?, limit?, categoryId?, search?` — `search` filtre sur `name` OU `sku` (insensible à la casse). ⚠️ **CORRECTION** : contrairement à l'ancienne doc, la recherche texte **est** supportée nativement côté API. |
+| GET     | `/product/:productId`        | ❌       | 404 si introuvable ou soft-deleted                                                                                                                                                                                         |
+| POST    | `/product`                   | 🔒 ADMIN | `sku, name, description?, price, categoryId, status?(DRAFT défaut), weight?`                                                                                                                                               |
+| PATCH   | `/product/:productId`        | 🔒 ADMIN | body partiel                                                                                                                                                                                                               |
+| DELETE  | `/product/:productId`        | 🔒 ADMIN | soft delete → `{ numberOfProductsDeleted: 1 }`                                                                                                                                                                             |
+| POST    | `/product/:productId/images` | 🔒 ADMIN | `multipart/form-data`, champ `images` (1-5, jpeg/png/webp/gif, 5MB max), `variantId?` optionnel                                                                                                                            |
+| DELETE  | `/product/:productId/images` | 🔒 ADMIN | body `{ imageId }`                                                                                                                                                                                                         |
+
+---
+
+## 4. Variantes (`/product/:productId/variants`)
+
+| Méthode | Route         | Auth     | Body                                                                                        |
+| ------- | ------------- | -------- | ------------------------------------------------------------------------------------------- |
+| GET     | `/`           | ✅       | — → `Variant[]`                                                                             |
+| GET     | `/:variantId` | ✅       | —                                                                                           |
+| POST    | `/`           | 🔒 ADMIN | `sku, price?, isActive?(défaut true), attributes: [{attributeDefinitionId, value}] (min 1)` |
+| PATCH   | `/:variantId` | 🔒 ADMIN | body partiel                                                                                |
+| DELETE  | `/:variantId` | 🔒 ADMIN | —                                                                                           |
+
+Contraintes métier (`variant.service.ts`) : le `sku` doit être unique globalement ; chaque `attributeDefinitionId` doit appartenir à la catégorie du produit **et** avoir `isVariant: true`.
+
+---
+
+## 5. Catégories (`/categories`)
+
+| Méthode | Route                             | Auth     | Body                                                                                                                          |
+| ------- | --------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/categories`                     | ✅       | — → `Category[]` (mis en cache)                                                                                               |
+| GET     | `/categories/:categoryId`         | ✅       | —                                                                                                                             |
+| GET     | `/categories/slug/:slug`          | ❌       | —                                                                                                                             |
+| GET     | `/categories/slug/:slug/products` | ❌       | Query `page?, limit?` → `{ category, items, total, page, limit, totalPages }`                                                 |
+| POST    | `/categories`                     | 🔒 ADMIN | `name(2-100), slug(2-100, kebab-case), description?, imageUrl?, iconUrl?, metaTitle?, metaDescription?, isActive?, parentId?` |
+| PUT     | `/categories/:categoryId`         | 🔒 ADMIN | body partiel                                                                                                                  |
+| DELETE  | `/categories/:categoryId`         | 🔒 ADMIN | **400** si des produits sont encore rattachés — aucune réassignation en masse disponible                                      |
+
+---
+
+## 6. Attributs (`/categories/:categoryId/attributes`, `/attributes`)
+
+| Méthode | Route                                | Auth     | Body                                                                                                                                                                                                  |
+| ------- | ------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/categories/:categoryId/attributes` | ✅       | —                                                                                                                                                                                                     |
+| POST    | `/categories/:categoryId/attributes` | 🔒 ADMIN | `name, slug, type(TEXT\|NUMBER\|COLOR\|BOOLEAN\|SELECT), unit?, isVariant?, isFilterable?, isRequired?, position?`                                                                                    |
+| GET     | `/attributes/:definitionId`          | ✅       | —                                                                                                                                                                                                     |
+| PATCH   | `/attributes/:definitionId`          | 🔒 ADMIN | body partiel                                                                                                                                                                                          |
+| DELETE  | `/attributes/:definitionId`          | 🔒 ADMIN | —                                                                                                                                                                                                     |
+| POST    | `/attributes/:definitionId/options`  | 🔒 ADMIN | `value, colorHex?(#RRGGBB), position?`                                                                                                                                                                |
+| PATCH   | `/attributes/options/:optionId`      | 🔒 ADMIN | body partiel — ⚠️ **CORRECTION** : contrairement aux anciens warnings, une route d'édition d'option **existe** (`attribute.router.ts`), il n'est donc pas nécessaire de supprimer/recréer une option. |
+| DELETE  | `/attributes/options/:optionId`      | 🔒 ADMIN | —                                                                                                                                                                                                     |
+| PUT     | `/product/:productId/attributes`     | 🔒 ADMIN | `attributes: [{attributeDefinitionId, value}]` — remplace toutes les valeurs                                                                                                                          |
+
+---
+
+## 7. Tags (`/tags`, `/product/:productId/tags`)
+
+| Méthode | Route                      | Auth     | Body                                                    |
+| ------- | -------------------------- | -------- | ------------------------------------------------------- |
+| GET     | `/tags`                    | ❌       | —                                                       |
+| GET     | `/tags/:tagId`             | ❌       | — (avec `products`)                                     |
+| POST    | `/tags`                    | 🔒 ADMIN | `name(2-50), slug(2-50, kebab-case)`                    |
+| PATCH   | `/tags/:tagId`             | 🔒 ADMIN | body partiel                                            |
+| DELETE  | `/tags/:tagId`             | 🔒 ADMIN | —                                                       |
+| PUT     | `/product/:productId/tags` | 🔒 ADMIN | `{ tagIds: string[] }` (min 1) — remplace tous les tags |
+| GET     | `/product/:productId/tags` | ✅       | —                                                       |
+
+---
+
+## 8. Panier (`/basket`)
+
+| Méthode | Route                                 | Auth | Body                                                                                           |
+| ------- | ------------------------------------- | ---- | ---------------------------------------------------------------------------------------------- |
+| POST    | `/basket`                             | ✅   | — → `201` panier vide                                                                          |
+| GET     | `/basket/:basket_id`                  | ✅   | —                                                                                              |
+| POST    | `/basket/:basket_id/product`          | ✅   | `product_id, variant_id?, quantity` — incrémente si déjà présent (même couple produit/variant) |
+| PUT     | `/basket/:basket_id/product/quantity` | ✅   | `product_id, variant_id?, quantity`                                                            |
+| DELETE  | `/basket/:basket_id/product`          | ✅   | `product_id, variant_id?`                                                                      |
+
+Un utilisateur peut avoir plusieurs paniers actifs simultanément (aucune contrainte d'unicité `userId`).
+
+---
+
+## 9. Wishlist (`/wishlist`)
+
+| Méthode | Route             | Auth | Body                                 |
+| ------- | ----------------- | ---- | ------------------------------------ |
+| GET     | `/wishlist`       | ✅   | — (créée automatiquement si absente) |
+| POST    | `/wishlist/items` | ✅   | `product_id, variant_id?`            |
+| DELETE  | `/wishlist/items` | ✅   | `product_id, variant_id?`            |
+
+Contrairement au panier, la wishlist est **unique par utilisateur** (`@unique userId` en base).
+
+---
+
+## 10. Commandes (`/orders`)
+
+| Méthode | Route                     | Auth     | Notes                                                                                                                               |
+| ------- | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/orders`                 | ✅       | Query `page?, limit?, status?, customer?` — `customer` filtre `user.email` en `contains` insensible à la casse (match partiel)      |
+| POST    | `/orders`                 | ✅       | Voir body ci-dessous                                                                                                                |
+| GET     | `/orders/:orderId`        | ✅       | 403 si la commande n'appartient pas à l'appelant (sauf admin)                                                                       |
+| PUT     | `/orders/:orderId`        | ✅       | body partiel (adresses, méthode de livraison, notes)                                                                                |
+| DELETE  | `/orders/:orderId`        | ✅       | annule la commande → `{ message: "Order cancelled successfully" }`                                                                  |
+| PUT     | `/orders/:orderId/status` | 🔒 ADMIN | `status, reason?, shippingCarrier?, trackingNumber?, estimatedDeliveryDate?` — crédite les points fidélité au passage à `DELIVERED` |
+| GET     | `/user/:userId/orders`    | 🔒 ADMIN | Query `page?, limit?`                                                                                                               |
+
+**Body `POST /orders`** :
+
+```ts
 {
-  "username": "string (3-50)",
-  "email": "string (email)",
-  "password": "string (min 6)",
-  "firstName": "string (2-50)",
-  "lastName": "string (2-50)",
-  "dateOfBirth": "string (ISO datetime, optionnel)",
-  "phone": "string (optionnel)",
-  "role": "USER | ADMIN | MANAGER | SUPPORT (défaut: USER)"
+  items: { id: string; quantity: number }[]; // min 1
+  shippingAddressId?: string;
+  shippingAddress: { street, city, state?, country, postalCode };
+  billingAddressId?: string;
+  billingAddress?: { street, city, state?, country, postalCode };
+  shippingMethodId?: string;
+  paymentMethodId?: string;
+  notes?: string;
+  couponCode?: string;
 }
 ```
 
-**Réponse 200**
-```json
-{
-  "user": { "id": 1, "username": "...", "email": "...", "role": "USER", ... },
-  "token": "eyJ..."
-}
-```
+⚠️ **CORRECTION** : `items[].id` est le **`productId` converti en string** (`order.service.ts` fait `Number(item.id)` pour résoudre le produit), **pas** un `basketItemId` comme indiqué dans les anciennes docs. Le panier n'est jamais consulté lors de la création de commande — les deux flux (panier et commande) sont indépendants.
 
----
-
-### `POST /login`
-Se connecter.  
-**Auth** : ❌
-
-**Body**
-```json
-{
-  "username": "string",
-  "password": "string"
-}
-```
-
-**Réponse 200**
-```json
-{
-  "user": { "id": 1, "username": "...", "email": "...", "role": "USER", ... },
-  "token": "eyJ..."
-}
-```
-
----
-
-## Utilisateurs
-
-### `GET /user`
-Récupérer son propre profil.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-{
-  "id": 1,
-  "username": "string",
-  "email": "string",
-  "firstName": "string",
-  "lastName": "string",
-  "dateOfBirth": "datetime | null",
-  "phone": "string | null",
-  "role": "USER",
-  "isActive": true,
-  "createdAt": "datetime",
-  "updatedAt": "datetime"
-}
-```
-
----
-
-### `PATCH /user`
-Mettre à jour son propre profil.  
-**Auth** : ✅ (tous rôles)
-
-**Body** (tous les champs optionnels)
-```json
-{
-  "email": "string (email)",
-  "firstName": "string (2-50)",
-  "lastName": "string (2-50)",
-  "dateOfBirth": "string (ISO datetime)",
-  "phone": "string"
-}
-```
-
----
-
-### `GET /user/all` 🔒 ADMIN
-Lister tous les utilisateurs.  
-**Auth** : ✅ ADMIN
-
-**Réponse 200** : tableau d'utilisateurs (sans `password`)
-
----
-
-### `GET /user/:userId` 🔒 ADMIN
-Récupérer un utilisateur par ID.  
-**Auth** : ✅ ADMIN
-
----
-
-### `POST /user` 🔒 ADMIN
-Créer un utilisateur (côté admin).  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "username": "string (3-50)",
-  "email": "string (email)",
-  "password": "string (min 6)",
-  "firstName": "string (2-50)",
-  "lastName": "string (2-50)",
-  "dateOfBirth": "string (ISO datetime, optionnel)",
-  "phone": "string (optionnel)",
-  "role": "USER | ADMIN | MANAGER | SUPPORT (défaut: USER)"
-}
-```
-
----
-
-### `PATCH /user/change-role/:userId` 🔒 ADMIN
-Changer le rôle d'un utilisateur.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "role": "USER | ADMIN | MANAGER | SUPPORT"
-}
-```
-
----
-
-### `DELETE /user/:userId` 🔒 ADMIN
-Supprimer (soft delete) un utilisateur.  
-**Auth** : ✅ ADMIN
-
-**Réponse 200**
-```json
-{ "numberOfUsersDeleted": 1 }
-```
-
----
-
-## Produits
-
-### `GET /product`
-Lister les produits.  
-**Auth** : ❌
-
-**Query**
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `page` | number | Page |
-| `limit` | number | Limite |
-| `categoryId` | string | Filtrer par catégorie |
-
-**Réponse 200** : réponse paginée avec `items` = tableau de produits
-
----
-
-### `GET /product/:productId`
-Récupérer un produit par ID.  
-**Auth** : ❌
-
-**Réponse 200**
-```json
-{
-  "id": 1,
-  "sku": "string",
-  "name": "string",
-  "description": "string | null",
-  "price": 9999,
-  "status": "DRAFT | ACTIVE | ARCHIVED",
-  "weight": 1.5,
-  "brand": "string | null",
-  "category": { "id": "string", "name": "string", "slug": "string" },
-  "images": [{ "id": "string", "url": "string", "isPrimary": true, "position": 0 }],
-  "variants": [...],
-  "attributeValues": [...],
-  "createdAt": "datetime",
-  "updatedAt": "datetime"
-}
-```
-
----
-
-### `POST /product` 🔒 ADMIN
-Créer un produit.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "sku": "string (1-100)",
-  "name": "string (2-200)",
-  "description": "string (optionnel)",
-  "price": 9999,
-  "categoryId": "string",
-  "status": "DRAFT | ACTIVE | ARCHIVED (défaut: DRAFT)",
-  "weight": 1.5
-}
-```
-
-**Réponse 201** : produit créé
-
----
-
-### `PATCH /product/:productId` 🔒 ADMIN
-Mettre à jour un produit.  
-**Auth** : ✅ ADMIN
-
-**Body** (tous les champs optionnels, mêmes champs que POST)
-
----
-
-### `DELETE /product/:productId` 🔒 ADMIN
-Supprimer un produit (soft delete).  
-**Auth** : ✅ ADMIN
-
-**Réponse 200**
-```json
-{ "numberOfProductsDeleted": 1 }
-```
-
----
-
-### `POST /product/:productId/images` 🔒 ADMIN
-Upload d'images pour un produit.  
-**Auth** : ✅ ADMIN  
-**Content-Type** : `multipart/form-data`
-
-**Body (form-data)**
-| Champ | Type | Description |
-|-------|------|-------------|
-| `images` | File[] | 1 à 5 fichiers (JPEG, PNG, WEBP, GIF, max 5MB chacun) |
-| `variantId` | string | ID du variant (optionnel) |
-
----
-
-### `DELETE /product/:productId/images` 🔒 ADMIN
-Supprimer une image d'un produit.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{ "imageId": "string" }
-```
-
----
-
-## Variants Produit
-
-> **Préfixe** : `/product/:productId/variants`
-
-### `GET /product/:productId/variants`
-Lister les variants d'un produit.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `GET /product/:productId/variants/:variantId`
-Récupérer un variant.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `POST /product/:productId/variants` 🔒 ADMIN
-Créer un variant.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "sku": "string (1-100)",
-  "price": 9999,
-  "isActive": true,
-  "attributes": [
-    { "attributeDefinitionId": "string", "value": "string" }
-  ]
-}
-```
-
-**Réponse 201** : variant créé
-
----
-
-### `PATCH /product/:productId/variants/:variantId` 🔒 ADMIN
-Mettre à jour un variant.  
-**Auth** : ✅ ADMIN
-
-**Body** (tous les champs optionnels)
-```json
-{
-  "sku": "string",
-  "price": 9999,
-  "isActive": true,
-  "attributes": [
-    { "attributeDefinitionId": "string", "value": "string" }
-  ]
-}
-```
-
----
-
-### `DELETE /product/:productId/variants/:variantId` 🔒 ADMIN
-Supprimer un variant.  
-**Auth** : ✅ ADMIN
-
----
-
-## Catégories
-
-### `GET /categories`
-Lister toutes les catégories.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-[
-  {
-    "id": "string",
-    "name": "string",
-    "slug": "string",
-    "description": "string | null",
-    "imageUrl": "string | null",
-    "iconUrl": "string | null",
-    "isActive": true,
-    "parentId": "string | null",
-    "parent": { "id": "string", "name": "string", "slug": "string" },
-    "children": [...],
-    "_count": { "products": 12 }
-  }
-]
-```
-
----
-
-### `GET /categories/:categoryId`
-Récupérer une catégorie par ID.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `GET /categories/slug/:slug`
-Récupérer une catégorie par slug.  
-**Auth** : ❌
-
----
-
-### `GET /categories/slug/:slug/products`
-Lister les produits d'une catégorie.  
-**Auth** : ❌
-
-**Query** : `page`, `limit`
-
-**Réponse 200**
-```json
-{
-  "category": { "id": "string", "name": "string", "slug": "string" },
-  "items": [...],
-  "total": 50,
-  "page": 1,
-  "limit": 20,
-  "totalPages": 3
-}
-```
-
----
-
-### `POST /categories` 🔒 ADMIN
-Créer une catégorie.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "name": "string (2-100)",
-  "slug": "string (2-100, lowercase-hyphenated)",
-  "description": "string (optionnel)",
-  "imageUrl": "string (url, optionnel)",
-  "iconUrl": "string (url, optionnel)",
-  "metaTitle": "string (max 70, optionnel)",
-  "metaDescription": "string (max 160, optionnel)",
-  "isActive": true,
-  "parentId": "string (optionnel)"
-}
-```
-
-**Réponse 201** : catégorie créée
-
----
-
-### `PUT /categories/:categoryId` 🔒 ADMIN
-Mettre à jour une catégorie.  
-**Auth** : ✅ ADMIN
-
-**Body** (tous les champs optionnels, mêmes champs que POST)
-
----
-
-### `DELETE /categories/:categoryId` 🔒 ADMIN
-Supprimer une catégorie.  
-**Auth** : ✅ ADMIN  
-⚠️ Échoue si des produits sont encore rattachés à cette catégorie.
-
-**Réponse 200**
-```json
-{ "message": "Category deleted successfully" }
-```
-
----
-
-## Attributs
-
-### `GET /categories/:categoryId/attributes`
-Lister les définitions d'attributs d'une catégorie.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `POST /categories/:categoryId/attributes` 🔒 ADMIN
-Créer une définition d'attribut.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "name": "string (2-100)",
-  "slug": "string (2-100, lowercase-hyphenated)",
-  "type": "TEXT | NUMBER | COLOR | BOOLEAN | SELECT",
-  "unit": "string (optionnel)",
-  "isVariant": false,
-  "isFilterable": true,
-  "isRequired": false,
-  "position": 0
-}
-```
-
-**Réponse 201** : définition créée
-
----
-
-### `GET /attributes/:definitionId`
-Récupérer une définition d'attribut.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `PATCH /attributes/:definitionId` 🔒 ADMIN
-Mettre à jour une définition d'attribut.  
-**Auth** : ✅ ADMIN
-
-**Body** (tous les champs optionnels, mêmes champs que POST)
-
----
-
-### `DELETE /attributes/:definitionId` 🔒 ADMIN
-Supprimer une définition d'attribut.  
-**Auth** : ✅ ADMIN
-
----
-
-### `POST /attributes/:definitionId/options` 🔒 ADMIN
-Ajouter une option à un attribut SELECT/COLOR.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "value": "string",
-  "colorHex": "#FF0000 (optionnel)",
-  "position": 0
-}
-```
-
----
-
-### `DELETE /attributes/options/:optionId` 🔒 ADMIN
-Supprimer une option d'attribut.  
-**Auth** : ✅ ADMIN
-
----
-
-### `PUT /product/:productId/attributes` 🔒 ADMIN
-Définir les valeurs d'attributs d'un produit (remplace tout).  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "attributes": [
-    { "attributeDefinitionId": "string", "value": "string" }
-  ]
-}
-```
-
----
-
-## Tags
-
-### `GET /tags`
-Lister tous les tags.  
-**Auth** : ❌
-
----
-
-### `GET /tags/:tagId`
-Récupérer un tag.  
-**Auth** : ❌
-
----
-
-### `POST /tags` 🔒 ADMIN
-Créer un tag.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "name": "string (2-50)",
-  "slug": "string (2-50, lowercase-hyphenated)"
-}
-```
-
-**Réponse 201** : tag créé
-
----
-
-### `PATCH /tags/:tagId` 🔒 ADMIN
-Mettre à jour un tag.  
-**Auth** : ✅ ADMIN
-
-**Body** (tous les champs optionnels)
-
----
-
-### `DELETE /tags/:tagId` 🔒 ADMIN
-Supprimer un tag.  
-**Auth** : ✅ ADMIN
-
----
-
-### `PUT /product/:productId/tags` 🔒 ADMIN
-Définir les tags d'un produit (remplace tout).  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{ "tagIds": ["string", "string"] }
-```
-
----
-
-### `GET /product/:productId/tags`
-Lister les tags d'un produit.  
-**Auth** : ✅ (tous rôles)
-
----
-
-## Panier (Basket)
-
-### `POST /basket`
-Créer un panier.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 201**
-```json
-{
-  "id": "string",
-  "userId": 1,
-  "items": [],
-  "createdAt": "datetime",
-  "updatedAt": "datetime"
-}
-```
-
----
-
-### `GET /basket/:basket_id`
-Récupérer un panier.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-{
-  "id": "string",
-  "userId": 1,
-  "items": [
-    {
-      "id": "string",
-      "productId": 1,
-      "variantId": "string | null",
-      "quantity": 2,
-      "product": { ... },
-      "variant": { ... }
-    }
-  ]
-}
-```
-
----
-
-### `POST /basket/:basket_id/product`
-Ajouter un produit au panier.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "product_id": 1,
-  "variant_id": "string (optionnel)",
-  "quantity": 2
-}
-```
-
-**Réponse 200** : panier mis à jour
-
----
-
-### `PUT /basket/:basket_id/product/quantity`
-Mettre à jour la quantité d'un article.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "product_id": 1,
-  "variant_id": "string (optionnel)",
-  "quantity": 3
-}
-```
-
-**Réponse 200** : panier mis à jour
-
----
-
-### `DELETE /basket/:basket_id/product`
-Retirer un produit du panier.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "product_id": 1,
-  "variant_id": "string (optionnel)"
-}
-```
-
-**Réponse 200** : panier mis à jour
-
----
-
-## Wishlist
-
-### `GET /wishlist`
-Récupérer la wishlist de l'utilisateur connecté.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-{
-  "id": "string",
-  "userId": 1,
-  "items": [
-    {
-      "id": "string",
-      "productId": 1,
-      "variantId": "string | null",
-      "product": { "id": 1, "name": "string", "price": 9999, "images": [...] },
-      "variant": { "id": "string", "sku": "string", "price": 9999 }
-    }
-  ]
-}
-```
-
----
-
-### `POST /wishlist/items`
-Ajouter un article à la wishlist.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "product_id": 1,
-  "variant_id": "string (optionnel)"
-}
-```
-
-**Réponse 201** : wishlist mise à jour
-
----
-
-### `DELETE /wishlist/items`
-Retirer un article de la wishlist.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "product_id": 1,
-  "variant_id": "string (optionnel)"
-}
-```
-
----
-
-## Commandes (Orders)
-
-### `GET /orders`
-Lister toutes les commandes.  
-**Auth** : ✅ (tous rôles)
-
-**Query**
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `page` | number | Page |
-| `limit` | number | Limite |
-| `status` | string | Filtrer par statut |
-| `customer` | string | Filtrer par email client |
-
-**Réponse 200** : réponse paginée
-
----
-
-### `POST /orders`
-Créer une commande.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "items": [
-    { "id": "string (basketItemId)", "quantity": 2 }
-  ],
-  "shippingAddress": {
-    "street": "string",
-    "city": "string",
-    "state": "string (optionnel)",
-    "country": "string",
-    "postalCode": "string"
-  },
-  "shippingAddressId": "string (optionnel)",
-  "billingAddress": { "...même structure que shippingAddress (optionnel)" },
-  "billingAddressId": "string (optionnel)",
-  "shippingMethodId": "string (optionnel)",
-  "paymentMethodId": "string (optionnel)",
-  "notes": "string (optionnel)"
-}
-```
-
-**Réponse 201** : commande créée
-
----
-
-### `GET /orders/:orderId`
-Récupérer une commande.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-{
-  "id": "string",
-  "userId": 1,
-  "status": "PENDING | CONFIRMED | PROCESSING | SHIPPED | DELIVERED | CANCELLED | REFUNDED",
-  "totalAmount": 9999,
-  "discountedAmount": null,
-  "shippingAddressSnapshot": { ... },
-  "items": [...],
-  "payments": [...],
-  "appliedCoupon": { "id": "string", "code": "string", "promotion": { ... } },
-  "shippingMethod": { "id": "string", "name": "string", "estimatedDays": 3 },
-  "statusHistory": [...],
-  "createdAt": "datetime"
-}
-```
-
----
-
-### `PUT /orders/:orderId`
-Mettre à jour une commande (adresse, méthode de livraison, notes).  
-**Auth** : ✅ (tous rôles)
-
-**Body** (tous les champs optionnels)
-```json
-{
-  "shippingAddressId": "string",
-  "shippingAddress": { "street": "...", "city": "...", "country": "...", "postalCode": "..." },
-  "billingAddressId": "string",
-  "billingAddress": { "...même structure" },
-  "shippingMethodId": "string",
-  "notes": "string"
-}
-```
-
----
-
-### `DELETE /orders/:orderId`
-Annuler une commande.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-{ "message": "Order cancelled successfully" }
-```
-
----
-
-### `PUT /orders/:orderId/status` 🔒 ADMIN
-Changer le statut d'une commande.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "status": "PENDING | CONFIRMED | PROCESSING | SHIPPED | DELIVERED | CANCELLED | REFUNDED",
-  "reason": "string (optionnel)",
-  "shippingCarrier": "string (optionnel)",
-  "trackingNumber": "string (optionnel)",
-  "estimatedDeliveryDate": "string ISO (optionnel)"
-}
-```
-
----
-
-### `GET /user/:userId/orders` 🔒 ADMIN
-Lister les commandes d'un utilisateur spécifique.  
-**Auth** : ✅ ADMIN
+La priorité `shippingAddressId` vs `shippingAddress` n'est **pas** un choix exclusif : le repository écrit toujours le snapshot (`shippingAddressSnapshot`) à partir de `shippingAddress`, et enregistre `shippingAddressId` séparément s'il est fourni. Les deux peuvent donc coexister sans conflit — `shippingAddress` est obligatoire dans tous les cas.
 
-**Query** : `page`, `limit`
+Un `couponCode` invalide, expiré, inactif ou déjà utilisé au-delà de `perUserLimit` fait échouer toute la création de commande (404/400), aucun item n'est créé.
 
 ---
 
-## Paiements (Payments)
-
-### `GET /payment-methods`
-Lister les méthodes de paiement disponibles.  
-**Auth** : ❌
-
-**Réponse 200**
-```json
-[
-  { "id": "CASH_ON_DELIVERY", "name": "Cash on Delivery", "available": true },
-  { "id": "STRIPE", "name": "Stripe", "available": false, "message": "..." },
-  { "id": "PAYPAL", "name": "PayPal", "available": false, "message": "..." },
-  { "id": "CINETPAY", "name": "CinetPay", "available": false, "message": "..." }
-]
-```
+## 11. Paiements (`/payment-methods`, `/payments`)
 
----
-
-### `POST /payments`
-Créer un paiement pour une commande.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "order_id": "string",
-  "method": "CASH_ON_DELIVERY | PAYPAL | STRIPE | CINETPAY",
-  "currency": "XAF (défaut)",
-  "notes": "string (optionnel)"
-}
-```
-
-**Réponse 201** : paiement créé, commande passée en `CONFIRMED`
-
----
-
-### `GET /payments/:payment_id`
-Récupérer un paiement.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `GET /orders/:orderId/payments`
-Lister les paiements d'une commande.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `GET /payments` 🔒 ADMIN
-Lister tous les paiements.  
-**Auth** : ✅ ADMIN
-
-**Query**
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `page` | number | Page |
-| `limit` | number | Limite |
-| `status` | string | `PENDING \| COMPLETED \| FAILED \| REFUNDED \| CANCELLED` |
-| `method` | string | Méthode de paiement |
-| `order_id` | string | ID de la commande |
-
----
-
-## Adresses
-
-### `POST /address/validate`
-Valider une adresse sans l'enregistrer.  
-**Auth** : ❌
-
-**Body**
-```json
-{
-  "street": "string (min 2)",
-  "city": "string (min 2)",
-  "state": "string (optionnel)",
-  "country": "string (min 2)",
-  "postal_code": "string (min 2)"
-}
-```
-
-**Réponse 200**
-```json
-{
-  "valid": true,
-  "normalized_address": {
-    "street": "string",
-    "city": "string",
-    "state": "string | null",
-    "country": "string",
-    "postal_code": "string"
-  }
-}
-```
-
----
-
-### `GET /addresses`
-Lister ses adresses.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `GET /addresses/:addressId`
-Récupérer une adresse.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `POST /addresses`
-Créer une adresse.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "street": "string (min 2)",
-  "city": "string (min 2)",
-  "state": "string (optionnel)",
-  "country": "string (min 2)",
-  "postalCode": "string (min 2)",
-  "isDefault": false
-}
-```
-
-**Réponse 201** : adresse créée  
-⚠️ Si `isDefault: true`, toutes les autres adresses de l'utilisateur sont désactivées.
-
----
-
-### `PATCH /addresses/:addressId`
-Mettre à jour une adresse.  
-**Auth** : ✅ (tous rôles)
-
-**Body** (tous les champs optionnels, mêmes champs que POST)
-
----
-
-### `DELETE /addresses/:addressId`
-Supprimer une adresse.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-{ "message": "Address deleted successfully" }
-```
-
----
-
-## Avis (Reviews)
-
-### `GET /products/:pid/reviews`
-Lister les avis d'un produit.  
-**Auth** : ❌
-
-**Réponse 200**
-```json
-{
-  "product_id": 1,
-  "average_rating": 4.3,
-  "total_reviews": 12,
-  "reviews": [
-    {
-      "id": "string",
-      "rating": 5,
-      "comment": "string | null",
-      "user": { "id": 1, "username": "string", "firstName": "string", "lastName": "string" },
-      "createdAt": "datetime"
-    }
-  ]
-}
-```
-
----
-
-### `GET /reviews/:rid`
-Récupérer un avis.  
-**Auth** : ❌
-
----
-
-### `POST /reviews`
-Créer un avis.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "order_item_id": "string",
-  "product_id": 1,
-  "rating": 5,
-  "comment": "string (optionnel)"
-}
-```
-
-**Réponse 201** : avis créé  
-⚠️ L'utilisateur doit avoir acheté le produit (via `order_item_id`). Un seul avis par achat.
-
----
-
-### `PUT /reviews/:rid`
-Mettre à jour son avis.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "rating": 4,
-  "comment": "string (optionnel)"
-}
-```
-
----
-
-### `DELETE /reviews/:rid`
-Supprimer son avis.  
-**Auth** : ✅ (tous rôles)
-
----
-
-## Promotions
-
-### `GET /promotions/slug/:slug`
-Récupérer une promotion par slug (page publique).  
-**Auth** : ❌
-
-**Réponse 200**
-```json
-{
-  "id": "string",
-  "name": "string",
-  "slug": "string",
-  "description": "string | null",
-  "images": ["url", "url"],
-  "status": "SCHEDULED | ACTIVE | EXPIRED | CANCELLED",
-  "isActive": true,
-  "startDate": "datetime",
-  "endDate": "datetime",
-  "discounts": [
-    {
-      "id": "string",
-      "type": "PERCENTAGE | FIXED_AMOUNT",
-      "value": 20,
-      "category": { "id": "string", "name": "string", "slug": "string" },
-      "products": [
-        { "product": { "id": 1, "name": "string", "price": 9999 } }
-      ]
-    }
-  ],
-  "coupons": [...]
-}
-```
-
----
-
-### `POST /coupons/validate`
-Valider un coupon avant de passer commande.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "code": "string",
-  "basketId": "string"
-}
-```
-
-**Réponse 200**
-```json
-{
-  "valid": true,
-  "couponId": "string",
-  "code": "string",
-  "promotion": { "id": "string", "name": "string", "slug": "string" },
-  "discounts": [...]
-}
-```
-
----
-
-### `GET /promotions` 🔒 ADMIN
-Lister toutes les promotions.  
-**Auth** : ✅ ADMIN
-
-**Query**
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `status` | string | `SCHEDULED \| ACTIVE \| EXPIRED \| CANCELLED` |
-| `isActive` | boolean | `true \| false` |
-
----
-
-### `GET /promotions/:promotionId` 🔒 ADMIN
-Récupérer une promotion par ID.  
-**Auth** : ✅ ADMIN
-
----
-
-### `POST /promotions` 🔒 ADMIN
-Créer une promotion.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "name": "string (2-200)",
-  "slug": "string (2-200, lowercase-hyphenated)",
-  "description": "string (optionnel)",
-  "startDate": "string (ISO datetime)",
-  "endDate": "string (ISO datetime)",
-  "isActive": true
-}
-```
-
-**Réponse 201** : promotion créée
-
----
-
-### `PUT /promotions/:promotionId` 🔒 ADMIN
-Mettre à jour une promotion.  
-**Auth** : ✅ ADMIN
-
-**Body** (tous les champs optionnels, mêmes champs que POST)
-
----
-
-### `PATCH /promotions/:promotionId/toggle` 🔒 ADMIN
-Activer / désactiver une promotion.  
-**Auth** : ✅ ADMIN
-
----
-
-### `DELETE /promotions/:promotionId` 🔒 ADMIN
-Supprimer une promotion.  
-**Auth** : ✅ ADMIN
-
----
-
-### `POST /promotions/:promotionId/images` 🔒 ADMIN
-Upload d'images pour une promotion.  
-**Auth** : ✅ ADMIN  
-**Content-Type** : `multipart/form-data`
-
-**Body (form-data)**
-| Champ | Type | Description |
-|-------|------|-------------|
-| `images` | File[] | 1 à 5 fichiers (JPEG, PNG, WEBP, GIF, max 5MB) |
-
----
-
-### `DELETE /promotions/:promotionId/images` 🔒 ADMIN
-Supprimer une image de promotion.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{ "imageUrl": "string" }
-```
-
----
-
-### `POST /promotions/:promotionId/discounts` 🔒 ADMIN
-Ajouter une remise à une promotion.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "type": "PERCENTAGE | FIXED_AMOUNT",
-  "value": 20,
-  "categoryId": "string (optionnel)",
-  "productIds": [1, 2, 3]
-}
-```
-
-⚠️ Au moins `categoryId` ou `productIds` est requis.
-
-**Réponse 201** : remise créée
-
----
-
-### `DELETE /promotions/:promotionId/discounts/:discountId` 🔒 ADMIN
-Supprimer une remise.  
-**Auth** : ✅ ADMIN
-
----
-
-### `GET /promotions/:promotionId/coupons` 🔒 ADMIN
-Lister les coupons d'une promotion.  
-**Auth** : ✅ ADMIN
-
----
-
-### `POST /promotions/:promotionId/coupons` 🔒 ADMIN
-Créer un coupon pour une promotion.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "code": "string (3-50, converti en majuscules)",
-  "maxUses": 100,
-  "perUserLimit": 1,
-  "startDate": "string (ISO datetime, optionnel)",
-  "endDate": "string (ISO datetime, optionnel)",
-  "isActive": true
-}
-```
-
-**Réponse 201** : coupon créé
-
----
-
-### `DELETE /promotions/:promotionId/coupons/:couponId` 🔒 ADMIN
-Supprimer un coupon.  
-**Auth** : ✅ ADMIN
-
----
-
-## Expéditions (Shipments)
-
-### `POST /shipments/cost`
-Calculer le coût d'une expédition.  
-**Auth** : ❌
-
-**Body**
-```json
-{
-  "origin": "string",
-  "destination": "string",
-  "weight": 2.5,
-  "dimensions": {
-    "length": 10,
-    "width": 10,
-    "height": 10
-  }
-}
-```
-
-**Réponse 200**
-```json
-{ "cost": 5.25, "currency": "XAF" }
-```
+| Méthode | Route                       | Auth     | Notes                                                                                                                                                                                                          |
+| ------- | --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/payment-methods`          | ❌       | Seul `CASH_ON_DELIVERY` a `available: true`                                                                                                                                                                    |
+| POST    | `/payments`                 | ✅       | `order_id, method(CASH_ON_DELIVERY\|PAYPAL\|STRIPE\|CINETPAY), currency?(XAF défaut), notes?` — **503** si méthode indisponible, **403** si commande d'un autre utilisateur. Passe la commande en `CONFIRMED`. |
+| GET     | `/payments/:payment_id`     | ✅       | —                                                                                                                                                                                                              |
+| GET     | `/orders/:orderId/payments` | ✅       | — → `Payment[]`                                                                                                                                                                                                |
+| GET     | `/payments`                 | 🔒 ADMIN | Query `page?, limit?, status?, method?, order_id?`                                                                                                                                                             |
 
 ---
 
-### `POST /shipments`
-Créer une expédition.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "sender_name": "string",
-  "sender_address": "string",
-  "recipient_name": "string",
-  "recipient_address": "string",
-  "weight": 2.5,
-  "dimensions": { "length": 10, "width": 10, "height": 10 },
-  "order_id": "string (optionnel)",
-  "estimated_delivery_at": "string ISO (optionnel)"
-}
-```
-
-**Réponse 201** : expédition créée avec `trackingNumber` généré
+## 12. Avis (`/products/:pid/reviews`, `/reviews`)
 
----
-
-### `GET /shipments/:shipmentId`
-Récupérer une expédition.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `GET /shipments/:shipmentId/track`
-Suivre une expédition.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-{
-  "current_status": "PENDING | IN_TRANSIT | DELIVERED | CANCELLED",
-  "current_location": "string | null",
-  "updates": [
-    { "id": "string", "status": "string", "location": "string", "createdAt": "datetime" }
-  ]
-}
-```
-
----
-
-### `POST /shipments/:shipmentId/cancel`
-Annuler une expédition.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `GET /labels/:shipmentId`
-Récupérer le label d'expédition.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-{ "label_id": "string", "label_url": "string" }
-```
-
----
-
-### `POST /pickup-requests`
-Créer une demande de collecte.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "pickup_date": "string (ISO datetime)",
-  "pickup_address": "string"
-}
-```
-
-**Réponse 201** : demande créée
-
----
-
-### `GET /pickup-requests/:requestId`
-Récupérer une demande de collecte.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `POST /pickup-requests/:requestId/cancel`
-Annuler une demande de collecte.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `GET /shipments` 🔒 ADMIN
-Lister toutes les expéditions.  
-**Auth** : ✅ ADMIN
-
-**Query** : `page`, `limit`, `status`
-
----
-
-### `POST /shipments/:shipmentId/track` 🔒 ADMIN
-Ajouter un événement de tracking.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "status": "string",
-  "location": "string (optionnel)"
-}
-```
-
----
-
-## Méthodes de livraison (Shipping Methods)
-
-### `GET /shipping-methods`
-Lister les méthodes de livraison.  
-**Auth** : ❌
-
-**Query**
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `active` | boolean | `true` pour n'afficher que les actives |
-
----
-
-### `GET /shipping-methods/:methodId`
-Récupérer une méthode de livraison.  
-**Auth** : ❌
-
----
-
-### `POST /shipping-methods/calculate`
-Calculer le coût pour une méthode et un poids.  
-**Auth** : ❌
-
-**Body**
-```json
-{
-  "shippingMethodId": "string",
-  "weight": 2.5
-}
-```
-
-**Réponse 200**
-```json
-{
-  "shippingMethodId": "string",
-  "name": "string",
-  "estimatedDays": 3,
-  "cost": 12.50,
-  "currency": "XAF"
-}
-```
-
----
-
-### `POST /shipping-methods` 🔒 ADMIN
-Créer une méthode de livraison.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "name": "string (2-100)",
-  "description": "string (optionnel)",
-  "estimatedDays": 3,
-  "basePrice": 1000,
-  "pricePerKg": 100,
-  "isActive": true,
-  "zones": ["CM", "FR"]
-}
-```
-
-**Réponse 201** : méthode créée
-
----
-
-### `PATCH /shipping-methods/:methodId` 🔒 ADMIN
-Mettre à jour une méthode de livraison.  
-**Auth** : ✅ ADMIN
-
-**Body** (tous les champs optionnels, mêmes champs que POST)
-
----
-
-### `DELETE /shipping-methods/:methodId` 🔒 ADMIN
-Supprimer une méthode de livraison.  
-**Auth** : ✅ ADMIN
+| Méthode | Route                    | Auth       | Body                                                           |
+| ------- | ------------------------ | ---------- | -------------------------------------------------------------- |
+| GET     | `/products/:pid/reviews` | ❌         | — → `{ product_id, average_rating, total_reviews, reviews[] }` |
+| GET     | `/reviews/:rid`          | ❌         | —                                                              |
+| POST    | `/reviews`               | ✅         | `order_item_id, product_id, rating(1-5), comment?`             |
+| PUT     | `/reviews/:rid`          | ✅ (owner) | `rating?, comment?`                                            |
+| DELETE  | `/reviews/:rid`          | ✅ (owner) | —                                                              |
 
----
-
-## Inventaire
-
-### `GET /inventory`
-Lister l'inventaire.  
-**Auth** : ✅ (tous rôles)
-
-**Query**
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `page` | number | Page |
-| `limit` | number | Limite |
-| `category` | string | Filtrer par nom de catégorie |
-| `location` | string | Filtrer par localisation entrepôt |
-
-**Réponse 200** : réponse paginée  
-⚠️ **Breaking change** : retourne un objet paginé, pas un tableau plat.
-
----
-
-### `GET /inventory/low-stock`
-Lister les articles en stock faible.  
-**Auth** : ✅ (tous rôles)
-
-**Query**
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `threshold` | number | Seuil (défaut: 10) |
-
----
-
-### `GET /inventory/out-of-stock`
-Lister les articles en rupture de stock.  
-**Auth** : ✅ (tous rôles)
-
----
-
-### `GET /inventory/search`
-Rechercher dans l'inventaire.  
-**Auth** : ✅ (tous rôles)
-
-**Query**
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `keyword` | string | Mot-clé (requis) |
-
----
-
-### `GET /inventory/:item_id`
-Récupérer un article d'inventaire.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-{
-  "id": "string",
-  "productId": 1,
-  "variantId": "string | null",
-  "warehouseId": "string",
-  "quantity": 50,
-  "product": { ... },
-  "warehouse": { ... },
-  "variant": { ... }
-}
-```
-
----
-
-### `POST /inventory` 🔒 ADMIN
-Créer un article d'inventaire.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "product_id": 1,
-  "warehouse_id": "string",
-  "variant_id": "string (optionnel)",
-  "quantity": 100
-}
-```
-
-**Réponse 201** : article créé
-
----
-
-### `PUT /inventory/:item_id` 🔒 ADMIN
-Mettre à jour un article d'inventaire.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "quantity": 80,
-  "warehouse_id": "string (optionnel)"
-}
-```
+Un avis est lié à un **`orderItemId`** précis (achat vérifié), avec contrainte d'unicité `(orderItemId, userId)` — un même produit acheté plusieurs fois (commandes différentes) peut donc recevoir plusieurs avis du même utilisateur.
 
 ---
 
-### `DELETE /inventory/:item_id` 🔒 ADMIN
-Supprimer un article d'inventaire.  
-**Auth** : ✅ ADMIN
+## 13. Entrepôts (`/warehouses`)
 
----
-
-### `POST /inventory/transfer` 🔒 ADMIN
-Transférer du stock entre entrepôts.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "item_id": "string",
-  "from_warehouse": "string",
-  "to_warehouse": "string",
-  "quantity": 10
-}
-```
-
-**Réponse 200**
-```json
-{
-  "item_id": "string",
-  "from_warehouse": "string",
-  "to_warehouse": "string",
-  "quantity": 10
-}
-```
-
----
-
-## Entrepôts (Warehouses)
-
-### `GET /warehouses`
-Lister les entrepôts.  
-**Auth** : ✅ (tous rôles)
+| Méthode | Route                                 | Auth     | Body                                          |
+| ------- | ------------------------------------- | -------- | --------------------------------------------- |
+| GET     | `/warehouses`                         | ✅       | — (cache)                                     |
+| GET     | `/warehouses/:warehouse_id`           | ✅       | — (cache)                                     |
+| GET     | `/warehouses/:warehouse_id/inventory` | ✅       | — → `{ warehouse: {...totalUnits}, items[] }` |
+| POST    | `/warehouses`                         | 🔒 ADMIN | `name(2-100), location, capacity?`            |
+| PUT     | `/warehouses/:warehouse_id`           | 🔒 ADMIN | body partiel                                  |
+| DELETE  | `/warehouses/:warehouse_id`           | 🔒 ADMIN | —                                             |
 
 ---
 
-### `GET /warehouses/:warehouse_id`
-Récupérer un entrepôt.  
-**Auth** : ✅ (tous rôles)
+## 14. Inventaire (`/inventory`)
 
----
-
-### `GET /warehouses/:warehouse_id/inventory`
-Lister l'inventaire d'un entrepôt.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-{
-  "warehouse": { "id": "string", "name": "string", "location": "string", "totalUnits": 500 },
-  "items": [...]
-}
-```
-
----
-
-### `POST /warehouses` 🔒 ADMIN
-Créer un entrepôt.  
-**Auth** : ✅ ADMIN
+| Méthode | Route                     | Auth     | Notes                                                                                                         |
+| ------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| GET     | `/inventory`              | ✅       | Query `page?, limit?, category?, location?` → objet paginé                                                    |
+| GET     | `/inventory/low-stock`    | ✅       | Query `threshold?(défaut 10)` → `0 < quantity <= threshold`                                                   |
+| GET     | `/inventory/out-of-stock` | ✅       | `quantity === 0`                                                                                              |
+| GET     | `/inventory/search`       | ✅       | Query `keyword` **requis**, sinon erreur 500 (non gérée en `AppError`)                                        |
+| GET     | `/inventory/:item_id`     | ✅       | —                                                                                                             |
+| POST    | `/inventory`              | 🔒 ADMIN | `product_id, warehouse_id, variant_id?, quantity?(défaut 0)` — 409 si doublon `(product, warehouse, variant)` |
+| PUT     | `/inventory/:item_id`     | 🔒 ADMIN | `quantity?, warehouse_id?`                                                                                    |
+| DELETE  | `/inventory/:item_id`     | 🔒 ADMIN | —                                                                                                             |
+| POST    | `/inventory/transfer`     | 🔒 ADMIN | `item_id, from_warehouse, to_warehouse, quantity` — 400 si stock source insuffisant                           |
 
-**Body**
-```json
-{
-  "name": "string (2-100)",
-  "location": "string",
-  "capacity": 1000
-}
-```
+⚠️ `GET /inventory/search` sans `keyword` renvoie une erreur non typée (`throw new Error(...)`), donc **500** et non 400 — à corriger côté code si un comportement 400 est souhaité (non fait à ce jour).
 
-**Réponse 201** : entrepôt créé
-
 ---
-
-### `PUT /warehouses/:warehouse_id` 🔒 ADMIN
-Mettre à jour un entrepôt.  
-**Auth** : ✅ ADMIN
 
-**Body** (tous les champs optionnels, mêmes champs que POST)
+## 15. Expéditions (`/shipments`, `/pickup-requests`, `/labels`)
 
----
+| Méthode | Route                                | Auth       | Notes                                                                                                                                                                                                                                           |
+| ------- | ------------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST    | `/shipments/cost`                    | ❌         | `origin, destination, weight, dimensions?` → `cost = 5 + weight*0.1` XAF                                                                                                                                                                        |
+| POST    | `/shipments`                         | 🔒 ADMIN   | ⚠️ **CORRECTION** : cette route est **admin-only** dans le code actuel (`authGuard, adminGuard`), contrairement aux anciens warnings qui la disaient ouverte à tout utilisateur connecté.                                                       |
+| GET     | `/shipments/:shipmentId`             | ✅         | —                                                                                                                                                                                                                                               |
+| GET     | `/shipments`                         | 🔒 ADMIN   | Query `page?, limit?, status?`                                                                                                                                                                                                                  |
+| POST    | `/shipments/:shipmentId/track`       | ✅         | ⚠️ **CORRECTION** : cette route n'est **pas** protégée par `adminGuard` — tout utilisateur authentifié peut ajouter un événement de tracking sur n'importe quelle expédition. À restreindre si ce n'est pas voulu. Body `{ status, location? }` |
+| GET     | `/shipments/:shipmentId/track`       | ✅         | —                                                                                                                                                                                                                                               |
+| POST    | `/shipments/:shipmentId/cancel`      | ✅         | 400 si déjà annulée                                                                                                                                                                                                                             |
+| GET     | `/labels/:shipmentId`                | ✅         | Crée l'étiquette si absente                                                                                                                                                                                                                     |
+| POST    | `/pickup-requests`                   | ✅         | `pickup_date(ISO), pickup_address`                                                                                                                                                                                                              |
+| GET     | `/pickup-requests`                   | 🔒 ADMIN   | Query `page?, limit?, status?` — ⚠️ **CORRECTION** : cette route existe déjà, contrairement aux anciens warnings qui la disaient absente.                                                                                                       |
+| GET     | `/pickup-requests/:requestId`        | ✅         | —                                                                                                                                                                                                                                               |
+| POST    | `/pickup-requests/:requestId/cancel` | ✅ (owner) | 403 si pas propriétaire, 400 si déjà annulée                                                                                                                                                                                                    |
 
-### `DELETE /warehouses/:warehouse_id` 🔒 ADMIN
-Supprimer un entrepôt.  
-**Auth** : ✅ ADMIN
-
 ---
 
-## Retours (Returns)
+## 16. Méthodes de livraison (`/shipping-methods`)
 
-### `GET /returns/:returnId`
-Récupérer une demande de retour.  
-**Auth** : ✅ (tous rôles)  
-⚠️ Un utilisateur ne peut voir que ses propres retours. Un admin voit tout.
+| Méthode | Route                         | Auth     | Body                                                                                            |
+| ------- | ----------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| GET     | `/shipping-methods`           | ❌       | Query `active?(bool)`                                                                           |
+| GET     | `/shipping-methods/:methodId` | ❌       | —                                                                                               |
+| POST    | `/shipping-methods`           | 🔒 ADMIN | `name, description?, estimatedDays, basePrice, pricePerKg?, isActive?, zones: string[2-letter]` |
+| PATCH   | `/shipping-methods/:methodId` | 🔒 ADMIN | body partiel                                                                                    |
+| DELETE  | `/shipping-methods/:methodId` | 🔒 ADMIN | —                                                                                               |
+| POST    | `/shipping-methods/calculate` | ❌       | `shippingMethodId, weight` → `cost = basePrice + pricePerKg*weight`                             |
 
 ---
-
-### `POST /returns`
-Créer une demande de retour.  
-**Auth** : ✅ (tous rôles)
-
-**Body**
-```json
-{
-  "order_id": "string",
-  "reason": "string (min 2)",
-  "notes": "string (optionnel)",
-  "items": [
-    {
-      "order_item_id": "string",
-      "quantity": 1,
-      "condition": "string (optionnel)"
-    }
-  ]
-}
-```
-
-**Réponse 201** : demande de retour créée
 
----
+## 17. Adresses (`/address`, `/addresses`)
 
-### `GET /orders/:orderId/returns`
-Lister les retours d'une commande.  
-**Auth** : ✅ (tous rôles)
+| Méthode | Route                   | Auth       | Body                                                                                                                                  |
+| ------- | ----------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| POST    | `/address/validate`     | ❌         | `street, city, state?, country, postal_code` → `{ valid, normalized_address }` — validation contre une liste de pays supportés en dur |
+| GET     | `/addresses`            | ✅         | —                                                                                                                                     |
+| GET     | `/addresses/:addressId` | ✅ (owner) | 403 sinon                                                                                                                             |
+| POST    | `/addresses`            | ✅         | `street, city, state?, country, postalCode, isDefault?` — désactive les autres si `isDefault: true`                                   |
+| PATCH   | `/addresses/:addressId` | ✅ (owner) | body partiel                                                                                                                          |
+| DELETE  | `/addresses/:addressId` | ✅ (owner) | —                                                                                                                                     |
 
 ---
 
-### `GET /returns` 🔒 ADMIN
-Lister toutes les demandes de retour.  
-**Auth** : ✅ ADMIN
+## 18. Promotions, remises & coupons
 
-**Query** : `page`, `limit`, `status`
-
----
+| Méthode | Route                                            | Auth     | Body                                                                                             |
+| ------- | ------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------ |
+| GET     | `/promotions/slug/:slug`                         | ❌       | Page publique promo (avec `discounts`, `coupons`)                                                |
+| POST    | `/coupons/validate`                              | ✅       | `code, basketId` — vérifie activité, dates, plafond global et par-utilisateur                    |
+| GET     | `/promotions`                                    | 🔒 ADMIN | Query `status?, isActive?`                                                                       |
+| GET     | `/promotions/:promotionId`                       | 🔒 ADMIN | —                                                                                                |
+| POST    | `/promotions`                                    | 🔒 ADMIN | `name, slug, description?, startDate(ISO), endDate(ISO > startDate), isActive?`                  |
+| PUT     | `/promotions/:promotionId`                       | 🔒 ADMIN | body partiel                                                                                     |
+| PATCH   | `/promotions/:promotionId/toggle`                | 🔒 ADMIN | bascule `isActive`                                                                               |
+| DELETE  | `/promotions/:promotionId`                       | 🔒 ADMIN | —                                                                                                |
+| POST    | `/promotions/:promotionId/images`                | 🔒 ADMIN | multipart, champ `images` (1-5)                                                                  |
+| DELETE  | `/promotions/:promotionId/images`                | 🔒 ADMIN | body `{ imageUrl }`                                                                              |
+| POST    | `/promotions/:promotionId/discounts`             | 🔒 ADMIN | `type(PERCENTAGE\|FIXED_AMOUNT), value, categoryId?, productIds?` — au moins un ciblage requis   |
+| DELETE  | `/promotions/:promotionId/discounts/:discountId` | 🔒 ADMIN | —                                                                                                |
+| GET     | `/promotions/:promotionId/coupons`               | 🔒 ADMIN | —                                                                                                |
+| POST    | `/promotions/:promotionId/coupons`               | 🔒 ADMIN | `code(3-50, auto-uppercase), maxUses?, perUserLimit?(défaut 1), startDate?, endDate?, isActive?` |
+| DELETE  | `/promotions/:promotionId/coupons/:couponId`     | 🔒 ADMIN | —                                                                                                |
 
-### `PUT /returns/:returnId/status` 🔒 ADMIN
-Mettre à jour le statut d'un retour.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "status": "PENDING | APPROVED | REJECTED | COMPLETED",
-  "notes": "string (optionnel)"
-}
-```
+Le prix affiché sur `GET /product` / `GET /product/:id` inclut désormais un objet `pricing` (`{ originalPrice, finalPrice, discountAmount, discountPercentage, hasDiscount, promotionId, discountId }`) calculé à partir des remises actives — non documenté auparavant.
 
 ---
 
-## Programme de fidélité (Loyalty)
+## 19. Programme fidélité (`/loyalty`)
 
-### `GET /loyalty/:userId/balance`
-Récupérer le solde de points d'un utilisateur.  
-**Auth** : ✅ (tous rôles)
+| Méthode | Route                      | Auth     | Notes                                                                                                                                                                                                                                               |
+| ------- | -------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/loyalty/:userId/balance` | ✅       | ⚠️ **Aucun contrôle d'appartenance** : tout utilisateur authentifié peut consulter le solde de **n'importe quel** `userId` (le service ne vérifie que l'existence de l'utilisateur, pas `req.user.userId === userId`). À restreindre si non désiré. |
+| GET     | `/loyalty/:userId/history` | ✅       | Même remarque que ci-dessus                                                                                                                                                                                                                         |
+| POST    | `/loyalty/adjust`          | 🔒 ADMIN | `userId, points(≠0, négatif pour un débit), type(EARNED\|REDEEMED\|EXPIRED\|ADJUSTED), orderId?` — rejette un `REDEEMED` si le solde résultant serait négatif                                                                                       |
 
-**Réponse 200**
-```json
-{ "userId": 1, "balance": 350 }
-```
+1 point crédité automatiquement par tranche de 100 XAF (`POINTS_PER_XAF = 0.01`) lorsqu'une commande passe à `DELIVERED`.
 
 ---
 
-### `GET /loyalty/:userId/history`
-Historique des transactions de points.  
-**Auth** : ✅ (tous rôles)
-
-**Réponse 200**
-```json
-[
-  {
-    "id": "string",
-    "points": 100,
-    "type": "EARNED | REDEEMED | EXPIRED | ADJUSTED",
-    "orderId": "string | null",
-    "createdAt": "datetime"
-  }
-]
-```
+## 20. Retours (`/returns`)
 
----
-
-### `POST /loyalty/adjust` 🔒 ADMIN
-Ajuster manuellement les points d'un utilisateur.  
-**Auth** : ✅ ADMIN
-
-**Body**
-```json
-{
-  "userId": 1,
-  "points": 100,
-  "type": "EARNED | REDEEMED | EXPIRED | ADJUSTED",
-  "orderId": "string (optionnel)"
-}
-```
+| Méthode | Route                       | Auth                | Body                                                                                                                                                                                                  |
+| ------- | --------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/returns`                  | 🔒 ADMIN            | Query `page?, limit?, status?`                                                                                                                                                                        |
+| GET     | `/returns/:returnId`        | ✅ (owner ou admin) | —                                                                                                                                                                                                     |
+| POST    | `/returns`                  | ✅                  | `order_id, reason(min2), notes?, items: [{order_item_id, quantity, condition?}] (min1)` — vérifie que chaque item appartient bien à la commande et que la quantité ne dépasse pas la quantité achetée |
+| PUT     | `/returns/:returnId/status` | 🔒 ADMIN            | `status(PENDING\|APPROVED\|REJECTED\|COMPLETED), notes?` — 400 si déjà `COMPLETED`                                                                                                                    |
+| GET     | `/orders/:orderId/returns`  | ✅ (owner ou admin) | —                                                                                                                                                                                                     |
 
-⚠️ `points` ne peut pas être `0`. Pour un débit, utiliser un nombre négatif avec `type: "REDEEMED"`.
-
-**Réponse 201** : transaction créée
-
 ---
 
-## Dashboard 🔒 ADMIN
-
-### `GET /dashboard/stats` 🔒 ADMIN
-Récupérer les statistiques globales.  
-**Auth** : ✅ ADMIN
-
-**Réponse 200**
-```json
-{
-  "products": { "total": 120, "addedThisMonth": 5 },
-  "orders": { "total": 450, "thisMonth": 32, "trend": 12 },
-  "users": { "total": 200, "active": 200 },
-  "payments": { "totalAmountThisMonth": 1500000, "currency": "XAF", "trend": 8 },
-  "inventory": { "lowStockCount": 3 },
-  "shipments": { "inProgress": 12, "trend": -5 },
-  "promotions": {
-    "active": 2,
-    "couponUsageThisMonth": 45,
-    "revenueFromCouponsThisMonth": 250000,
-    "currency": "XAF"
-  }
-}
-```
-
-> `trend` = variation en % par rapport au mois précédent
-
----
+## 21. Dashboard (`/dashboard`) 🔒 ADMIN
 
-### `GET /dashboard/sales-chart` 🔒 ADMIN
-Données du graphique de ventes.  
-**Auth** : ✅ ADMIN
-
-**Query**
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `year` | number | Année (défaut: année courante) |
-| `period` | string | `monthly` (défaut) |
-
-**Réponse 200**
-```json
-{
-  "period": "monthly",
-  "year": 2026,
-  "currency": "XAF",
-  "points": [
-    { "label": "Jan", "amount": 500000, "orderCount": 12 },
-    { "label": "Fév", "amount": 750000, "orderCount": 18 },
-    ...
-  ]
-}
-```
+| Méthode | Route                    | Query                     |
+| ------- | ------------------------ | ------------------------- |
+| GET     | `/dashboard/stats`       | —                         |
+| GET     | `/dashboard/sales-chart` | `year?, period?(monthly)` |
 
 ---
 
 ## Codes d'erreur HTTP
 
-| Code | Signification |
-|------|--------------|
-| `400` | Données invalides / validation échouée |
-| `401` | Token manquant ou invalide |
-| `403` | Accès refusé (rôle insuffisant) |
-| `404` | Ressource introuvable |
-| `409` | Conflit (doublon) |
-| `429` | Trop de requêtes (rate limit : 100 req / 15 min) |
-| `500` | Erreur interne serveur |
-| `503` | Service temporairement indisponible |
+| Code | Signification                                                                           |
+| ---- | --------------------------------------------------------------------------------------- |
+| 400  | Validation échouée / requête invalide                                                   |
+| 401  | Token manquant ou invalide                                                              |
+| 403  | Rôle insuffisant ou ressource d'un autre utilisateur                                    |
+| 404  | Ressource introuvable                                                                   |
+| 409  | Conflit (doublon)                                                                       |
+| 429  | Rate limit dépassé (100 req / 15 min, header `x-request-id` renvoyé sur chaque réponse) |
+| 500  | Erreur interne serveur                                                                  |
+| 503  | Fonctionnalité temporairement indisponible (moyens de paiement non branchés)            |
