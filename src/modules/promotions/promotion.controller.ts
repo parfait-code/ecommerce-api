@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import { promotionService } from "./promotion.service";
+import { promotionRepository } from "./promotion.repository";
 import { respond } from "../../shared/utils/response";
 import { AppError } from "../../shared/utils/app-error";
 import { productRepository } from "../products/product.repository";
 import { getBestPricing } from "./promotion.pricing";
+import { ValidateCouponDto } from "./promotion.schema";
 
 export const promotionController = {
   // ── Promotions ─────────────────────────────────────────────────────────────
