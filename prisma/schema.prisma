@@ -111,7 +111,7 @@ model User {
   updatedAt   DateTime  @updatedAt
 
   profile             UserProfile?
-  baskets             Basket[]
+  basket              Basket?
   orders              Order[]
   payments            Payment[]
   reviews             Review[]
@@ -209,7 +209,7 @@ model Product {
   categoryId      String
   category        Category      @relation(fields: [categoryId], references: [id])
   status          ProductStatus @default(DRAFT)
-  weight          Float?
+  weight          Float    @default(0.5)
   brand           String?
   metaTitle       String?
   metaDescription String?
@@ -343,7 +343,7 @@ model ShippingMethod {
 
 model Basket {
   id        String       @id @default(cuid())
-  userId    Int
+  userId    Int          @unique
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     BasketItem[]
   createdAt DateTime     @default(now())
@@ -394,6 +394,7 @@ model Order {
   statusHistory       OrderStatusHistory[]
   returns             ReturnRequest[]
   loyaltyTransactions LoyaltyTransaction[]
+  pickupRequests      PickupRequest[]
 
   @@index([userId])
   @@index([status])
@@ -532,6 +533,7 @@ model Shipment {
 
   trackingEvents TrackingEvent[]
   label          ShippingLabel?
+  pickupRequests PickupRequest[]
 }
 
 model TrackingEvent {
@@ -559,6 +561,10 @@ model PickupRequest {
   id            String       @id @default(cuid())
   userId        Int
   user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId       String?
+  order         Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  shipmentId    String?
+  shipment      Shipment?    @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
   pickupDate    DateTime
   pickupAddress String
   status        PickupStatus @default(PENDING)
@@ -566,6 +572,8 @@ model PickupRequest {
   updatedAt     DateTime     @updatedAt
 
   @@index([userId])
+  @@index([orderId])
+  @@index([shipmentId])
 }
 
 // ─── Address ──────────────────────────────────────────────────────────────────
