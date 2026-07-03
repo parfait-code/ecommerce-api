@@ -1,5 +1,6 @@
 import { paymentRepository } from "./payment.repository";
 import { orderRepository } from "../orders/order.repository";
+import { orderService } from "../orders/order.service";
 import { CreatePaymentDto } from "./payment.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { PaymentMethod } from "@prisma/client";
@@ -84,32 +85,61 @@ export const paymentService = {
       notes: dto.notes,
     });
 
-    await orderRepository.updateStatus(dto.order_id, "CONFIRMED", null);
+    // Confirme la prise en charge de la commande — ne signifie PAS que
+    // l'argent a été encaissé pour un COD (voir paymentService.complete).
+    await orderService.updateStatus(
+      dto.order_id,
+      { status: "CONFIRMED", reason: "Payment recorded — order confirmed" },
+      userId,
+      "SYSTEM",
+    );
+
+    return payment;
+  },
+
+  /**
+   * Confirme l'encaissement réel d'un paiement (typiquement CASH_ON_DELIVERY
+   * à la livraison). Réservé à l'admin/livreur — l'argent est physiquement
+   * collecté à ce moment-là, pas à la création du paiement.
+   */
+  complete: async (paymentId: string, adminUserId: number) => {
+    const payment = await paymentRepository.findById(paymentId);
+    if (!payment) throw new AppError("Payment not found", 404);
+
+    if (payment.status !== "PENDING")
+      throw new AppError(
+        `Cannot complete a payment with status ${payment.status}`,
+        400,
+      );
+
+    const updated = await paymentRepository.updateStatus(
+      paymentId,
+      "COMPLETED",
+    );
 
     businessLogger.log("PAYMENT_SUCCESS", {
       service: "payment",
-      actor: { userId, role: "CUSTOMER" },
-      target: { orderId: dto.order_id },
+      actor: { userId: adminUserId, role: "ADMIN" },
+      target: { orderId: payment.orderId, paymentId },
       metadata: {
-        paymentId: payment.id,
-        amount: order.totalAmount,
-        currency: dto.currency,
-        method: dto.method,
+        method: payment.method,
+        amount: payment.amount,
+        currency: payment.currency,
       },
     });
 
     auditLogger.log("PAYMENT_APPROVED", {
       service: "payment",
-      actor: { userId, role: "CUSTOMER" },
-      target: { orderId: dto.order_id },
+      actor: { userId: adminUserId, role: "ADMIN" },
+      target: { orderId: payment.orderId },
       metadata: {
-        paymentId: payment.id,
-        amount: order.totalAmount,
-        currency: dto.currency,
+        paymentId,
+        amount: payment.amount,
+        currency: payment.currency,
       },
     });
 
-    return payment;
+    return updated;
   },
 
   getAll: async (query: {

@@ -5,6 +5,7 @@ import { basketRepository } from "../basket/basket.repository";
 import { loyaltyService } from "../loyalty/loyalty.service";
 import { promotionRepository } from "../promotions/promotion.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
+import { assertValidTransition } from "./order.state-machine";
 import {
   CreateOrderDto,
   UpdateOrderDto,
@@ -12,7 +13,7 @@ import {
 } from "./order.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
-import { businessLogger, auditLogger } from "../../shared/logger";
+import { businessLogger, auditLogger, ActorRole } from "../../shared/logger";
 import { OrderStatus } from "@prisma/client";
 
 const CACHE_KEYS = {
@@ -114,7 +115,6 @@ export const orderService = {
   create: async (userId: number, dto: CreateOrderDto) => {
     const activeDiscounts = await promotionRepository.findActiveDiscounts();
 
-    // ── Résolution des items : soit fournis directement, soit depuis le panier serveur ──
     let sourceItems: { id: string; variantId?: string; quantity: number }[];
     let basketToClear: string | undefined;
 
@@ -219,7 +219,6 @@ export const orderService = {
       });
     }
 
-    // ── Vidage du panier serveur si la commande venait d'un basketId ──
     if (basketToClear) {
       await basketRepository.clearItems(basketToClear);
     }
@@ -263,13 +262,21 @@ export const orderService = {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
+  /**
+   * Point d'entrée unique pour toute transition de statut, qu'elle soit
+   * déclenchée par un admin (PUT /orders/:id/status) ou par le système
+   * (ex: confirmation automatique à la création d'un paiement COD).
+   */
   updateStatus: async (
     id: string,
     dto: UpdateOrderStatusDto,
     changedBy: number | null,
+    actorRole: ActorRole = "ADMIN",
   ) => {
     const order = await orderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
+
+    assertValidTransition(order.status, dto.status);
 
     const oldStatus = order.status;
     const updated = await orderRepository.updateStatus(
@@ -284,14 +291,14 @@ export const orderService = {
 
     businessLogger.log("ORDER_STATUS_CHANGED", {
       service: "orders",
-      actor: { userId: order.userId, role: "ADMIN" },
+      actor: { userId: changedBy, role: actorRole },
       target: { orderId: id },
       metadata: { oldStatus, newStatus: dto.status },
     });
 
     auditLogger.log("ORDER_STATUS_CHANGED", {
       service: "orders",
-      actor: { userId: order.userId, role: "ADMIN" },
+      actor: { userId: changedBy, role: actorRole },
       target: { orderId: id },
       metadata: { oldStatus, newStatus: dto.status },
     });
@@ -306,26 +313,40 @@ export const orderService = {
     return updated;
   },
 
+  /**
+   * "Annulation" — ne supprime plus jamais la commande en base.
+   * Passe simplement le statut à CANCELLED (rejeté par la state machine
+   * si la commande est déjà SHIPPED/DELIVERED/CANCELLED/REFUNDED).
+   * Les paiements, retours et historique restent intacts.
+   */
   delete: async (id: string, userId: number, isAdmin: boolean) => {
     const order = await orderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
     if (!isAdmin && order.userId !== userId)
       throw new AppError("Forbidden", 403);
 
-    await orderRepository.delete(id);
+    assertValidTransition(order.status, OrderStatus.CANCELLED);
+
+    await orderRepository.updateStatus(
+      id,
+      OrderStatus.CANCELLED,
+      userId,
+      isAdmin ? "Cancelled by admin" : "Cancelled by customer",
+    );
+
     await cache.del(CACHE_KEYS.single(id));
     await cache.delByPattern("orders:all:*");
 
     businessLogger.log("ORDER_CANCELLED", {
       service: "orders",
-      actor: { userId: order.userId, role: "CUSTOMER" },
+      actor: { userId, role: isAdmin ? "ADMIN" : "CUSTOMER" },
       target: { orderId: id },
       metadata: { totalAmount: order.totalAmount },
     });
 
     auditLogger.log("ORDER_CANCELLED", {
       service: "orders",
-      actor: { userId: order.userId, role: "CUSTOMER" },
+      actor: { userId, role: isAdmin ? "ADMIN" : "CUSTOMER" },
       target: { orderId: id },
       metadata: { totalAmount: order.totalAmount },
     });

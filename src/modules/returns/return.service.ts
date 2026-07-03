@@ -1,8 +1,9 @@
 import { returnRepository } from "./return.repository";
 import { orderRepository } from "../orders/order.repository";
+import { orderService } from "../orders/order.service";
 import { CreateReturnDto, UpdateReturnStatusDto } from "./return.schema";
 import { AppError } from "../../shared/utils/app-error";
-import { businessLogger, auditLogger } from "../../shared/logger";
+import { businessLogger } from "../../shared/logger";
 import { ReturnStatus } from "@prisma/client";
 
 export const returnService = {
@@ -33,6 +34,12 @@ export const returnService = {
     const order = await orderRepository.findById(dto.order_id);
     if (!order) throw new AppError("Order not found", 404);
     if (order.userId !== userId) throw new AppError("Forbidden", 403);
+
+    if (order.status !== "DELIVERED")
+      throw new AppError(
+        "Returns can only be requested for delivered orders",
+        400,
+      );
 
     const orderItemIds = new Set(order.items.map((i) => i.id));
     for (const item of dto.items) {
@@ -92,12 +99,18 @@ export const returnService = {
       metadata: { status: dto.status },
     });
 
-    // auditLogger.log("RETURN_STATUS_CHANGED", {
-    //   service: "returns",
-    //   actor: { userId: adminUserId, role: "ADMIN" },
-    //   target: { returnRequestId: id },
-    //   metadata: { oldStatus: returnRequest.status, newStatus: dto.status },
-    // });
+    // Un retour COMPLETED referme le cycle de vie de la commande.
+    // Réintégration de stock : non implémentée — aucune information de
+    // warehouse d'origine n'est tracée sur OrderItem/ReturnItem à ce jour.
+    // Nécessite le chantier "réservation de stock à la commande" (à décider).
+    if (dto.status === ReturnStatus.COMPLETED) {
+      await orderService.updateStatus(
+        returnRequest.orderId,
+        { status: "REFUNDED", reason: `Return ${id} completed` },
+        adminUserId,
+        "ADMIN",
+      );
+    }
 
     return updated;
   },

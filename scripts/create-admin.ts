@@ -26,12 +26,11 @@ async function main() {
       password: hashed,
       firstName: 'Admin',
       lastName: 'User',
-      role: 'ADMIN',
     },
   })
 
   console.log('Admin créé avec succès:')
-  console.log({ id: admin.id, username: admin.username, email: admin.email, role: admin.role })
+  console.log({ id: admin.id, username: admin.username, email: admin.email })
   process.exit(0)
 }
 

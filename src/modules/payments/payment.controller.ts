@@ -12,6 +12,18 @@ export const paymentController = {
     }
   },
 
+  complete: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await paymentService.complete(
+        req.params.payment_id as string,
+        req.user!.userId,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   create: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await paymentService.create(req.user!.userId, req.body);
