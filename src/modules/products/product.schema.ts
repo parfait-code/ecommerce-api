@@ -11,13 +11,12 @@ export const createProductSchema = z.object({
   weight: z.number().positive(),
 });
 
-// categoryId exclu — immuable après création (voir product.service.ts)
 export const updateProductSchema = createProductSchema
   .omit({ categoryId: true })
   .partial();
 
 export const uploadImagesSchema = z.object({
-  variantId: z.string().optional(),
+  combinationId: z.string().optional(),
 });
 
 export type CreateProductDto = z.infer<typeof createProductSchema>;

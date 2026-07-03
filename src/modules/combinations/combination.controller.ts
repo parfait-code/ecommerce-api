@@ -1,0 +1,91 @@
+import { Request, Response, NextFunction } from "express";
+import { combinationService } from "./combination.service";
+import { respond } from "../../shared/utils/response";
+
+export const combinationController = {
+  setOptionsForAttribute: async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const result = await combinationService.setOptionsForAttribute(
+        Number(req.params.productId),
+        req.params.attributeDefinitionId as string,
+        req.body,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  getSelections: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await combinationService.getSelections(
+        Number(req.params.productId),
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  generate: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await combinationService.generate(
+        Number(req.params.productId),
+      );
+      respond(res, result, 201);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  getByProduct: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await combinationService.getByProduct(
+        Number(req.params.productId),
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  getById: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await combinationService.getById(
+        req.params.combinationId as string,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  update: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await combinationService.update(
+        req.params.combinationId as string,
+        Number(req.params.productId),
+        req.body,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  delete: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await combinationService.delete(
+        req.params.combinationId as string,
+        Number(req.params.productId),
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+};

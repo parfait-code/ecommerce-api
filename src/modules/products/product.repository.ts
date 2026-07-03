@@ -5,13 +5,14 @@ import { paginate } from "../../shared/utils/pagination";
 const productInclude = {
   category: { select: { id: true, name: true, slug: true } },
   images: { orderBy: { position: "asc" as const } },
-  variants: {
+  combinations: {
     where: { isActive: true },
     include: {
-      attributeValues: {
+      values: {
         include: {
-          attributeDefinition: {
-            select: { id: true, name: true, slug: true, type: true },
+          attributeDefinition: { select: { id: true, name: true, slug: true } },
+          attributeOption: {
+            select: { id: true, value: true, colorHex: true },
           },
         },
       },
@@ -24,6 +25,12 @@ const productInclude = {
       attributeDefinition: {
         select: { id: true, name: true, slug: true, type: true, unit: true },
       },
+    },
+  },
+  attributeSelections: {
+    include: {
+      attributeDefinition: { select: { id: true, name: true, slug: true } },
+      attributeOption: { select: { id: true, value: true, colorHex: true } },
     },
   },
 };
@@ -74,14 +81,12 @@ export const productRepository = {
   delete: (id: number) =>
     prisma.product.update({ where: { id }, data: { deletedAt: new Date() } }),
 
-  // ── Images ────────────────────────────────────────────────────────────────
-
-  addImages: (productId: number, urls: string[], variantId?: string) =>
+  addImages: (productId: number, urls: string[], combinationId?: string) =>
     prisma.productImage.createMany({
       data: urls.map((url, index) => ({
         productId,
         url,
-        variantId: variantId ?? null,
+        combinationId: combinationId ?? null,
         position: index,
         isPrimary: index === 0,
       })),

@@ -176,9 +176,10 @@ model AttributeDefinition {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  options         AttributeOption[]
-  productValues   ProductAttributeValue[]
-  variantValues   VariantAttributeValue[]
+  options           AttributeOption[]
+  productValues     ProductAttributeValue[]
+  productSelections ProductAttributeSelection[]
+  combinationValues ProductCombinationValue[]
 
   @@unique([categoryId, slug])
   @@index([categoryId])
@@ -193,6 +194,9 @@ model AttributeOption {
   value                 String
   colorHex              String?
   position              Int                 @default(0)
+
+  productSelections ProductAttributeSelection[]
+  combinationValues ProductCombinationValue[]
 
   @@unique([attributeDefinitionId, value])
   @@index([attributeDefinitionId])
@@ -217,16 +221,17 @@ model Product {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  images          ProductImage[]
-  variants        ProductVariant[]
-  attributeValues ProductAttributeValue[]
-  basketItems     BasketItem[]
-  orderItems      OrderItem[]
-  reviews         Review[]
-  inventory       Inventory[]
-  discounts       DiscountProduct[]
-  wishlistItems   WishlistItem[]
-  tags            ProductTag[]
+  images              ProductImage[]
+  combinations        ProductCombination[]
+  attributeValues     ProductAttributeValue[]
+  attributeSelections ProductAttributeSelection[]
+  basketItems         BasketItem[]
+  orderItems          OrderItem[]
+  reviews             Review[]
+  inventory           Inventory[]
+  discounts           DiscountProduct[]
+  wishlistItems       WishlistItem[]
+  tags                ProductTag[]
 
   @@index([categoryId])
   @@index([status])
@@ -239,8 +244,8 @@ model ProductImage {
   id        String         @id @default(cuid())
   productId Int
   product   Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  variantId String?
-  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  combinationId String?
+  combination   ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
   url       String
   altText   String?
   position  Int            @default(0)
@@ -248,7 +253,7 @@ model ProductImage {
   createdAt DateTime       @default(now())
 
   @@index([productId])
-  @@index([variantId])
+  @@index([combinationId])
 }
 
 // ─── ProductAttributeValue ────────────────────────────────────────────────────
@@ -266,41 +271,55 @@ model ProductAttributeValue {
   @@index([attributeDefinitionId, value])
 }
 
-// ─── ProductVariant ───────────────────────────────────────────────────────────
+// ─── ProductAttributeSelection ──────────────────────────────────────────────────────────────────────
 
-model ProductVariant {
-  id        String   @id @default(cuid())
-  productId Int
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sku       String   @unique
-  price     Float?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model ProductAttributeSelection {
+  id                     String              @id @default(cuid())
+  productId              Int
+  product                Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attributeDefinitionId  String
+  attributeDefinition    AttributeDefinition @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
+  attributeOptionId      String
+  attributeOption        AttributeOption     @relation(fields: [attributeOptionId], references: [id], onDelete: Cascade)
 
-  attributeValues VariantAttributeValue[]
-  inventory       Inventory[]
-  basketItems     BasketItem[]
-  orderItems      OrderItem[]
-  wishlistItems   WishlistItem[]
-  images          ProductImage[]
+  @@unique([productId, attributeOptionId])
+  @@index([productId])
+  @@index([attributeDefinitionId])
+}
 
+model ProductCombination {
+  id         String   @id @default(cuid())
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  optionsKey String   // clé canonique triée des attributeOptionId — garantit l'unicité de la combinaison
+  sku        String?  @unique
+  price      Float?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  values        ProductCombinationValue[]
+  inventory     Inventory[]
+  basketItems   BasketItem[]
+  orderItems    OrderItem[]
+  wishlistItems WishlistItem[]
+  images        ProductImage[]
+
+  @@unique([productId, optionsKey])
   @@index([productId])
 }
 
-// ─── VariantAttributeValue ────────────────────────────────────────────────────
-
-model VariantAttributeValue {
+model ProductCombinationValue {
   id                    String              @id @default(cuid())
-  variantId             String
-  variant               ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  combinationId         String
+  combination           ProductCombination  @relation(fields: [combinationId], references: [id], onDelete: Cascade)
   attributeDefinitionId String
   attributeDefinition   AttributeDefinition @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
-  value                 String
+  attributeOptionId     String
+  attributeOption       AttributeOption     @relation(fields: [attributeOptionId], references: [id], onDelete: Cascade)
 
-  @@unique([variantId, attributeDefinitionId])
-  @@index([variantId])
-  @@index([attributeDefinitionId, value])
+  @@unique([combinationId, attributeDefinitionId])
+  @@index([combinationId])
 }
 
 // ─── Tag ──────────────────────────────────────────────────────────────────────
@@ -356,13 +375,13 @@ model BasketItem {
   basket    Basket          @relation(fields: [basketId], references: [id], onDelete: Cascade)
   productId Int
   product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  variantId String?
-  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  combinationId String?
+  combination   ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
   quantity  Int
 
-  @@unique([basketId, productId, variantId])
+  @@unique([basketId, productId, combinationId])
   @@index([productId])
-  @@index([variantId])
+  @@index([combinationId])
 }
 
 // ─── Order ────────────────────────────────────────────────────────────────────
@@ -406,24 +425,26 @@ model Order {
 // ─── OrderItem ────────────────────────────────────────────────────────────────
 
 model OrderItem {
-  id             String          @id @default(cuid())
-  orderId        String
-  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId      Int
-  product        Product         @relation(fields: [productId], references: [id])
-  variantId      String?
-  variant        ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
-  quantity       Int
-  price          Float
-  originalPrice  Float
-  discountAmount Float           @default(0)
+  id                   String              @id @default(cuid())
+  orderId              String
+  order                Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId            Int
+  product              Product             @relation(fields: [productId], references: [id])
+  combinationId        String?
+  combination          ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
+  combinationSnapshot  Json?               // ex: {"Taille":"M","Couleur":"Orange"} — conservé même si l'attribut change après coup
+  quantity             Int
+  price                Float
+  originalPrice        Float
+  discountAmount       Float               @default(0)
 
-  reviews     Review[]
-  returnItems ReturnItem[]
+  reviews      Review[]
+  returnItems  ReturnItem[]
+  reservations OrderItemReservation[]
 
   @@index([orderId])
   @@index([productId])
-  @@index([variantId])
+  @@index([combinationId])
 }
 
 // ─── OrderStatusHistory ───────────────────────────────────────────────────────
@@ -439,6 +460,21 @@ model OrderStatusHistory {
   createdAt  DateTime     @default(now())
 
   @@index([orderId])
+}
+
+// ─── OrderItemReservation ──────────────────────────────────────────────────────────────────
+
+model OrderItemReservation {
+  id          String    @id @default(cuid())
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  quantity    Int
+  createdAt   DateTime  @default(now())
+
+  @@index([orderItemId])
+  @@index([warehouseId])
 }
 
 // ─── Payment ──────────────────────────────────────────────────────────────────
@@ -492,6 +528,7 @@ model Warehouse {
   updatedAt DateTime    @updatedAt
 
   inventory Inventory[]
+  reservations OrderItemReservation[]
 }
 
 // ─── Inventory ────────────────────────────────────────────────────────────────
@@ -500,17 +537,17 @@ model Inventory {
   id          String          @id @default(cuid())
   productId   Int
   product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  variantId   String?
-  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  combinationId String?
+  combination   ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
   warehouseId String
   warehouse   Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   quantity    Int             @default(0)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  @@unique([productId, warehouseId, variantId])
+  @@unique([productId, warehouseId, combinationId])
   @@index([productId])
-  @@index([variantId])
+  @@index([combinationId])
   @@index([warehouseId])
 }
 
@@ -614,14 +651,14 @@ model WishlistItem {
   wishlist   Wishlist        @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
   productId  Int
   product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  variantId  String?
-  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  combinationId  String?
+  combination    ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
   addedAt    DateTime        @default(now())
 
-  @@unique([wishlistId, productId, variantId])
+  @@unique([wishlistId, productId, combinationId])
   @@index([wishlistId])
   @@index([productId])
-  @@index([variantId])
+  @@index([combinationId])
 }
 
 // ─── ReturnRequest ────────────────────────────────────────────────────────────

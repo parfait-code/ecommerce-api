@@ -1,7 +1,11 @@
-import { orderRepository } from "./order.repository";
+import {
+  orderRepository,
+  orderReservationRepository,
+} from "./order.repository";
 import { productRepository } from "../products/product.repository";
-import { variantRepository } from "../variants/variant.repository";
+import { combinationRepository } from "../combinations/combination.repository";
 import { basketRepository } from "../basket/basket.repository";
+import { inventoryRepository } from "../inventory/inventory.repository";
 import { loyaltyService } from "../loyalty/loyalty.service";
 import { promotionRepository } from "../promotions/promotion.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
@@ -56,6 +60,36 @@ const resolveCoupon = async (
     );
 
   return coupon;
+};
+
+/**
+ * Libère le stock réservé pour une commande : réincrémente chaque entrepôt
+ * exactement de la quantité qui lui avait été retirée, puis efface la trace.
+ */
+const releaseReservedStock = async (orderId: string) => {
+  const reservations = await orderReservationRepository.findByOrder(orderId);
+
+  for (const r of reservations) {
+    const invRow = await inventoryRepository.findByProductAndWarehouse(
+      r.orderItem.productId,
+      r.warehouseId,
+      r.orderItem.combinationId ?? undefined,
+    );
+
+    if (invRow) {
+      await inventoryRepository.incrementQuantity(invRow.id, r.quantity);
+    } else {
+      // La ligne d'inventaire a été supprimée entre-temps — on la recrée
+      await inventoryRepository.create({
+        product_id: r.orderItem.productId,
+        warehouse_id: r.warehouseId,
+        combination_id: r.orderItem.combinationId ?? undefined,
+        quantity: r.quantity,
+      });
+    }
+  }
+
+  await orderReservationRepository.deleteByOrder(orderId);
 };
 
 export const orderService = {
@@ -115,7 +149,7 @@ export const orderService = {
   create: async (userId: number, dto: CreateOrderDto) => {
     const activeDiscounts = await promotionRepository.findActiveDiscounts();
 
-    let sourceItems: { id: string; variantId?: string; quantity: number }[];
+    let sourceItems: { id: string; combinationId?: string; quantity: number }[];
     let basketToClear: string | undefined;
 
     if (dto.items && dto.items.length > 0) {
@@ -131,7 +165,7 @@ export const orderService = {
 
       sourceItems = basket.items.map((i) => ({
         id: String(i.productId),
-        variantId: i.variantId ?? undefined,
+        combinationId: i.combinationId ?? undefined,
         quantity: i.quantity,
       }));
       basketToClear = basket.id;
@@ -139,7 +173,8 @@ export const orderService = {
 
     const orderItems: {
       productId: number;
-      variantId?: string | null;
+      combinationId?: string | null;
+      combinationSnapshot?: Record<string, string> | null;
       quantity: number;
       price: number;
       originalPrice: number;
@@ -154,18 +189,41 @@ export const orderService = {
       if (!product) throw new AppError(`Product ${item.id} not found`, 404);
 
       let unitPrice = product.price;
+      let combinationSnapshot: Record<string, string> | null = null;
 
-      if (item.variantId) {
-        const variant = await variantRepository.findById(item.variantId);
-        if (!variant || variant.productId !== product.id)
+      if (item.combinationId) {
+        const combination = await combinationRepository.findById(
+          item.combinationId,
+        );
+        if (!combination || combination.productId !== product.id)
           throw new AppError(
-            `Variant ${item.variantId} not found on product ${item.id}`,
+            `Combination ${item.combinationId} not found on product ${item.id}`,
             404,
           );
-        if (!variant.isActive)
-          throw new AppError(`Variant ${item.variantId} is not available`, 400);
-        if (variant.price !== null) unitPrice = variant.price;
+        if (!combination.isActive)
+          throw new AppError(
+            `Combination ${item.combinationId} is not available`,
+            400,
+          );
+        if (combination.price !== null) unitPrice = combination.price;
+
+        combinationSnapshot = {};
+        for (const v of combination.values) {
+          combinationSnapshot[v.attributeDefinition.name] =
+            v.attributeOption.value;
+        }
       }
+
+      // ── Vérification de disponibilité : somme sur TOUS les entrepôts, pas un seul ──
+      const available = await inventoryRepository.sumAvailable(
+        product.id,
+        item.combinationId ?? null,
+      );
+      if (available < item.quantity)
+        throw new AppError(
+          `Insufficient stock for product "${product.name}": ${available} available, ${item.quantity} requested`,
+          400,
+        );
 
       const pricing = getBestPricing(
         { ...product, price: unitPrice },
@@ -174,7 +232,8 @@ export const orderService = {
 
       orderItems.push({
         productId: product.id,
-        variantId: item.variantId ?? null,
+        combinationId: item.combinationId ?? null,
+        combinationSnapshot,
         quantity: item.quantity,
         price: pricing.finalPrice,
         originalPrice: unitPrice,
@@ -207,6 +266,41 @@ export const orderService = {
       discountedAmount,
     );
 
+    // ── Réservation FIFO : entrepôt par entrepôt jusqu'à couvrir la quantité demandée ──
+    try {
+      for (const orderItem of order.items) {
+        const rows = await inventoryRepository.findAvailableOrdered(
+          orderItem.productId,
+          orderItem.combinationId ?? null,
+        );
+        let remaining = orderItem.quantity;
+
+        for (const row of rows) {
+          if (remaining <= 0) break;
+          const take = Math.min(row.quantity, remaining);
+          await inventoryRepository.decrementQuantity(row.id, take);
+          await orderReservationRepository.create(
+            orderItem.id,
+            row.warehouseId,
+            take,
+          );
+          remaining -= take;
+        }
+
+        if (remaining > 0) {
+          // Cas rare : stock pris entre la vérification et la réservation
+          throw new AppError(
+            `Stock became unavailable while placing the order for product ${orderItem.productId}`,
+            409,
+          );
+        }
+      }
+    } catch (err) {
+      await releaseReservedStock(order.id);
+      await orderRepository.delete(order.id);
+      throw err;
+    }
+
     if (coupon) {
       await promotionRepository.incrementCouponUsage(coupon.id);
       await promotionRepository.createCouponUse(coupon.id, userId, order.id);
@@ -219,9 +313,7 @@ export const orderService = {
       });
     }
 
-    if (basketToClear) {
-      await basketRepository.clearItems(basketToClear);
-    }
+    if (basketToClear) await basketRepository.clearItems(basketToClear);
 
     await cache.delByPattern("orders:all:*");
 
@@ -262,11 +354,6 @@ export const orderService = {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
-  /**
-   * Point d'entrée unique pour toute transition de statut, qu'elle soit
-   * déclenchée par un admin (PUT /orders/:id/status) ou par le système
-   * (ex: confirmation automatique à la création d'un paiement COD).
-   */
   updateStatus: async (
     id: string,
     dto: UpdateOrderStatusDto,
@@ -285,6 +372,14 @@ export const orderService = {
       changedBy,
       dto.reason,
     );
+
+    // Annulation avant expédition → le stock réservé retourne dans les entrepôts
+    if (
+      dto.status === OrderStatus.CANCELLED &&
+      oldStatus !== OrderStatus.CANCELLED
+    ) {
+      await releaseReservedStock(id);
+    }
 
     await cache.del(CACHE_KEYS.single(id));
     await cache.delByPattern("orders:all:*");
@@ -313,12 +408,6 @@ export const orderService = {
     return updated;
   },
 
-  /**
-   * "Annulation" — ne supprime plus jamais la commande en base.
-   * Passe simplement le statut à CANCELLED (rejeté par la state machine
-   * si la commande est déjà SHIPPED/DELIVERED/CANCELLED/REFUNDED).
-   * Les paiements, retours et historique restent intacts.
-   */
   delete: async (id: string, userId: number, isAdmin: boolean) => {
     const order = await orderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
@@ -333,6 +422,7 @@ export const orderService = {
       userId,
       isAdmin ? "Cancelled by admin" : "Cancelled by customer",
     );
+    await releaseReservedStock(id);
 
     await cache.del(CACHE_KEYS.single(id));
     await cache.delByPattern("orders:all:*");

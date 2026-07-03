@@ -1,5 +1,5 @@
 import { productRepository } from "./product.repository";
-import { variantRepository } from "../variants/variant.repository";
+import { combinationRepository } from "../combinations/combination.repository";
 import { attributeRepository } from "../attributes/attribute.repository";
 import { promotionRepository } from "../promotions/promotion.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
@@ -209,19 +209,19 @@ export const productService = {
   uploadImages: async (
     id: number,
     files: Express.Multer.File[],
-    variantId?: string,
+    combinationId?: string,
   ) => {
     const product = await productRepository.findById(id);
     if (!product) throw new AppError("Product not found", 404);
 
-    if (variantId) {
-      const variant = await variantRepository.findById(variantId);
-      if (!variant || variant.productId !== id)
-        throw new AppError("Variant not found on this product", 404);
+    if (combinationId) {
+      const combination = await combinationRepository.findById(combinationId);
+      if (!combination || combination.productId !== id)
+        throw new AppError("Combination not found on this product", 404);
     }
 
     const uploadedUrls = await Promise.all(files.map((f) => uploadImage(f)));
-    await productRepository.addImages(id, uploadedUrls, variantId);
+    await productRepository.addImages(id, uploadedUrls, combinationId);
 
     await cache.del(CACHE_KEYS.single(id));
     await cache.delByPattern("products:all:*");

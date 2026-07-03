@@ -4,12 +4,15 @@ const basketInclude = {
   items: {
     include: {
       product: true,
-      variant: {
+      combination: {
         include: {
-          attributeValues: {
+          values: {
             include: {
               attributeDefinition: {
                 select: { id: true, name: true, slug: true },
+              },
+              attributeOption: {
+                select: { id: true, value: true, colorHex: true },
               },
             },
           },
@@ -36,11 +39,11 @@ export const basketRepository = {
     basketId: string,
     productId: number,
     quantity: number,
-    variantId?: string,
+    combinationId?: string,
   ) => {
-    const vId = variantId ?? null;
+    const cId = combinationId ?? null;
     const existing = await prisma.basketItem.findFirst({
-      where: { basketId, productId, variantId: vId },
+      where: { basketId, productId, combinationId: cId },
     });
 
     if (existing) {
@@ -51,7 +54,7 @@ export const basketRepository = {
     }
 
     return prisma.basketItem.create({
-      data: { basketId, productId, quantity, variantId: vId },
+      data: { basketId, productId, quantity, combinationId: cId },
     });
   },
 
@@ -59,19 +62,19 @@ export const basketRepository = {
     basketId: string,
     productId: number,
     quantity: number,
-    variantId?: string,
+    combinationId?: string,
   ) => {
-    const vId = variantId ?? null;
+    const cId = combinationId ?? null;
     return prisma.basketItem.updateMany({
-      where: { basketId, productId, variantId: vId },
+      where: { basketId, productId, combinationId: cId },
       data: { quantity },
     });
   },
 
-  removeItem: (basketId: string, productId: number, variantId?: string) => {
-    const vId = variantId ?? null;
+  removeItem: (basketId: string, productId: number, combinationId?: string) => {
+    const cId = combinationId ?? null;
     return prisma.basketItem.deleteMany({
-      where: { basketId, productId, variantId: vId },
+      where: { basketId, productId, combinationId: cId },
     });
   },
 };

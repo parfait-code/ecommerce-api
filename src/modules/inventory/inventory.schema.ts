@@ -3,7 +3,7 @@ import { z } from "zod";
 export const createInventorySchema = z.object({
   product_id: z.number().int().positive(),
   warehouse_id: z.string(),
-  variant_id: z.string().optional(),
+  combination_id: z.string().optional(),
   quantity: z.number().int().min(0).default(0),
 });
 

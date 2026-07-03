@@ -112,6 +112,11 @@ export const attributeService = {
           `Attribute ${definition.name} does not belong to this product's category`,
           400,
         );
+      if (definition.isVariant)
+        throw new AppError(
+          `Attribute ${definition.name} is a variant attribute — use PUT /product/:productId/combinations/selections/:attributeDefinitionId instead`,
+          400,
+        );
     }
 
     const result = await attributeRepository.setProductAttributes(

@@ -15,7 +15,7 @@ export const createOrderSchema = z
       .array(
         z.object({
           id: z.string(),
-          variantId: z.string().optional(),
+          combinationId: z.string().optional(),
           quantity: z.number().int().positive(),
         }),
       )

@@ -64,11 +64,11 @@ export const productController = {
       const files = req.files as Express.Multer.File[];
       if (!files || files.length === 0)
         throw new AppError("No files uploaded", 400);
-      const variantId = req.body.variantId as string | undefined;
+      const combinationId = req.body.combinationId as string | undefined;
       const result = await productService.uploadImages(
         Number(req.params.productId),
         files,
-        variantId,
+        combinationId,
       );
       respond(res, result);
     } catch (err) {

@@ -5,11 +5,14 @@ import { paginate } from "../../shared/utils/pagination";
 const inventoryInclude = {
   product: true,
   warehouse: true,
-  variant: {
+  combination: {
     include: {
-      attributeValues: {
+      values: {
         include: {
           attributeDefinition: { select: { id: true, name: true, slug: true } },
+          attributeOption: {
+            select: { id: true, value: true, colorHex: true },
+          },
         },
       },
     },
@@ -54,24 +57,39 @@ export const inventoryRepository = {
   findByProductAndWarehouse: (
     productId: number,
     warehouseId: string,
-    variantId?: string,
+    combinationId?: string,
   ) => {
-    if (variantId) {
+    if (combinationId) {
       return prisma.inventory.findUnique({
         where: {
-          productId_warehouseId_variantId: {
+          productId_warehouseId_combinationId: {
             productId,
             warehouseId,
-            variantId,
+            combinationId,
           },
         },
         include: inventoryInclude,
       });
     }
     return prisma.inventory.findFirst({
-      where: { productId, warehouseId, variantId: null },
+      where: { productId, warehouseId, combinationId: null },
       include: inventoryInclude,
     });
+  },
+
+  // ── Utilisé pour la vérification & la réservation FIFO multi-entrepôt ──
+  findAvailableOrdered: (productId: number, combinationId: string | null) =>
+    prisma.inventory.findMany({
+      where: { productId, combinationId, quantity: { gt: 0 } },
+      orderBy: { createdAt: "asc" },
+    }),
+
+  sumAvailable: async (productId: number, combinationId: string | null) => {
+    const result = await prisma.inventory.aggregate({
+      where: { productId, combinationId },
+      _sum: { quantity: true },
+    });
+    return result._sum.quantity ?? 0;
   },
 
   findLowStock: (threshold: number) =>
@@ -97,7 +115,7 @@ export const inventoryRepository = {
       data: {
         productId: data.product_id,
         warehouseId: data.warehouse_id,
-        variantId: data.variant_id ?? null,
+        combinationId: data.combination_id ?? null,
         quantity: data.quantity,
       },
       include: inventoryInclude,

@@ -1,0 +1,185 @@
+import { combinationRepository } from "./combination.repository";
+import { productRepository } from "../products/product.repository";
+import { attributeRepository } from "../attributes/attribute.repository";
+import { prisma } from "../../shared/config/database";
+import {
+  SetVariantOptionsDto,
+  UpdateCombinationDto,
+} from "./combination.schema";
+import { AppError } from "../../shared/utils/app-error";
+import { cache } from "../../shared/utils/cache";
+
+const buildOptionsKey = (optionIds: string[]) =>
+  [...optionIds].sort().join(":");
+
+export const combinationService = {
+  setOptionsForAttribute: async (
+    productId: number,
+    attributeDefinitionId: string,
+    dto: SetVariantOptionsDto,
+  ) => {
+    const product = await productRepository.findById(productId);
+    if (!product) throw new AppError("Product not found", 404);
+
+    const definition = await attributeRepository.findDefinitionById(
+      attributeDefinitionId,
+    );
+    if (!definition) throw new AppError("Attribute definition not found", 404);
+    if (definition.categoryId !== product.categoryId)
+      throw new AppError(
+        "Attribute does not belong to this product's category",
+        400,
+      );
+    if (!definition.isVariant)
+      throw new AppError(
+        "This attribute is not a variant attribute — use PUT /product/:productId/attributes instead",
+        400,
+      );
+
+    const validOptionIds = new Set(definition.options.map((o) => o.id));
+    for (const optionId of dto.optionIds) {
+      if (!validOptionIds.has(optionId))
+        throw new AppError(
+          `Option ${optionId} does not belong to this attribute`,
+          400,
+        );
+    }
+
+    await prisma.$transaction([
+      prisma.productAttributeSelection.deleteMany({
+        where: { productId, attributeDefinitionId },
+      }),
+      prisma.productAttributeSelection.createMany({
+        data: dto.optionIds.map((attributeOptionId) => ({
+          productId,
+          attributeDefinitionId,
+          attributeOptionId,
+        })),
+      }),
+    ]);
+
+    return prisma.productAttributeSelection.findMany({
+      where: { productId, attributeDefinitionId },
+      include: { attributeOption: true },
+    });
+  },
+
+  getSelections: async (productId: number) => {
+    const product = await productRepository.findById(productId);
+    if (!product) throw new AppError("Product not found", 404);
+
+    return prisma.productAttributeSelection.findMany({
+      where: { productId },
+      include: {
+        attributeDefinition: { select: { id: true, name: true, slug: true } },
+        attributeOption: true,
+      },
+    });
+  },
+
+  generate: async (productId: number) => {
+    const product = await productRepository.findById(productId);
+    if (!product) throw new AppError("Product not found", 404);
+
+    const selections = await prisma.productAttributeSelection.findMany({
+      where: { productId },
+    });
+
+    if (selections.length === 0)
+      throw new AppError(
+        "No variant attribute options selected for this product yet",
+        400,
+      );
+
+    const byAttribute = new Map<string, string[]>();
+    for (const s of selections) {
+      const list = byAttribute.get(s.attributeDefinitionId) ?? [];
+      list.push(s.attributeOptionId);
+      byAttribute.set(s.attributeDefinitionId, list);
+    }
+
+    let combos: {
+      attributeDefinitionId: string;
+      attributeOptionId: string;
+    }[][] = [[]];
+    for (const [attributeDefinitionId, optionIds] of byAttribute) {
+      const next: typeof combos = [];
+      for (const combo of combos) {
+        for (const attributeOptionId of optionIds) {
+          next.push([...combo, { attributeDefinitionId, attributeOptionId }]);
+        }
+      }
+      combos = next;
+    }
+
+    const generatedKeys: string[] = [];
+
+    for (const combo of combos) {
+      const optionsKey = buildOptionsKey(combo.map((c) => c.attributeOptionId));
+      generatedKeys.push(optionsKey);
+
+      const existing = await combinationRepository.findByOptionsKey(
+        productId,
+        optionsKey,
+      );
+      if (existing) {
+        if (!existing.isActive)
+          await combinationRepository.update(existing.id, { isActive: true });
+        continue;
+      }
+      await combinationRepository.create(productId, optionsKey, combo);
+    }
+
+    // Désactive (ne supprime pas) les combinaisons qui ne correspondent plus à la sélection actuelle
+    await combinationRepository.deactivateManyExcept(productId, generatedKeys);
+
+    await cache.del(`products:${productId}`);
+
+    return combinationRepository.findByProduct(productId);
+  },
+
+  getByProduct: async (productId: number) => {
+    const product = await productRepository.findById(productId);
+    if (!product) throw new AppError("Product not found", 404);
+    return combinationRepository.findByProduct(productId);
+  },
+
+  getById: async (id: string) => {
+    const combination = await combinationRepository.findById(id);
+    if (!combination) throw new AppError("Combination not found", 404);
+    return combination;
+  },
+
+  update: async (id: string, productId: number, dto: UpdateCombinationDto) => {
+    const combination = await combinationRepository.findById(id);
+    if (!combination) throw new AppError("Combination not found", 404);
+    if (combination.productId !== productId)
+      throw new AppError("Combination not found on this product", 404);
+
+    if (dto.sku) {
+      const existingSku = await combinationRepository.findBySku(dto.sku);
+      if (existingSku && existingSku.id !== id)
+        throw new AppError("SKU already taken", 409);
+    }
+
+    const updated = await combinationRepository.update(id, dto);
+    await cache.del(`products:${productId}`);
+    return updated;
+  },
+
+  delete: async (id: string, productId: number) => {
+    const combination = await combinationRepository.findById(id);
+    if (!combination) throw new AppError("Combination not found", 404);
+    if (combination.productId !== productId)
+      throw new AppError("Combination not found on this product", 404);
+    if (combination.inventory.length > 0)
+      throw new AppError(
+        "Cannot delete a combination that still has inventory entries — remove stock first",
+        400,
+      );
+
+    await combinationRepository.delete(id);
+    await cache.del(`products:${productId}`);
+    return { message: "Combination deleted successfully" };
+  },
+};

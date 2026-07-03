@@ -1,6 +1,6 @@
 import { wishlistRepository } from "./wishlist.repository";
 import { productRepository } from "../products/product.repository";
-import { variantRepository } from "../variants/variant.repository";
+import { combinationRepository } from "../combinations/combination.repository";
 import { AddWishlistItemDto, RemoveWishlistItemDto } from "./wishlist.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
@@ -18,24 +18,26 @@ export const wishlistService = {
     const product = await productRepository.findById(dto.product_id);
     if (!product) throw new AppError("Product not found", 404);
 
-    if (dto.variant_id) {
-      const variant = await variantRepository.findById(dto.variant_id);
-      if (!variant || variant.productId !== dto.product_id)
-        throw new AppError("Variant not found on this product", 404);
+    if (dto.combination_id) {
+      const combination = await combinationRepository.findById(
+        dto.combination_id,
+      );
+      if (!combination || combination.productId !== dto.product_id)
+        throw new AppError("Combination not found on this product", 404);
     }
 
     const wishlist = await getOrCreate(userId);
     await wishlistRepository.addItem(
       wishlist.id,
       dto.product_id,
-      dto.variant_id,
+      dto.combination_id,
     );
 
     businessLogger.log("WISHLIST_ITEM_ADDED", {
       service: "wishlist",
       actor: { userId, role: "CUSTOMER" },
       target: { productId: dto.product_id },
-      metadata: { variantId: dto.variant_id ?? null },
+      metadata: { combinationId: dto.combination_id ?? null },
     });
 
     return wishlistRepository.findByUserId(userId);
@@ -47,21 +49,21 @@ export const wishlistService = {
     const item = wishlist.items.find(
       (i) =>
         i.productId === dto.product_id &&
-        i.variantId === (dto.variant_id ?? null),
+        i.combinationId === (dto.combination_id ?? null),
     );
     if (!item) throw new AppError("Product not in wishlist", 404);
 
     await wishlistRepository.removeItem(
       wishlist.id,
       dto.product_id,
-      dto.variant_id,
+      dto.combination_id,
     );
 
     businessLogger.log("WISHLIST_ITEM_REMOVED", {
       service: "wishlist",
       actor: { userId, role: "CUSTOMER" },
       target: { productId: dto.product_id },
-      metadata: { variantId: dto.variant_id ?? null },
+      metadata: { combinationId: dto.combination_id ?? null },
     });
 
     return wishlistRepository.findByUserId(userId);

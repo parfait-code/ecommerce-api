@@ -11,17 +11,14 @@ const wishlistInclude = {
           images: { select: { url: true }, take: 1 },
         },
       },
-      variant: { select: { id: true, sku: true, price: true } },
+      combination: { select: { id: true, sku: true, price: true } },
     },
   },
 };
 
 export const wishlistRepository = {
   findByUserId: (userId: number) =>
-    prisma.wishlist.findUnique({
-      where: { userId },
-      include: wishlistInclude,
-    }),
+    prisma.wishlist.findUnique({ where: { userId }, include: wishlistInclude }),
 
   create: (userId: number) =>
     prisma.wishlist.create({ data: { userId }, include: wishlistInclude }),
@@ -29,22 +26,21 @@ export const wishlistRepository = {
   addItem: async (
     wishlistId: string,
     productId: number,
-    variantId?: string,
+    combinationId?: string,
   ) => {
-    const vId = variantId ?? null;
+    const cId = combinationId ?? null;
     const existing = await prisma.wishlistItem.findFirst({
-      where: { wishlistId, productId, variantId: vId },
+      where: { wishlistId, productId, combinationId: cId },
     });
-
     if (existing) return existing;
 
     return prisma.wishlistItem.create({
-      data: { wishlistId, productId, variantId: vId },
+      data: { wishlistId, productId, combinationId: cId },
     });
   },
 
-  removeItem: (wishlistId: string, productId: number, variantId?: string) =>
+  removeItem: (wishlistId: string, productId: number, combinationId?: string) =>
     prisma.wishlistItem.deleteMany({
-      where: { wishlistId, productId, variantId: variantId ?? null },
+      where: { wishlistId, productId, combinationId: combinationId ?? null },
     }),
 };

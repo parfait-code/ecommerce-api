@@ -7,15 +7,18 @@ const orderInclude = {
   items: {
     include: {
       product: { select: { id: true, name: true, sku: true } },
-      variant: {
+      combination: {
         select: {
           id: true,
           sku: true,
           price: true,
-          attributeValues: {
+          values: {
             include: {
               attributeDefinition: {
                 select: { id: true, name: true, slug: true },
+              },
+              attributeOption: {
+                select: { id: true, value: true, colorHex: true },
               },
             },
           },
@@ -42,13 +45,8 @@ const orderInclude = {
       promotion: { select: { id: true, name: true, slug: true } },
     },
   },
-  shippingMethod: {
-    select: { id: true, name: true, estimatedDays: true },
-  },
-  statusHistory: {
-    orderBy: { createdAt: "desc" as const },
-    take: 10,
-  },
+  shippingMethod: { select: { id: true, name: true, estimatedDays: true } },
+  statusHistory: { orderBy: { createdAt: "desc" as const }, take: 10 },
 };
 
 export const orderRepository = {
@@ -65,7 +63,6 @@ export const orderRepository = {
     const where = {
       ...(userId !== undefined && { userId }),
       ...(query.status && { status: query.status as OrderStatus }),
-      // "customer" reste réservé à l'admin — ignoré si userId est fourni (scope non-admin)
       ...(query.customer &&
         userId === undefined && {
           user: {
@@ -94,7 +91,8 @@ export const orderRepository = {
     totalAmount: number,
     items: {
       productId: number;
-      variantId?: string | null;
+      combinationId?: string | null;
+      combinationSnapshot?: Record<string, string> | null;
       quantity: number;
       price: number;
       originalPrice: number;
@@ -116,7 +114,17 @@ export const orderRepository = {
         ...(couponCodeId && { couponCodeId }),
         totalAmount,
         ...(discountedAmount !== undefined && { discountedAmount }),
-        items: { create: items },
+        items: {
+          create: items.map((i) => ({
+            productId: i.productId,
+            combinationId: i.combinationId,
+            combinationSnapshot: i.combinationSnapshot as object,
+            quantity: i.quantity,
+            price: i.price,
+            originalPrice: i.originalPrice,
+            discountAmount: i.discountAmount,
+          })),
+        },
         statusHistory: {
           create: {
             fromStatus: null,
@@ -197,4 +205,25 @@ export const orderRepository = {
     }),
 
   delete: (id: string) => prisma.order.delete({ where: { id } }),
+};
+
+// ── Traçabilité des réservations de stock (pour libération précise à l'annulation) ──
+export const orderReservationRepository = {
+  create: (orderItemId: string, warehouseId: string, quantity: number) =>
+    prisma.orderItemReservation.create({
+      data: { orderItemId, warehouseId, quantity },
+    }),
+
+  findByOrder: (orderId: string) =>
+    prisma.orderItemReservation.findMany({
+      where: { orderItem: { orderId } },
+      include: {
+        orderItem: { select: { productId: true, combinationId: true } },
+      },
+    }),
+
+  deleteByOrder: (orderId: string) =>
+    prisma.orderItemReservation.deleteMany({
+      where: { orderItem: { orderId } },
+    }),
 };
