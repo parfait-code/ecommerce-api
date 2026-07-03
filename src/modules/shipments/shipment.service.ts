@@ -2,6 +2,7 @@ import { shipmentRepository, pickupRepository } from "./shipment.repository";
 import {
   CreateShipmentDto,
   TrackingEventDto,
+  UpdateShipmentStatusDto,
   ShippingCostDto,
   CreatePickupRequestDto,
 } from "./shipment.schema";
@@ -11,8 +12,6 @@ import { businessLogger } from "../../shared/logger";
 const generateTrackingNumber = () =>
   Math.random().toString(36).substring(2, 12).toUpperCase();
 
-// Retourne désormais un ISO-8601 complet (pas juste la date) —
-// c'était la cause de l'erreur Prisma "premature end of input".
 const generateEstimatedDelivery = () => {
   const date = new Date();
   date.setDate(date.getDate() + 7);
@@ -35,8 +34,8 @@ export const shipmentService = {
   },
 
   create: async (dto: CreateShipmentDto) => {
-    // Respecte la date fournie par le client si elle existe, sinon calcule +7 jours
-    const estimatedDeliveryDate = dto.estimated_delivery_at ?? generateEstimatedDelivery();
+    const estimatedDeliveryDate =
+      dto.estimated_delivery_at ?? generateEstimatedDelivery();
 
     const shipment = await shipmentRepository.create(
       dto,
@@ -64,24 +63,58 @@ export const shipmentService = {
     return shipment;
   },
 
+  // Ajoute une ligne libre dans l'historique de suivi. Peut optionnellement
+  // aussi mettre à jour le statut officiel si shipment_status est fourni.
   addTrackingEvent: async (id: string, dto: TrackingEventDto) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
 
     await shipmentRepository.addTrackingEvent(id, dto);
-    await shipmentRepository.updateStatus(
-      id,
-      dto.status as "PENDING" | "IN_TRANSIT" | "DELIVERED" | "CANCELLED",
-    );
 
-    const updated = await shipmentRepository.findById(id);
+    if (dto.shipment_status) {
+      await shipmentRepository.updateStatus(id, dto.shipment_status);
+
+      businessLogger.log(
+        dto.shipment_status === "DELIVERED"
+          ? "SHIPMENT_DELIVERED"
+          : "SHIPMENT_SENT",
+        {
+          service: "shipments",
+          actor: { userId: null, role: "SYSTEM" },
+          target: { shipmentId: id },
+          metadata: { location: dto.location, status: dto.shipment_status },
+        },
+      );
+    }
+
+    return shipmentRepository.findById(id);
+  },
+
+  // Action dédiée : change uniquement le statut officiel de l'expédition
+  updateStatus: async (id: string, dto: UpdateShipmentStatusDto) => {
+    const shipment = await shipmentRepository.findById(id);
+    if (!shipment) throw new AppError("Shipment not found", 404);
+
+    if (shipment.status === "CANCELLED")
+      throw new AppError("Cannot change status of a cancelled shipment", 400);
+    if (shipment.status === "DELIVERED" && dto.status !== "DELIVERED")
+      throw new AppError("Cannot change status of a delivered shipment", 400);
+
+    const updated = await shipmentRepository.updateStatus(id, dto.status);
+
+    if (dto.reason) {
+      await shipmentRepository.addTrackingEvent(id, {
+        status: dto.reason,
+        location: undefined,
+      });
+    }
 
     if (dto.status === "DELIVERED") {
       businessLogger.log("SHIPMENT_DELIVERED", {
         service: "shipments",
-        actor: { userId: null, role: "SYSTEM" },
+        actor: { userId: null, role: "ADMIN" },
         target: { shipmentId: id },
-        metadata: { location: dto.location },
+        metadata: { reason: dto.reason },
       });
     }
 

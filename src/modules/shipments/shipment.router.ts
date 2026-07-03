@@ -6,6 +6,7 @@ import { validate } from "../../shared/middlewares/validate";
 import {
   createShipmentSchema,
   trackingEventSchema,
+  updateShipmentStatusSchema,
   shippingCostSchema,
   createPickupRequestSchema,
 } from "./shipment.schema";
@@ -36,6 +37,13 @@ router.get(
   "/shipments/:shipmentId/track",
   authGuard,
   shipmentController.getTracking,
+);
+router.put(
+  "/shipments/:shipmentId/status",
+  authGuard,
+  adminGuard,
+  validate(updateShipmentStatusSchema),
+  shipmentController.updateStatus,
 );
 router.post(
   "/shipments/:shipmentId/cancel",

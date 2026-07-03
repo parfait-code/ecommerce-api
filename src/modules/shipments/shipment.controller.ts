@@ -55,6 +55,18 @@ export const shipmentController = {
     }
   },
 
+  updateStatus: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await shipmentService.updateStatus(
+        req.params.shipmentId as string,
+        req.body,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   getTracking: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await shipmentService.getTracking(
