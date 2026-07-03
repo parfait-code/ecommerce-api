@@ -23,7 +23,9 @@ export const shipmentRepository = {
         ...(data.dimensions && { dimensions: data.dimensions as object }),
         ...(data.order_id && { orderId: data.order_id }),
         trackingNumber,
-        estimatedDeliveryDate,
+        // new Date(...) accepte aussi bien un ISO complet qu'une date "YYYY-MM-DD",
+        // et garantit que Prisma reçoit toujours un objet Date valide.
+        estimatedDeliveryDate: new Date(estimatedDeliveryDate),
       },
       include: shipmentInclude,
     }),

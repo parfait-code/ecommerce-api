@@ -11,10 +11,12 @@ import { businessLogger } from "../../shared/logger";
 const generateTrackingNumber = () =>
   Math.random().toString(36).substring(2, 12).toUpperCase();
 
+// Retourne désormais un ISO-8601 complet (pas juste la date) —
+// c'était la cause de l'erreur Prisma "premature end of input".
 const generateEstimatedDelivery = () => {
   const date = new Date();
   date.setDate(date.getDate() + 7);
-  return date.toISOString().split("T")[0];
+  return date.toISOString();
 };
 
 export const shipmentService = {
@@ -33,10 +35,13 @@ export const shipmentService = {
   },
 
   create: async (dto: CreateShipmentDto) => {
+    // Respecte la date fournie par le client si elle existe, sinon calcule +7 jours
+    const estimatedDeliveryDate = dto.estimated_delivery_at ?? generateEstimatedDelivery();
+
     const shipment = await shipmentRepository.create(
       dto,
       generateTrackingNumber(),
-      generateEstimatedDelivery(),
+      estimatedDeliveryDate,
     );
 
     businessLogger.log("SHIPMENT_CREATED", {
