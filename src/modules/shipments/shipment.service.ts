@@ -1,4 +1,6 @@
 import { shipmentRepository, pickupRepository } from "./shipment.repository";
+import { orderRepository } from "../orders/order.repository";
+import { orderService } from "../orders/order.service";
 import {
   CreateShipmentDto,
   TrackingEventDto,
@@ -7,7 +9,8 @@ import {
   CreatePickupRequestDto,
 } from "./shipment.schema";
 import { AppError } from "../../shared/utils/app-error";
-import { businessLogger } from "../../shared/logger";
+import { businessLogger, systemLogger } from "../../shared/logger";
+import { OrderStatus, ShipmentStatus } from "@prisma/client";
 
 const generateTrackingNumber = () =>
   Math.random().toString(36).substring(2, 12).toUpperCase();
@@ -18,6 +21,42 @@ const generateEstimatedDelivery = () => {
   return date.toISOString();
 };
 
+// ── Synchronisation automatique Shipment.status → Order.status ──
+// N'inclut volontairement pas CANCELLED : annuler une expédition ne signifie
+// pas forcément annuler la commande (un nouvel envoi peut être recréé).
+const SHIPMENT_TO_ORDER_STATUS: Partial<Record<ShipmentStatus, OrderStatus>> = {
+  IN_TRANSIT: OrderStatus.SHIPPED,
+  DELIVERED: OrderStatus.DELIVERED,
+};
+
+const syncOrderStatus = async (
+  orderId: string | null | undefined,
+  shipmentStatus: ShipmentStatus,
+) => {
+  if (!orderId) return;
+  const mappedStatus = SHIPMENT_TO_ORDER_STATUS[shipmentStatus];
+  if (!mappedStatus) return;
+
+  try {
+    await orderService.updateStatus(
+      orderId,
+      { status: mappedStatus, reason: `Auto-synced from shipment status change to ${shipmentStatus}` },
+      null,
+      "SYSTEM",
+    );
+  } catch (err) {
+    systemLogger.error("ORDER_SYNC_FAILED", {
+      service: "shipments",
+      metadata: {
+        orderId,
+        shipmentStatus,
+        targetOrderStatus: mappedStatus,
+        error: (err as Error).message,
+      },
+    });
+  }
+};
+
 export const shipmentService = {
   calculateCost: (dto: ShippingCostDto) => {
     const baseCost = 5;
@@ -26,7 +65,12 @@ export const shipmentService = {
     return { cost: Math.round(cost * 100) / 100, currency: "XAF" };
   },
 
-  getAll: async (query: { page?: string; limit?: string; status?: string }) => {
+  getAll: async (query: {
+    page?: string;
+    limit?: string;
+    status?: string;
+    order_id?: string;
+  }) => {
     const [items, total] = await shipmentRepository.findAll(query);
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
@@ -34,8 +78,7 @@ export const shipmentService = {
   },
 
   create: async (dto: CreateShipmentDto) => {
-    const estimatedDeliveryDate =
-      dto.estimated_delivery_at ?? generateEstimatedDelivery();
+    const estimatedDeliveryDate = dto.estimated_delivery_at ?? generateEstimatedDelivery();
 
     const shipment = await shipmentRepository.create(
       dto,
@@ -63,8 +106,15 @@ export const shipmentService = {
     return shipment;
   },
 
-  // Ajoute une ligne libre dans l'historique de suivi. Peut optionnellement
-  // aussi mettre à jour le statut officiel si shipment_status est fourni.
+  // ── Nouveau : visibilité croisée commande → expédition ──
+  getByOrder: async (orderId: string, userId: number, isAdmin: boolean) => {
+    const order = await orderRepository.findById(orderId);
+    if (!order) throw new AppError("Order not found", 404);
+    if (!isAdmin && order.userId !== userId) throw new AppError("Forbidden", 403);
+
+    return shipmentRepository.findByOrderId(orderId); // null si aucune expédition encore créée
+  },
+
   addTrackingEvent: async (id: string, dto: TrackingEventDto) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
@@ -75,9 +125,7 @@ export const shipmentService = {
       await shipmentRepository.updateStatus(id, dto.shipment_status);
 
       businessLogger.log(
-        dto.shipment_status === "DELIVERED"
-          ? "SHIPMENT_DELIVERED"
-          : "SHIPMENT_SENT",
+        dto.shipment_status === "DELIVERED" ? "SHIPMENT_DELIVERED" : "SHIPMENT_SENT",
         {
           service: "shipments",
           actor: { userId: null, role: "SYSTEM" },
@@ -85,12 +133,13 @@ export const shipmentService = {
           metadata: { location: dto.location, status: dto.shipment_status },
         },
       );
+
+      await syncOrderStatus(shipment.orderId, dto.shipment_status);
     }
 
     return shipmentRepository.findById(id);
   },
 
-  // Action dédiée : change uniquement le statut officiel de l'expédition
   updateStatus: async (id: string, dto: UpdateShipmentStatusDto) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
@@ -103,10 +152,7 @@ export const shipmentService = {
     const updated = await shipmentRepository.updateStatus(id, dto.status);
 
     if (dto.reason) {
-      await shipmentRepository.addTrackingEvent(id, {
-        status: dto.reason,
-        location: undefined,
-      });
+      await shipmentRepository.addTrackingEvent(id, { status: dto.reason, location: undefined });
     }
 
     if (dto.status === "DELIVERED") {
@@ -117,6 +163,8 @@ export const shipmentService = {
         metadata: { reason: dto.reason },
       });
     }
+
+    await syncOrderStatus(shipment.orderId, dto.status);
 
     return updated;
   },
@@ -171,11 +219,7 @@ export const shipmentService = {
       shipmentId: dto.shipment_id,
     }),
 
-  getAllPickupRequests: async (query: {
-    page?: string;
-    limit?: string;
-    status?: string;
-  }) => {
+  getAllPickupRequests: async (query: { page?: string; limit?: string; status?: string }) => {
     const [items, total] = await pickupRepository.findAll(query);
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);

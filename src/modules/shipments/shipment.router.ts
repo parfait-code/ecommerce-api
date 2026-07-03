@@ -73,5 +73,10 @@ router.post(
   authGuard,
   shipmentController.cancelPickupRequest,
 );
+router.get(
+  "/orders/:orderId/shipment",
+  authGuard,
+  shipmentController.getByOrder,
+);
 
 export default router;

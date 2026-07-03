@@ -1,12 +1,31 @@
 import { paymentRepository } from "./payment.repository";
 import { orderRepository } from "../orders/order.repository";
 import { orderService } from "../orders/order.service";
-import { CreatePaymentDto } from "./payment.schema";
+import { CreatePaymentDto, UpdatePaymentStatusDto } from "./payment.schema";
 import { AppError } from "../../shared/utils/app-error";
-import { PaymentMethod } from "@prisma/client";
-import { businessLogger, auditLogger } from "../../shared/logger";
+import { PaymentMethod, PaymentStatus } from "@prisma/client";
+import { assertValidPaymentTransition } from "./payment.state-machine";
+import {
+  businessLogger,
+  auditLogger,
+  BusinessEvent,
+  AuditEvent,
+} from "../../shared/logger";
 
 const UNAVAILABLE_METHODS: PaymentMethod[] = ["PAYPAL", "STRIPE", "CINETPAY"];
+
+// ── Mapping statut → événement de log (aucune entrée = pas de log pour ce statut) ──
+const BUSINESS_EVENT_MAP: Partial<Record<PaymentStatus, BusinessEvent>> = {
+  COMPLETED: "PAYMENT_SUCCESS",
+  FAILED: "PAYMENT_FAILED",
+  REFUNDED: "PAYMENT_REFUNDED",
+};
+
+const AUDIT_EVENT_MAP: Partial<Record<PaymentStatus, AuditEvent>> = {
+  COMPLETED: "PAYMENT_APPROVED",
+  REFUNDED: "PAYMENT_REFUNDED",
+  CANCELLED: "PAYMENT_CANCELLED",
+};
 
 export const paymentService = {
   getAvailableMethods: () => [
@@ -49,10 +68,7 @@ export const paymentService = {
         service: "payment",
         actor: { userId, role: "CUSTOMER" },
         target: { orderId: dto.order_id },
-        metadata: {
-          method: dto.method,
-          reason: "Payment method not available",
-        },
+        metadata: { method: dto.method, reason: "Payment method not available" },
       });
 
       throw new AppError(
@@ -69,11 +85,7 @@ export const paymentService = {
       service: "payment",
       actor: { userId, role: "CUSTOMER" },
       target: { orderId: dto.order_id },
-      metadata: {
-        method: dto.method,
-        amount: order.totalAmount,
-        currency: dto.currency,
-      },
+      metadata: { method: dto.method, amount: order.totalAmount, currency: dto.currency },
     });
 
     const payment = await paymentRepository.create({
@@ -86,7 +98,7 @@ export const paymentService = {
     });
 
     // Confirme la prise en charge de la commande — ne signifie PAS que
-    // l'argent a été encaissé pour un COD (voir paymentService.complete).
+    // l'argent a été encaissé pour un COD (voir paymentService.updateStatus).
     await orderService.updateStatus(
       dto.order_id,
       { status: "CONFIRMED", reason: "Payment recorded — order confirmed" },
@@ -98,49 +110,69 @@ export const paymentService = {
   },
 
   /**
-   * Confirme l'encaissement réel d'un paiement (typiquement CASH_ON_DELIVERY
-   * à la livraison). Réservé à l'admin/livreur — l'argent est physiquement
-   * collecté à ce moment-là, pas à la création du paiement.
+   * Change le statut d'un paiement existant (ex: confirmer un encaissement COD
+   * réel à la livraison, marquer un échec, ou rembourser).
+   * Réservé à l'admin. Transitions validées via payment.state-machine.
    */
-  complete: async (paymentId: string, adminUserId: number) => {
+  updateStatus: async (
+    paymentId: string,
+    dto: UpdatePaymentStatusDto,
+    adminUserId: number,
+  ) => {
     const payment = await paymentRepository.findById(paymentId);
     if (!payment) throw new AppError("Payment not found", 404);
 
-    if (payment.status !== "PENDING")
-      throw new AppError(
-        `Cannot complete a payment with status ${payment.status}`,
-        400,
-      );
+    assertValidPaymentTransition(payment.status, dto.status);
 
-    const updated = await paymentRepository.updateStatus(
-      paymentId,
-      "COMPLETED",
-    );
+    const oldStatus = payment.status;
+    const updated = await paymentRepository.updateStatus(paymentId, dto.status, dto.notes);
 
-    businessLogger.log("PAYMENT_SUCCESS", {
-      service: "payment",
-      actor: { userId: adminUserId, role: "ADMIN" },
-      target: { orderId: payment.orderId, paymentId },
-      metadata: {
-        method: payment.method,
-        amount: payment.amount,
-        currency: payment.currency,
-      },
-    });
+    const businessEvent = BUSINESS_EVENT_MAP[dto.status];
+    if (businessEvent) {
+      businessLogger.log(businessEvent, {
+        service: "payment",
+        actor: { userId: adminUserId, role: "ADMIN" },
+        target: { orderId: payment.orderId, paymentId },
+        metadata: {
+          oldStatus,
+          newStatus: dto.status,
+          method: payment.method,
+          amount: payment.amount,
+          currency: payment.currency,
+        },
+      });
+    }
 
-    auditLogger.log("PAYMENT_APPROVED", {
-      service: "payment",
-      actor: { userId: adminUserId, role: "ADMIN" },
-      target: { orderId: payment.orderId },
-      metadata: {
-        paymentId,
-        amount: payment.amount,
-        currency: payment.currency,
-      },
-    });
+    const auditEvent = AUDIT_EVENT_MAP[dto.status];
+    if (auditEvent) {
+      auditLogger.log(auditEvent, {
+        service: "payment",
+        actor: { userId: adminUserId, role: "ADMIN" },
+        target: { orderId: payment.orderId },
+        metadata: { paymentId, oldStatus, newStatus: dto.status, notes: dto.notes },
+      });
+    }
+
+    // Un passage à COMPLETED confirme définitivement l'encaissement — si la
+    // commande était restée PENDING (cas rare), on l'aligne sur CONFIRMED.
+    if (dto.status === "COMPLETED") {
+      const order = await orderRepository.findById(payment.orderId);
+      if (order && order.status === "PENDING") {
+        await orderService.updateStatus(
+          payment.orderId,
+          { status: "CONFIRMED", reason: "Payment completed" },
+          adminUserId,
+          "ADMIN",
+        );
+      }
+    }
 
     return updated;
   },
+
+  // Conservé pour compatibilité ascendante — alias de updateStatus(COMPLETED)
+  complete: (paymentId: string, adminUserId: number) =>
+    paymentService.updateStatus(paymentId, { status: "COMPLETED" }, adminUserId),
 
   getAll: async (query: {
     page?: string;

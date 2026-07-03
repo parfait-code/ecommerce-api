@@ -23,8 +23,6 @@ export const shipmentRepository = {
         ...(data.dimensions && { dimensions: data.dimensions as object }),
         ...(data.order_id && { orderId: data.order_id }),
         trackingNumber,
-        // new Date(...) accepte aussi bien un ISO complet qu'une date "YYYY-MM-DD",
-        // et garantit que Prisma reçoit toujours un objet Date valide.
         estimatedDeliveryDate: new Date(estimatedDeliveryDate),
       },
       include: shipmentInclude,
@@ -33,10 +31,22 @@ export const shipmentRepository = {
   findById: (id: string) =>
     prisma.shipment.findUnique({ where: { id }, include: shipmentInclude }),
 
-  findAll: (query: { page?: string; limit?: string; status?: string }) => {
+  findByOrderId: (orderId: string) =>
+    prisma.shipment.findFirst({
+      where: { orderId },
+      orderBy: { createdAt: "desc" },
+    }),
+
+  findAll: (query: {
+    page?: string;
+    limit?: string;
+    status?: string;
+    order_id?: string;
+  }) => {
     const { skip, take } = paginate(query);
     const where = {
       ...(query.status && { status: query.status as any }),
+      ...(query.order_id && { orderId: query.order_id }),
     };
     return Promise.all([
       prisma.shipment.findMany({

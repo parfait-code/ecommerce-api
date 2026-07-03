@@ -3,7 +3,7 @@ import { paymentController } from "./payment.controller";
 import { authGuard } from "../../shared/middlewares/auth-guard";
 import { adminGuard } from "../../shared/middlewares/admin-guard";
 import { validate } from "../../shared/middlewares/validate";
-import { createPaymentSchema } from "./payment.schema";
+import { createPaymentSchema, updatePaymentStatusSchema } from "./payment.schema";
 
 const router = Router();
 
@@ -15,12 +15,24 @@ router.post(
   paymentController.create,
 );
 router.get("/payments/:payment_id", authGuard, paymentController.getById);
+
+// Générique — remplace fonctionnellement /complete (conservé pour compat)
+router.put(
+  "/payments/:payment_id/status",
+  authGuard,
+  adminGuard,
+  validate(updatePaymentStatusSchema),
+  paymentController.updateStatus,
+);
+
+// Déprécié — équivalent à PUT /status { status: "COMPLETED" }
 router.put(
   "/payments/:payment_id/complete",
   authGuard,
   adminGuard,
   paymentController.complete,
 );
+
 router.get(
   "/orders/:orderId/payments",
   authGuard,

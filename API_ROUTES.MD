@@ -202,7 +202,9 @@ Un `couponCode` invalide, expiré, inactif ou déjà utilisé au-delà de `perUs
 | POST    | `/payments`                 | ✅       | `order_id, method(CASH_ON_DELIVERY\|PAYPAL\|STRIPE\|CINETPAY), currency?(XAF défaut), notes?` — **503** si méthode indisponible, **403** si commande d'un autre utilisateur. Passe la commande en `CONFIRMED`. |
 | GET     | `/payments/:payment_id`     | ✅       | —                                                                                                                                                                                                              |
 | GET     | `/orders/:orderId/payments` | ✅       | — → `Payment[]`                                                                                                                                                                                                |
-| GET     | `/payments`                 | 🔒 ADMIN | Query `page?, limit?, status?, method?, order_id?`                                                                                                                                                             |
+| GET     | `/payments`                 | 🔒 ADMIN | Query `page?, limit?, status?, method?, order_id?
+| PUT | `/payments/:payment_id/status` | 🔒 ADMIN | `status(PENDING\|COMPLETED\|FAILED\|REFUNDED\|CANCELLED), notes?` — transitions validées (`COMPLETED` → uniquement `REFUNDED` possible ensuite ; `FAILED`/`REFUNDED`/`CANCELLED` sont terminaux). Un passage à `COMPLETED` aligne la commande sur `CONFIRMED` si elle était restée `PENDING`. |
+| PUT | `/payments/:payment_id/complete` | 🔒 ADMIN | ⚠️ Déprécié — alias de `PUT .../status { status: "COMPLETED" }`, conservé pour compat |`                                                                                                                                                             |
 
 ---
 
@@ -267,6 +269,9 @@ Un avis est lié à un **`orderItemId`** précis (achat vérifié), avec contrai
 | GET     | `/pickup-requests`                   | 🔒 ADMIN   | Query `page?, limit?, status?` — ⚠️ **CORRECTION** : cette route existe déjà, contrairement aux anciens warnings qui la disaient absente.                                                                                                       |
 | GET     | `/pickup-requests/:requestId`        | ✅         | —                                                                                                                                                                                                                                               |
 | POST    | `/pickup-requests/:requestId/cancel` | ✅ (owner) | 403 si pas propriétaire, 400 si déjà annulée                                                                                                                                                                                                    |
+| PUT | `/shipments/:shipmentId/status` | 🔒 ADMIN | `status(PENDING\|IN_TRANSIT\|DELIVERED\|CANCELLED), reason?` — transition officielle distincte de `/track`. Synchronise automatiquement `Order.status` (`IN_TRANSIT`→`SHIPPED`, `DELIVERED`→`DELIVERED`) en best-effort. |
+| GET | `/orders/:orderId/shipment` | ✅ (owner ou admin) | Retourne l'expédition la plus récente liée à cette commande, ou `null` si aucune n'existe encore |
+| GET | `/shipments?order_id=xxx` | 🔒 ADMIN | Filtre additionnel sur `GET /shipments` existant |
 
 ---
 

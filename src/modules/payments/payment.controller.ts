@@ -12,10 +12,24 @@ export const paymentController = {
     }
   },
 
+  // Conservé pour compat ascendante — voir aussi PUT /payments/:payment_id/status
   complete: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await paymentService.complete(
         req.params.payment_id as string,
+        req.user!.userId,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  updateStatus: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await paymentService.updateStatus(
+        req.params.payment_id as string,
+        req.body,
         req.user!.userId,
       );
       respond(res, result);

@@ -1,5 +1,5 @@
 import { prisma } from "../../shared/config/database";
-import { PaymentMethod } from "@prisma/client";
+import { PaymentMethod, PaymentStatus } from "@prisma/client";
 import { paginate } from "../../shared/utils/pagination";
 
 const paymentInclude = {
@@ -58,11 +58,12 @@ export const paymentRepository = {
 
   updateStatus: (
     id: string,
-    status: "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED" | "CANCELLED",
+    status: PaymentStatus,
+    notes?: string,
   ) =>
     prisma.payment.update({
       where: { id },
-      data: { status },
+      data: { status, ...(notes !== undefined && { notes }) },
       include: paymentInclude,
     }),
 };

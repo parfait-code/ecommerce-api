@@ -130,6 +130,19 @@ export const shipmentController = {
       next(err);
     }
   },
+  getByOrder: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const isAdmin = req.user!.role === "ADMIN";
+      const result = await shipmentService.getByOrder(
+        req.params.orderId as string,
+        req.user!.userId,
+        isAdmin,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
 
   getPickupRequest: async (req: Request, res: Response, next: NextFunction) => {
     try {
