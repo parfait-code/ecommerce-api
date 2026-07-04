@@ -3,9 +3,11 @@ import { categoryService } from "./category.service";
 import { respond } from "../../shared/utils/response";
 
 export const categoryController = {
-  getAll: async (_req: Request, res: Response, next: NextFunction) => {
+  getAll: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await categoryService.getAll();
+      const includeInactive =
+        req.user?.role === "ADMIN" && req.query.includeInactive === "true";
+      const result = await categoryService.getAll(includeInactive);
       respond(res, result);
     } catch (err) {
       next(err);

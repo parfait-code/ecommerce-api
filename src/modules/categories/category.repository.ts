@@ -1,49 +1,47 @@
-import { prisma } from '../../shared/config/database'
-import { CreateCategoryDto, UpdateCategoryDto } from './category.schema'
+import { prisma } from "../../shared/config/database";
+import { CreateCategoryDto, UpdateCategoryDto } from "./category.schema";
 
 const categoryInclude = {
-  parent:   { select: { id: true, name: true, slug: true } },
+  parent: { select: { id: true, name: true, slug: true } },
   children: { select: { id: true, name: true, slug: true } },
-  _count:   { select: { products: true } },
-}
+  _count: { select: { products: true } },
+};
 
 export const categoryRepository = {
-  findAll: () =>
+  findAll: (includeInactive = false) =>
     prisma.category.findMany({
-      include:  categoryInclude,
-      orderBy:  { name: 'asc' },
+      where: includeInactive ? undefined : { isActive: true },
+      include: categoryInclude,
+      orderBy: { name: "asc" },
     }),
 
   findById: (id: string) =>
     prisma.category.findUnique({
-      where:   { id },
+      where: { id },
       include: categoryInclude,
     }),
 
   findBySlug: (slug: string) =>
     prisma.category.findUnique({
-      where:   { slug },
+      where: { slug },
       include: categoryInclude,
     }),
 
-  findProducts: (
-    slug: string,
-    query: { page?: string; limit?: string },
-  ) => {
-    const page  = Number(query.page  ?? 1)
-    const limit = Number(query.limit ?? 20)
-    const skip  = (page - 1) * limit
+  findProducts: (slug: string, query: { page?: string; limit?: string }) => {
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    const skip = (page - 1) * limit;
 
     return Promise.all([
       prisma.product.findMany({
-        where:   { category: { slug } },
+        where: { category: { slug } },
         skip,
-        take:    limit,
+        take: limit,
         include: { category: { select: { id: true, name: true, slug: true } } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       }),
       prisma.product.count({ where: { category: { slug } } }),
-    ])
+    ]);
   },
 
   create: (data: CreateCategoryDto) =>
@@ -54,17 +52,16 @@ export const categoryRepository = {
 
   update: (id: string, data: UpdateCategoryDto) =>
     prisma.category.update({
-      where:   { id },
+      where: { id },
       data,
       include: categoryInclude,
     }),
 
-  delete: (id: string) =>
-    prisma.category.delete({ where: { id } }),
+  delete: (id: string) => prisma.category.delete({ where: { id } }),
 
   existsByName: (name: string) =>
     prisma.category.findUnique({ where: { name } }),
 
   existsBySlug: (slug: string) =>
     prisma.category.findUnique({ where: { slug } }),
-}
+};

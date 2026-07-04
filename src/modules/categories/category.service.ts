@@ -13,11 +13,16 @@ const CACHE_KEYS = {
 };
 
 export const categoryService = {
-  getAll: async () => {
+  getAll: async (includeInactive = false) => {
+    // Admin explicite (includeInactive) → pas de cache partagé avec la vue publique
+    if (includeInactive) {
+      return categoryRepository.findAll(true);
+    }
+
     const cached = await cache.get(CACHE_KEYS.all);
     if (cached) return cached;
 
-    const categories = await categoryRepository.findAll();
+    const categories = await categoryRepository.findAll(false);
     await cache.set(CACHE_KEYS.all, categories);
     return categories;
   },
@@ -34,18 +39,21 @@ export const categoryService = {
     return category;
   },
 
+  // U1 — une catégorie désactivée n'est plus consultable via cette route publique
   getBySlug: async (slug: string) => {
     const cacheKey = CACHE_KEYS.bySlug(slug);
     const cached = await cache.get(cacheKey);
     if (cached) return cached;
 
     const category = await categoryRepository.findBySlug(slug);
-    if (!category) throw new AppError("Category not found", 404);
+    if (!category || !category.isActive)
+      throw new AppError("Category not found", 404);
 
     await cache.set(cacheKey, category);
     return category;
   },
 
+  // U1 — idem, les produits d'une catégorie désactivée ne sont plus listables publiquement
   getProducts: async (
     slug: string,
     query: { page?: string; limit?: string },
@@ -57,7 +65,8 @@ export const categoryService = {
     if (cached) return cached;
 
     const category = await categoryRepository.findBySlug(slug);
-    if (!category) throw new AppError("Category not found", 404);
+    if (!category || !category.isActive)
+      throw new AppError("Category not found", 404);
 
     const [items, total] = await categoryRepository.findProducts(slug, query);
     const result = {
