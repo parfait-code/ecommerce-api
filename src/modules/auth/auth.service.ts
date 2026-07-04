@@ -2,10 +2,19 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { UserRole } from "@prisma/client";
 import { authRepository } from "./auth.repository";
+import { userRepository } from "../users/user.repository";
 import { SignupDto, LoginDto } from "./auth.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { env } from "../../shared/config/env";
 import { businessLogger, securityLogger } from "../../shared/logger";
+import { redis } from "../../shared/config/redis";
+
+// U3 — seuil et fenêtre de verrouillage, réinitialisés après un login réussi
+// (suppression explicite de la clé) ou après expiration naturelle du TTL.
+const LOGIN_ATTEMPT_LIMIT = 5;
+const LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60;
+
+const loginAttemptsKey = (username: string) => `login_attempts:${username}`;
 
 export const authService = {
   signup: async (dto: SignupDto) => {
@@ -25,7 +34,7 @@ export const authService = {
       lastName: dto.lastName,
       dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
       phone: dto.phone ?? null,
-      role: UserRole.USER, // rôle forcé — jamais dérivé du body public
+      role: UserRole.USER,
     });
 
     const token = jwt.sign(
@@ -77,8 +86,52 @@ export const authService = {
         actor: { userId: user.id, role: "CUSTOMER" },
         metadata: { username: dto.username, reason: "Wrong password" },
       });
+
+      // U3 — comptage des échecs consécutifs sur une fenêtre glissante
+      const key = loginAttemptsKey(dto.username);
+      const attempts = await redis.incr(key);
+      if (attempts === 1) {
+        await redis.expire(key, LOGIN_ATTEMPT_WINDOW_SECONDS);
+      }
+
+      if (attempts > 1 && attempts < LOGIN_ATTEMPT_LIMIT) {
+        securityLogger.log("MULTIPLE_FAILED_LOGINS", {
+          service: "auth",
+          actor: { userId: user.id, role: "CUSTOMER" },
+          metadata: { username: dto.username, attempts },
+        });
+      }
+
+      if (attempts >= LOGIN_ATTEMPT_LIMIT) {
+        await userRepository.setActive(user.id, false);
+        await redis.del(key);
+
+        securityLogger.log("BRUTE_FORCE_DETECTED", {
+          service: "auth",
+          actor: { userId: user.id, role: "CUSTOMER" },
+          metadata: {
+            username: dto.username,
+            attempts,
+            windowSeconds: LOGIN_ATTEMPT_WINDOW_SECONDS,
+          },
+        });
+
+        businessLogger.log("ACCOUNT_LOCKED", {
+          service: "auth",
+          actor: { userId: null, role: "SYSTEM" },
+          target: { userId: user.id },
+          metadata: {
+            reason: "Too many failed login attempts",
+            attempts,
+          },
+        });
+      }
+
       throw new AppError("Provided username and password did not match.", 400);
     }
+
+    // Login réussi — le compteur d'échecs est explicitement réinitialisé
+    await redis.del(loginAttemptsKey(dto.username));
 
     const token = jwt.sign(
       { userId: user.id, username: user.username, role: user.role },

@@ -16,6 +16,10 @@ export const userRepository = {
   changeRole: (id: number, role: UserRole) =>
     prisma.user.update({ where: { id }, data: { role } }),
 
+  // U2/U3/U4 — bascule isActive indépendamment de deletedAt
+  setActive: (id: number, isActive: boolean) =>
+    prisma.user.update({ where: { id }, data: { isActive } }),
+
   delete: (id: number) =>
     prisma.user.update({
       where: { id },

@@ -99,7 +99,12 @@ export const userService = {
     return strip(updated as Record<string, unknown>);
   },
 
-  deleteUser: async (userId: number) => {
+  // U2 — un admin ne peut plus se supprimer lui-même
+  deleteUser: async (userId: number, callerId: number) => {
+    if (userId === callerId) {
+      throw new AppError("You cannot delete your own account", 400);
+    }
+
     const user = await userRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
 
@@ -107,18 +112,42 @@ export const userService = {
 
     businessLogger.log("USER_DELETED", {
       service: "users",
-      actor: { userId, role: "ADMIN" },
+      actor: { userId: callerId, role: "ADMIN" },
       target: { userId },
       metadata: { username: user.username },
     });
 
     auditLogger.log("USER_DELETED", {
       service: "users",
-      actor: { userId, role: "ADMIN" },
+      actor: { userId: callerId, role: "ADMIN" },
       target: { userId },
       metadata: { username: user.username },
     });
 
     return { numberOfUsersDeleted: 1 };
+  },
+
+  // U2/U4 — suspension/réactivation réversible, indépendante de deletedAt.
+  // findById filtre déjà deletedAt:null : un compte soft-supprimé est donc
+  // automatiquement invisible ici (404), cohérent avec le reste de l'API —
+  // pas de vérification supplémentaire nécessaire.
+  changeStatus: async (userId: number, callerId: number, isActive: boolean) => {
+    const user = await userRepository.findById(userId);
+    if (!user) throw new AppError("User not found", 404);
+
+    if (isActive === user.isActive) {
+      return strip(user as Record<string, unknown>);
+    }
+
+    const updated = await userRepository.setActive(userId, isActive);
+
+    businessLogger.log(isActive ? "ACCOUNT_UNLOCKED" : "ACCOUNT_LOCKED", {
+      service: "users",
+      actor: { userId: callerId, role: "ADMIN" },
+      target: { userId },
+      metadata: { reason: "Manual status change by admin" },
+    });
+
+    return strip(updated as Record<string, unknown>);
   },
 };

@@ -24,6 +24,12 @@ export const adminCreateUserSchema = z.object({
   role: z.nativeEnum(UserRole).default(UserRole.USER),
 });
 
+export const changeStatusSchema = z.object({
+  isActive: z.boolean(),
+});
+
+export type ChangeStatusDto = z.infer<typeof changeStatusSchema>;
+
 export type UpdateUserDto = z.infer<typeof updateUserSchema>;
 export type ChangeRoleDto = z.infer<typeof changeRoleSchema>;
 export type AdminCreateUserDto = z.infer<typeof adminCreateUserSchema>;

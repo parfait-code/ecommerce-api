@@ -63,9 +63,27 @@ export const userController = {
     }
   },
 
+  // U2 — passe l'id de l'appelant pour empêcher l'auto-suppression
   deleteUser: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await userService.deleteUser(Number(req.params.userId));
+      const result = await userService.deleteUser(
+        Number(req.params.userId),
+        req.user!.userId,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  // U2/U4 — suspension/réactivation manuelle, sert aussi de déverrouillage
+  changeStatus: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await userService.changeStatus(
+        Number(req.params.userId),
+        req.user!.userId,
+        req.body.isActive,
+      );
       respond(res, result);
     } catch (err) {
       next(err);
