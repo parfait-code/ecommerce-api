@@ -20,9 +20,9 @@ listeners dédiés, un fichier par domaine réactif.
 ## Structure
 
 src/shared/events/
-event-bus.ts       → le bus lui-même (eventBus.on / eventBus.emit)
-event-types.ts     → catalogue des événements et leurs payloads (AppEventMap)
-index.ts           → registerEventListeners() — appelé une fois au démarrage
+event-bus.ts → le bus lui-même (eventBus.on / eventBus.emit)
+event-types.ts → catalogue des événements et leurs payloads (AppEventMap)
+index.ts → registerEventListeners() — appelé une fois au démarrage
 listeners/
 payment.listeners.ts
 return.listeners.ts
@@ -78,14 +78,14 @@ export const registerInventoryEventListeners = (): void => {
 Puis l'enregistrer dans `src/shared/events/index.ts` :
 
 ```ts
-import { registerInventoryEventListeners } from './listeners/inventory.listeners'
+import { registerInventoryEventListeners } from "./listeners/inventory.listeners";
 
 export const registerEventListeners = (): void => {
-  registerPaymentEventListeners()
-  registerReturnEventListeners()
-  registerShipmentEventListeners()
-  registerInventoryEventListeners() // ← ajouté
-}
+  registerPaymentEventListeners();
+  registerReturnEventListeners();
+  registerShipmentEventListeners();
+  registerInventoryEventListeners(); // ← ajouté
+};
 ```
 
 ## Ajouter un nouvel événement
@@ -120,29 +120,37 @@ transformer ces échecs déjà loggés en alertes réellement consultées.
 
 ## Événements actuellement implémentés
 
-| Événement                 | Émis par                                    | Écouté par                                      | Règle(s)     |
-| -------------------------- | -------------------------------------------- | ------------------------------------------------ | ------------ |
-| `order.status.changed`    | `order.service.ts` (updateStatus, delete)   | `payment.listeners.ts`                          | R1           |
-| `shipment.status.changed` | `shipment.service.ts` (addTrackingEvent, updateStatus) | `shipment.listeners.ts` (→ appelle orderService) | sync Shipment→Order |
-| `return.status.changed`   | `return.service.ts` (updateStatus, COMPLETED) | `return.listeners.ts`                           | R2, R3, R4   |
+| Événement                    | Émis par                                                         | Écouté par                 | Règle(s)            |
+| ---------------------------- | ---------------------------------------------------------------- | -------------------------- | ------------------- |
+| `order.status.changed`       | `order.service.ts` (updateStatus, delete)                        | `payment.listeners.ts`     | R1                  |
+| `shipment.status.changed`    | `shipment.service.ts` (addTrackingEvent, updateStatus)           | `shipment.listeners.ts`    | sync Shipment→Order |
+| `return.status.changed`      | `return.service.ts` (updateStatus, COMPLETED)                    | `return.listeners.ts`      | R2, R3, R4          |
+| `inventory.quantity.changed` | `inventory.repository.ts` (decrementQuantity, incrementQuantity) | `inventory.listeners.ts`   | S1                  |
+| `combination.deactivated`    | `combination.service.ts` (generate, update)                      | `combination.listeners.ts` | S3                  |
+| `product.activated`          | `product.service.ts` (update, transition → ACTIVE)               | `product.listeners.ts`     | S4                  |
 
-## Prochaine utilisation prévue
+**S2 n'a pas de listener dédié** : c'est exactement la réintégration de stock
+via `OrderItemReservation` déjà implémentée dans `return.listeners.ts` pour
+R3 (`status_management_guide.md`). Les deux guides pointaient vers le même
+besoin — une seule implémentation y répond.
 
-Le guide `Guide de gestion des statuts — Product, Attributs, Combinaisons,
-Stock (Inventory).md` recommande (§8, Option B) de réutiliser ce même bus
-pour :
+## Décisions prises sur les points laissés ouverts par les guides
 
-- **S1** — émettre `inventory.quantity.changed` après chaque
-  `decrementQuantity`/`incrementQuantity` (transfert, réservation de
-  commande), avec un listener qui applique la même logique d'alerte
-  `LOW_STOCK`/`OUT_OF_STOCK` que `inventoryService.update()` — actuellement
-  dupliquée nulle part ailleurs.
-- **S3** — émettre `combination.deactivated` quand `generate()` désactive
-  une combinaison ayant du stock actif.
-- **S4** — émettre `product.activation.requested` avant de valider le
-  passage à `ACTIVE`, pour vérifier qu'au moins une combinaison active
-  existe si le produit a des attributs de variante.
+- **S1** : l'émission est faite au niveau du repository (`inventory.repository.ts`)
+  plutôt que dans chaque service appelant, car c'est le seul point de passage
+  commun à `inventoryService.transfer()`, à la réservation FIFO d'`order.service.ts`,
+  et à la restitution de stock (annulation, retour). `inventoryService.update()`
+  garde sa propre logique de log existante — non touchée pour ne pas casser les
+  tests existants, et parce que ce chemin n'avait pas le problème identifié par S1.
+- **S3** : désactivation NON bloquée, seulement tracée (`COMBINATION_DEACTIVATED_WITH_STOCK`).
+  Couvre les deux chemins de désactivation (`generate()` automatique et `PATCH` manuel).
+- **S4** : avertissement NON bloquant (`PRODUCT_ACTIVATED_WITHOUT_COMBINATIONS`), pas de 400.
+  Cohérent avec la nature asynchrone/fire-and-forget de l'event bus — un contrôle
+  bloquant devrait être fait de façon synchrone dans le service, pas via un événement.
 
-Il suffira d'ajouter ces payloads à `AppEventMap`, d'émettre depuis les
-services concernés, et d'écrire les listeners correspondants — sans toucher
-au bus lui-même.
+## Extension future
+
+Toute nouvelle règle de propagation (nouveaux domaines, nouveaux guides) suit le
+même schéma : ajouter le payload à `event-types.ts`, émettre depuis le point de
+mutation pertinent, écrire un listener dans `listeners/`, l'enregistrer dans
+`index.ts`. Le bus lui-même (`event-bus.ts`) n'a plus besoin d'être modifié.

@@ -7,6 +7,7 @@ import { CreateProductDto, UpdateProductDto } from "./product.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
 import { uploadImage, deleteImage } from "../../shared/utils/upload";
+import { eventBus } from "../../shared/events/event-bus";
 import { businessLogger, auditLogger } from "../../shared/logger";
 import { ProductStatus } from "@prisma/client";
 
@@ -177,6 +178,19 @@ export const productService = {
       target: { productId: id },
       metadata: { fields: Object.keys(dto) },
     });
+
+    // S4 — émis uniquement lors d'une VÉRITABLE transition vers ACTIVE
+    // (pas si le produit était déjà ACTIVE), pour éviter un bruit de log
+    // à chaque simple mise à jour d'un produit déjà actif.
+    if (
+      dto.status === ProductStatus.ACTIVE &&
+      product.status !== ProductStatus.ACTIVE
+    ) {
+      eventBus.emit("product.activated", {
+        productId: id,
+        categoryId: product.categoryId,
+      });
+    }
 
     return updated;
   },

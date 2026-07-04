@@ -245,7 +245,9 @@ export type SystemEvent =
   | "CACHE_MISS"
   | "CACHE_ERROR"
   | "ORDER_SYNC_FAILED"
-  | "EVENT_LISTENER_FAILED";
+  | "EVENT_LISTENER_FAILED"
+  | "COMBINATION_DEACTIVATED_WITH_STOCK"
+  | "PRODUCT_ACTIVATED_WITHOUT_COMBINATIONS";
 
 // ─── Error Events ────────────────────────────────────────────────────────────
 

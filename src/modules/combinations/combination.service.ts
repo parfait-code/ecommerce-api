@@ -8,6 +8,7 @@ import {
 } from "./combination.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
+import { eventBus } from "../../shared/events/event-bus";
 
 const buildOptionsKey = (optionIds: string[]) =>
   [...optionIds].sort().join(":");
@@ -130,6 +131,30 @@ export const combinationService = {
       await combinationRepository.create(productId, optionsKey, combo);
     }
 
+    // S3 — avant de désactiver, on identifie celles qui ont encore du stock
+    // actif pour émettre un avertissement (la désactivation elle-même n'est
+    // PAS bloquée, comme documenté dans le guide).
+    const toDeactivate = await combinationRepository.findActiveExcept(
+      productId,
+      generatedKeys,
+    );
+
+    for (const combo of toDeactivate) {
+      const totalQuantity = combo.inventory.reduce(
+        (sum, i) => sum + i.quantity,
+        0,
+      );
+      if (totalQuantity > 0) {
+        eventBus.emit("combination.deactivated", {
+          productId,
+          combinationId: combo.id,
+          optionsKey: combo.optionsKey,
+          hadStock: true,
+          totalQuantity,
+        });
+      }
+    }
+
     // Désactive (ne supprime pas) les combinaisons qui ne correspondent plus à la sélection actuelle
     await combinationRepository.deactivateManyExcept(productId, generatedKeys);
 
@@ -164,6 +189,24 @@ export const combinationService = {
 
     const updated = await combinationRepository.update(id, dto);
     await cache.del(`products:${productId}`);
+
+    // S3 — même avertissement pour la désactivation manuelle via PATCH.
+    if (dto.isActive === false) {
+      const totalQuantity = combination.inventory.reduce(
+        (sum, i) => sum + i.quantity,
+        0,
+      );
+      if (totalQuantity > 0) {
+        eventBus.emit("combination.deactivated", {
+          productId,
+          combinationId: id,
+          optionsKey: combination.optionsKey,
+          hadStock: true,
+          totalQuantity,
+        });
+      }
+    }
+
     return updated;
   },
 

@@ -35,6 +35,21 @@ export const combinationRepository = {
       include: combinationInclude,
     }),
 
+  // Nouveau — utilisé par combination.service.ts::generate() pour détecter,
+  // AVANT désactivation, quelles combinaisons sur le point d'être désactivées
+  // ont encore du stock actif (S3).
+  findActiveExcept: (productId: number, keepOptionsKeys: string[]) =>
+    prisma.productCombination.findMany({
+      where: {
+        productId,
+        isActive: true,
+        optionsKey: { notIn: keepOptionsKeys },
+      },
+      include: {
+        inventory: { select: { id: true, quantity: true, warehouseId: true } },
+      },
+    }),
+
   create: (
     productId: number,
     optionsKey: string,

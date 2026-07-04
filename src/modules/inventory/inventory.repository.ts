@@ -1,6 +1,7 @@
 import { prisma } from "../../shared/config/database";
 import { CreateInventoryDto, UpdateInventoryDto } from "./inventory.schema";
 import { paginate } from "../../shared/utils/pagination";
+import { eventBus } from "../../shared/events/event-bus";
 
 const inventoryInclude = {
   product: true,
@@ -77,7 +78,6 @@ export const inventoryRepository = {
     });
   },
 
-  // ── Utilisé pour la vérification & la réservation FIFO multi-entrepôt ──
   findAvailableOrdered: (productId: number, combinationId: string | null) =>
     prisma.inventory.findMany({
       where: { productId, combinationId, quantity: { gt: 0 } },
@@ -133,15 +133,49 @@ export const inventoryRepository = {
 
   delete: (id: string) => prisma.inventory.delete({ where: { id } }),
 
-  decrementQuantity: (id: string, quantity: number) =>
-    prisma.inventory.update({
+  /**
+   * S1 — décrément utilisé par inventoryService.transfer() ET par la
+   * réservation FIFO d'order.service.ts. C'est le SEUL point de passage
+   * commun aux deux chemins qui, avant cet event bus, ne déclenchaient
+   * jamais d'alerte LOW_STOCK/OUT_OF_STOCK. On émet ici plutôt que dans
+   * chaque appelant pour ne pas avoir à dupliquer la logique.
+   */
+  decrementQuantity: async (id: string, quantity: number) => {
+    const updated = await prisma.inventory.update({
       where: { id },
       data: { quantity: { decrement: quantity } },
-    }),
+    });
 
-  incrementQuantity: (id: string, quantity: number) =>
-    prisma.inventory.update({
+    eventBus.emit("inventory.quantity.changed", {
+      inventoryId: updated.id,
+      productId: updated.productId,
+      warehouseId: updated.warehouseId,
+      combinationId: updated.combinationId,
+      quantity: updated.quantity,
+    });
+
+    return updated;
+  },
+
+  /**
+   * Même logique que decrementQuantity — utilisé par le transfert (côté
+   * destination) et par la restitution de stock (annulation de commande,
+   * retour complété via return.listeners.ts).
+   */
+  incrementQuantity: async (id: string, quantity: number) => {
+    const updated = await prisma.inventory.update({
       where: { id },
       data: { quantity: { increment: quantity } },
-    }),
+    });
+
+    eventBus.emit("inventory.quantity.changed", {
+      inventoryId: updated.id,
+      productId: updated.productId,
+      warehouseId: updated.warehouseId,
+      combinationId: updated.combinationId,
+      quantity: updated.quantity,
+    });
+
+    return updated;
+  },
 };
