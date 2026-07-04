@@ -8,6 +8,12 @@ export const loyaltyRepository = {
       orderBy: { createdAt: "desc" },
     }),
 
+  // Nouveau — utilisé par loyaltyService.reverseForOrder (R4)
+  findByOrder: (orderId: string) =>
+    prisma.loyaltyTransaction.findMany({
+      where: { orderId },
+    }),
+
   getBalance: async (userId: number): Promise<number> => {
     const result = await prisma.loyaltyTransaction.aggregate({
       where: { userId },

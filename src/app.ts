@@ -29,6 +29,9 @@ import shippingMethodRouter from "./modules/shipping-methods/shipping-method.rou
 import loyaltyRouter from "./modules/loyalty/loyalty.router";
 import wishlistRouter from "./modules/wishlist/wishlist.router";
 import returnRouter from "./modules/returns/return.router";
+import { registerEventListeners } from "./shared/events";
+
+registerEventListeners();
 
 const app = express();
 

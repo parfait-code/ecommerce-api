@@ -243,7 +243,9 @@ export type SystemEvent =
   | "REDIS_ERROR"
   | "CACHE_HIT"
   | "CACHE_MISS"
-  | "CACHE_ERROR";
+  | "CACHE_ERROR"
+  | "ORDER_SYNC_FAILED"
+  | "EVENT_LISTENER_FAILED";
 
 // ─── Error Events ────────────────────────────────────────────────────────────
 

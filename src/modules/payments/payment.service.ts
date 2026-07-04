@@ -10,6 +10,7 @@ import {
   auditLogger,
   BusinessEvent,
   AuditEvent,
+  ActorRole,
 } from "../../shared/logger";
 
 const UNAVAILABLE_METHODS: PaymentMethod[] = ["PAYPAL", "STRIPE", "CINETPAY"];
@@ -68,7 +69,10 @@ export const paymentService = {
         service: "payment",
         actor: { userId, role: "CUSTOMER" },
         target: { orderId: dto.order_id },
-        metadata: { method: dto.method, reason: "Payment method not available" },
+        metadata: {
+          method: dto.method,
+          reason: "Payment method not available",
+        },
       });
 
       throw new AppError(
@@ -85,7 +89,11 @@ export const paymentService = {
       service: "payment",
       actor: { userId, role: "CUSTOMER" },
       target: { orderId: dto.order_id },
-      metadata: { method: dto.method, amount: order.totalAmount, currency: dto.currency },
+      metadata: {
+        method: dto.method,
+        amount: order.totalAmount,
+        currency: dto.currency,
+      },
     });
 
     const payment = await paymentRepository.create({
@@ -117,7 +125,8 @@ export const paymentService = {
   updateStatus: async (
     paymentId: string,
     dto: UpdatePaymentStatusDto,
-    adminUserId: number,
+    adminUserId: number | null,
+    actorRole: ActorRole = "ADMIN",
   ) => {
     const payment = await paymentRepository.findById(paymentId);
     if (!payment) throw new AppError("Payment not found", 404);
@@ -125,13 +134,17 @@ export const paymentService = {
     assertValidPaymentTransition(payment.status, dto.status);
 
     const oldStatus = payment.status;
-    const updated = await paymentRepository.updateStatus(paymentId, dto.status, dto.notes);
+    const updated = await paymentRepository.updateStatus(
+      paymentId,
+      dto.status,
+      dto.notes,
+    );
 
     const businessEvent = BUSINESS_EVENT_MAP[dto.status];
     if (businessEvent) {
       businessLogger.log(businessEvent, {
         service: "payment",
-        actor: { userId: adminUserId, role: "ADMIN" },
+        actor: { userId: adminUserId, role: actorRole },
         target: { orderId: payment.orderId, paymentId },
         metadata: {
           oldStatus,
@@ -147,9 +160,14 @@ export const paymentService = {
     if (auditEvent) {
       auditLogger.log(auditEvent, {
         service: "payment",
-        actor: { userId: adminUserId, role: "ADMIN" },
+        actor: { userId: adminUserId, role: actorRole },
         target: { orderId: payment.orderId },
-        metadata: { paymentId, oldStatus, newStatus: dto.status, notes: dto.notes },
+        metadata: {
+          paymentId,
+          oldStatus,
+          newStatus: dto.status,
+          notes: dto.notes,
+        },
       });
     }
 
@@ -162,7 +180,7 @@ export const paymentService = {
           payment.orderId,
           { status: "CONFIRMED", reason: "Payment completed" },
           adminUserId,
-          "ADMIN",
+          actorRole,
         );
       }
     }
@@ -172,7 +190,11 @@ export const paymentService = {
 
   // Conservé pour compatibilité ascendante — alias de updateStatus(COMPLETED)
   complete: (paymentId: string, adminUserId: number) =>
-    paymentService.updateStatus(paymentId, { status: "COMPLETED" }, adminUserId),
+    paymentService.updateStatus(
+      paymentId,
+      { status: "COMPLETED" },
+      adminUserId,
+    ),
 
   getAll: async (query: {
     page?: string;

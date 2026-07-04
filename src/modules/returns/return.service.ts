@@ -4,6 +4,7 @@ import { orderService } from "../orders/order.service";
 import { CreateReturnDto, UpdateReturnStatusDto } from "./return.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
+import { eventBus } from "../../shared/events/event-bus";
 import { ReturnStatus } from "@prisma/client";
 
 export const returnService = {
@@ -99,10 +100,6 @@ export const returnService = {
       metadata: { status: dto.status },
     });
 
-    // Un retour COMPLETED referme le cycle de vie de la commande.
-    // Réintégration de stock : non implémentée — aucune information de
-    // warehouse d'origine n'est tracée sur OrderItem/ReturnItem à ce jour.
-    // Nécessite le chantier "réservation de stock à la commande" (à décider).
     if (dto.status === ReturnStatus.COMPLETED) {
       await orderService.updateStatus(
         returnRequest.orderId,
@@ -110,6 +107,20 @@ export const returnService = {
         adminUserId,
         "ADMIN",
       );
+
+      // Émission — déclenche R2 (remboursement paiement), R3 (réintégration
+      // stock) et R4 (reversal fidélité) de façon découplée.
+      eventBus.emit("return.status.changed", {
+        returnRequestId: id,
+        orderId: returnRequest.orderId,
+        userId: returnRequest.userId,
+        fromStatus: returnRequest.status,
+        toStatus: dto.status,
+        items: returnRequest.items.map((i) => ({
+          orderItemId: i.orderItemId,
+          quantity: i.quantity,
+        })),
+      });
     }
 
     return updated;

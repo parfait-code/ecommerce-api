@@ -34,6 +34,32 @@ export const loyaltyService = {
     });
   },
 
+  // R4 — reversal des points gagnés sur une commande dont le retour est complété.
+  // Idempotent : si un reversal a déjà été fait pour cette commande, ne rien refaire.
+  reverseForOrder: async (userId: number, orderId: string) => {
+    const transactions = await loyaltyRepository.findByOrder(orderId);
+
+    const earned = transactions
+      .filter((t) => t.type === "EARNED")
+      .reduce((sum, t) => sum + t.points, 0);
+
+    if (earned <= 0) return null;
+
+    const alreadyReversed = transactions
+      .filter((t) => t.type === "ADJUSTED" && t.points < 0)
+      .reduce((sum, t) => sum + Math.abs(t.points), 0);
+
+    const toReverse = earned - alreadyReversed;
+    if (toReverse <= 0) return null;
+
+    return loyaltyRepository.create({
+      userId,
+      orderId,
+      points: -toReverse,
+      type: "ADJUSTED",
+    });
+  },
+
   adjust: async (dto: AdjustLoyaltyDto) => {
     const user = await userRepository.findById(dto.userId);
     if (!user) throw new AppError("User not found", 404);

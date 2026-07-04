@@ -222,6 +222,14 @@ export const orderReservationRepository = {
       },
     }),
 
+  findByOrderItem: (orderItemId: string) =>
+    prisma.orderItemReservation.findMany({
+      where: { orderItemId },
+      include: {
+        orderItem: { select: { productId: true, combinationId: true } },
+      },
+    }),
+
   deleteByOrder: (orderId: string) =>
     prisma.orderItemReservation.deleteMany({
       where: { orderItem: { orderId } },

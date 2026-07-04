@@ -17,6 +17,7 @@ import {
 } from "./order.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
+import { eventBus } from "../../shared/events/event-bus";
 import { businessLogger, auditLogger, ActorRole } from "../../shared/logger";
 import { OrderStatus } from "@prisma/client";
 
@@ -373,7 +374,6 @@ export const orderService = {
       dto.reason,
     );
 
-    // Annulation avant expédition → le stock réservé retourne dans les entrepôts
     if (
       dto.status === OrderStatus.CANCELLED &&
       oldStatus !== OrderStatus.CANCELLED
@@ -404,6 +404,17 @@ export const orderService = {
     ) {
       await loyaltyService.earnFromOrder(order.userId, id, order.totalAmount);
     }
+
+    // Émission de l'événement — les listeners (payment auto-complete R1, etc.)
+    // réagissent de façon découplée, sans que order.service n'ait besoin de
+    // les connaître.
+    eventBus.emit("order.status.changed", {
+      orderId: id,
+      userId: order.userId,
+      fromStatus: oldStatus,
+      toStatus: dto.status,
+      totalAmount: order.totalAmount,
+    });
 
     return updated;
   },
@@ -439,6 +450,14 @@ export const orderService = {
       actor: { userId, role: isAdmin ? "ADMIN" : "CUSTOMER" },
       target: { orderId: id },
       metadata: { totalAmount: order.totalAmount },
+    });
+
+    eventBus.emit("order.status.changed", {
+      orderId: id,
+      userId: order.userId,
+      fromStatus: order.status,
+      toStatus: OrderStatus.CANCELLED,
+      totalAmount: order.totalAmount,
     });
 
     return { message: "Order cancelled successfully" };
