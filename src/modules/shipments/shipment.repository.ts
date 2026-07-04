@@ -125,4 +125,15 @@ export const pickupRepository = {
       where: { id },
       data: { status: "CANCELLED" },
     }),
+
+  // T4 — nécessaires pour la cascade Order/Shipment → PickupRequest
+  findPendingByOrder: (orderId: string) =>
+    prisma.pickupRequest.findMany({
+      where: { orderId, status: "PENDING" },
+    }),
+
+  findPendingByShipment: (shipmentId: string) =>
+    prisma.pickupRequest.findMany({
+      where: { shipmentId, status: "PENDING" },
+    }),
 };

@@ -1,4 +1,4 @@
-import { DiscountType } from "@prisma/client";
+import { DiscountType, PromotionStatus } from "@prisma/client";
 
 interface PromotionInfo {
   isActive: boolean;
@@ -31,7 +31,7 @@ export const isPromotionActiveNow = (promotion: PromotionInfo): boolean => {
   const now = new Date();
   return (
     promotion.isActive &&
-    promotion.status === "ACTIVE" &&
+    promotion.status !== "CANCELLED" &&
     promotion.startDate <= now &&
     promotion.endDate >= now
   );
@@ -102,4 +102,46 @@ export const getBestPricing = (
     promotionId: best.promotionId,
     discountId: best.id,
   };
+};
+
+/**
+ * T1/T2 — status affiché, recalculé à chaque lecture à partir des dates.
+ * Ne touche JAMAIS la base : le champ `status` stocké redevient informatif
+ * (ex: CANCELLED posé manuellement reste respecté), mais SCHEDULED/ACTIVE/
+ * EXPIRED sont toujours dérivés de la réalité (isActive + dates), jamais
+ * figés au moment de la création.
+ */
+export const computeDisplayStatus = (promotion: {
+  isActive: boolean;
+  status: PromotionStatus;
+  startDate: Date;
+  endDate: Date;
+}): PromotionStatus => {
+  if (promotion.status === "CANCELLED") return "CANCELLED";
+  if (!promotion.isActive) return promotion.status; // toggle manuel, indépendant des dates
+
+  const now = new Date();
+  if (now < promotion.startDate) return "SCHEDULED";
+  if (now > promotion.endDate) return "EXPIRED";
+  return "ACTIVE";
+};
+
+/**
+ * T3 — statut effectif d'un coupon, recalculé à la lecture (isActive stocké
+ * reste l'intention admin ; ce champ reflète la réalité opérationnelle).
+ */
+export const computeCouponEffectiveStatus = (coupon: {
+  isActive: boolean;
+  usedCount: number;
+  maxUses: number | null;
+  startDate: Date | null;
+  endDate: Date | null;
+}): boolean => {
+  if (!coupon.isActive) return false;
+  const now = new Date();
+  if (coupon.startDate && now < coupon.startDate) return false;
+  if (coupon.endDate && now > coupon.endDate) return false;
+  if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses)
+    return false;
+  return true;
 };

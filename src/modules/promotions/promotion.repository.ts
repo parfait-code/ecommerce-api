@@ -35,9 +35,8 @@ const promotionInclude = {
 };
 
 export const promotionRepository = {
-  findAll: (query: { status?: string; isActive?: string }) => {
+  findAll: (query: { isActive?: string }) => {
     const where = {
-      ...(query.status && { status: query.status as any }),
       ...(query.isActive !== undefined && {
         isActive: query.isActive === "true",
       }),

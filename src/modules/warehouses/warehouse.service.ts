@@ -3,7 +3,7 @@ import { CreateWarehouseDto, UpdateWarehouseDto } from "./warehouse.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
 import { businessLogger } from "../../shared/logger";
-import { prisma } from '../../shared/config/database'
+import { prisma } from "../../shared/config/database";
 
 const CACHE_KEYS = {
   all: "warehouses:all",
@@ -84,6 +84,16 @@ export const warehouseService = {
   delete: async (id: string) => {
     const warehouse = await warehouseRepository.findById(id);
     if (!warehouse) throw new AppError("Warehouse not found", 404);
+
+    const stockCount = await prisma.inventory.count({
+      where: { warehouseId: id, quantity: { gt: 0 } },
+    });
+    if (stockCount > 0) {
+      throw new AppError(
+        `Cannot delete warehouse with ${stockCount} inventory item(s) still in stock — remove stock first`,
+        400,
+      );
+    }
 
     await warehouseRepository.delete(id);
     await cache.del(CACHE_KEYS.single(id), CACHE_KEYS.all);

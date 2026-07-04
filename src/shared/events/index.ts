@@ -7,6 +7,7 @@ import { registerShipmentEventListeners } from "./listeners/shipment.listeners";
 import { registerInventoryEventListeners } from "./listeners/inventory.listeners";
 import { registerCombinationEventListeners } from "./listeners/combination.listeners";
 import { registerProductEventListeners } from "./listeners/product.listeners";
+import { registerPickupEventListeners } from "./listeners/pickup.listeners";
 
 /**
  * Point d'entrée unique pour enregistrer TOUS les listeners de l'application.
@@ -24,4 +25,5 @@ export const registerEventListeners = (): void => {
   registerInventoryEventListeners();
   registerCombinationEventListeners();
   registerProductEventListeners();
+  registerPickupEventListeners();
 };

@@ -15,29 +15,55 @@ import {
   deleteImage as deleteR2Image,
 } from "../../shared/utils/upload";
 import { businessLogger, auditLogger } from "../../shared/logger";
+import {
+  computeDisplayStatus,
+  computeCouponEffectiveStatus,
+} from "./promotion.pricing";
+
+const withDisplayStatus = <
+  T extends {
+    isActive: boolean;
+    status: any;
+    startDate: Date;
+    endDate: Date;
+  },
+>(
+  promotion: T,
+): T => ({
+  ...promotion,
+  status: computeDisplayStatus(promotion),
+});
 
 export const promotionService = {
-  // ── Promotions ─────────────────────────────────────────────────────────────
-
-  getAll: (query: { status?: string; isActive?: string }) =>
-    promotionRepository.findAll(query),
+  getAll: async (query: { status?: string; isActive?: string }) => {
+    const promotions = await promotionRepository.findAll(query);
+    const withStatus = promotions.map(withDisplayStatus);
+    return query.status
+      ? withStatus.filter((p) => p.status === query.status)
+      : withStatus;
+  },
 
   getById: async (id: string) => {
     const promotion = await promotionRepository.findById(id);
     if (!promotion) throw new AppError("Promotion not found", 404);
-    return promotion;
+    return withDisplayStatus(promotion);
   },
 
   getBySlug: async (slug: string) => {
     const promotion = await promotionRepository.findBySlug(slug);
     if (!promotion) throw new AppError("Promotion not found", 404);
-    return promotion;
+    return withDisplayStatus(promotion);
   },
 
   getCoupons: async (promotionId: string) => {
     const promotion = await promotionRepository.findById(promotionId);
     if (!promotion) throw new AppError("Promotion not found", 404);
-    return promotionRepository.findCouponsByPromotion(promotionId);
+    const coupons =
+      await promotionRepository.findCouponsByPromotion(promotionId);
+    return coupons.map((c) => ({
+      ...c,
+      effectiveIsActive: computeCouponEffectiveStatus(c),
+    }));
   },
 
   create: async (dto: CreatePromotionDto) => {
@@ -60,7 +86,7 @@ export const promotionService = {
       metadata: { name: dto.name, slug: dto.slug },
     });
 
-    return promotion;
+    return withDisplayStatus(promotion);
   },
 
   update: async (id: string, dto: UpdatePromotionDto) => {
@@ -73,8 +99,6 @@ export const promotionService = {
     }
 
     const updated = await promotionRepository.update(id, dto);
-
-    // La fenêtre d'activité (dates/isActive) impacte directement le pricing produit
     await cache.delByPattern("products:*");
 
     businessLogger.log("PROMOTION_UPDATED", {
@@ -84,7 +108,7 @@ export const promotionService = {
       metadata: { fields: Object.keys(dto) },
     });
 
-    return updated;
+    return withDisplayStatus(updated);
   },
 
   toggle: async (id: string) => {
@@ -108,7 +132,7 @@ export const promotionService = {
       metadata: { isActive: !promotion.isActive },
     });
 
-    return updated;
+    return withDisplayStatus(updated);
   },
 
   delete: async (id: string) => {
@@ -159,8 +183,7 @@ export const promotionService = {
     return promotionRepository.removeImage(id, remaining);
   },
 
-  // ── Discounts ────────────────────────────────────────────────────────────
-
+  // ── Discounts / Coupons : inchangés (voir fichier original) ──
   createDiscount: async (promotionId: string, dto: CreateDiscountDto) => {
     const promotion = await promotionRepository.findById(promotionId);
     if (!promotion) throw new AppError("Promotion not found", 404);
@@ -216,8 +239,6 @@ export const promotionService = {
 
     return { message: "Discount deleted successfully" };
   },
-
-  // ── Coupons ──────────────────────────────────────────────────────────────
 
   createCoupon: async (promotionId: string, dto: CreateCouponDto) => {
     const promotion = await promotionRepository.findById(promotionId);
