@@ -332,6 +332,44 @@ export const promotionService = {
         400,
       );
 
+    // ── Preview optionnel : calcule le total réel si items fourni ──
+    let preview:
+      | {
+          totalAmount: number;
+          meetsMinimum: boolean;
+          minOrderAmount: number | null;
+        }
+      | undefined;
+
+    if (dto.items && dto.items.length > 0) {
+      const activeDiscounts = await promotionRepository.findActiveDiscounts();
+      let totalAmount = 0;
+
+      for (const item of dto.items) {
+        const product = await productRepository.findById(Number(item.id));
+        if (!product) continue;
+        const pricing = getBestPricing(product, activeDiscounts as any);
+        totalAmount += pricing.finalPrice * item.quantity;
+      }
+      totalAmount = Math.round(totalAmount * 100) / 100;
+
+      const meetsMinimum =
+        coupon.minOrderAmount === null || totalAmount >= coupon.minOrderAmount;
+
+      preview = {
+        totalAmount,
+        meetsMinimum,
+        minOrderAmount: coupon.minOrderAmount,
+      };
+
+      if (!meetsMinimum) {
+        throw new AppError(
+          `This coupon requires a minimum order amount of ${coupon.minOrderAmount}`,
+          400,
+        );
+      }
+    }
+
     return {
       valid: true as const,
       couponId: coupon.id,
@@ -342,6 +380,7 @@ export const promotionService = {
         slug: coupon.promotion.slug,
       },
       discounts: coupon.promotion.discounts,
+      ...(preview && { preview }),
     };
   },
 };
