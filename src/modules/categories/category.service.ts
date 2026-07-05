@@ -3,6 +3,10 @@ import { CreateCategoryDto, UpdateCategoryDto } from "./category.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
 import { businessLogger, auditLogger } from "../../shared/logger";
+import {
+  uploadImage,
+  deleteImage as deleteR2Image,
+} from "../../shared/utils/upload";
 
 const CACHE_KEYS = {
   all: "categories:all",
@@ -193,5 +197,87 @@ export const categoryService = {
     });
 
     return { message: "Category deleted successfully" };
+  },
+
+  // ── Upload image / icône ────────────────────────────────────────────────────
+  // Aligné sur le comportement produit : l'API uploade elle-même le fichier
+  // vers R2 et stocke l'URL résultante — le frontend n'a plus besoin de
+  // connaître/saisir une URL manuellement.
+  uploadAssets: async (
+    id: string,
+    files: {
+      image?: Express.Multer.File[];
+      icon?: Express.Multer.File[];
+    },
+  ) => {
+    const category = await categoryRepository.findById(id);
+    if (!category) throw new AppError("Category not found", 404);
+
+    if (!files.image?.[0] && !files.icon?.[0]) {
+      throw new AppError(
+        "No files uploaded (expected 'image' and/or 'icon')",
+        400,
+      );
+    }
+
+    const updateData: { imageUrl?: string; iconUrl?: string } = {};
+
+    if (files.image?.[0]) {
+      const newImageUrl = await uploadImage(files.image[0], "categories");
+      if (category.imageUrl) await deleteR2Image(category.imageUrl);
+      updateData.imageUrl = newImageUrl;
+    }
+
+    if (files.icon?.[0]) {
+      const newIconUrl = await uploadImage(files.icon[0], "categories/icons");
+      if (category.iconUrl) await deleteR2Image(category.iconUrl);
+      updateData.iconUrl = newIconUrl;
+    }
+
+    const updated = await categoryRepository.update(id, updateData);
+
+    await cache.del(
+      CACHE_KEYS.single(id),
+      CACHE_KEYS.bySlug(category.slug),
+      CACHE_KEYS.all,
+    );
+
+    businessLogger.log("CATEGORY_UPDATED", {
+      service: "categories",
+      actor: { userId: null, role: "ADMIN" },
+      target: { categoryId: id },
+      metadata: { fields: Object.keys(updateData) },
+    });
+
+    return updated;
+  },
+
+  deleteAsset: async (id: string, asset: "image" | "icon") => {
+    const category = await categoryRepository.findById(id);
+    if (!category) throw new AppError("Category not found", 404);
+
+    const url = asset === "image" ? category.imageUrl : category.iconUrl;
+    if (!url) throw new AppError(`No ${asset} set on this category`, 404);
+
+    await deleteR2Image(url);
+
+    const updated = await categoryRepository.update(id, {
+      [asset === "image" ? "imageUrl" : "iconUrl"]: null,
+    } as UpdateCategoryDto);
+
+    await cache.del(
+      CACHE_KEYS.single(id),
+      CACHE_KEYS.bySlug(category.slug),
+      CACHE_KEYS.all,
+    );
+
+    businessLogger.log("CATEGORY_UPDATED", {
+      service: "categories",
+      actor: { userId: null, role: "ADMIN" },
+      target: { categoryId: id },
+      metadata: { fields: [asset === "image" ? "imageUrl" : "iconUrl"] },
+    });
+
+    return updated;
   },
 };
