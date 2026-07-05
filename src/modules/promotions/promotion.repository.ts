@@ -34,6 +34,11 @@ const promotionInclude = {
   _count: { select: { coupons: true, discounts: true } },
 };
 
+const affectedProductInclude = {
+  category: { select: { id: true, name: true, slug: true } },
+  images: { orderBy: { position: "asc" as const } },
+};
+
 export const promotionRepository = {
   findAll: (query: { isActive?: string }) => {
     const where = {
@@ -57,7 +62,7 @@ export const promotionRepository = {
   existsBySlug: (slug: string) =>
     prisma.promotion.findUnique({ where: { slug } }),
 
-  // ── Pricing (nouveau) ──────────────────────────────────────────────────────
+  // ── Pricing ──────────────────────────────────────────────────────────────
 
   findActiveDiscounts: () => {
     const now = new Date();
@@ -81,6 +86,53 @@ export const promotionRepository = {
         },
         products: { select: { productId: true } },
       },
+    });
+  },
+
+  // ── Produits affectés par une promotion ─────────────────────────────────
+  // Fusionne les produits ciblés directement (DiscountProduct) et ceux
+  // appartenant aux catégories ciblées (Discount.categoryId), sur TOUS les
+  // discounts de la promotion, dédoublonnés. Une promotion sans aucun
+  // discount (ex: coupon seul, sans ciblage produit) retourne un tableau vide.
+  findAffectedProducts: async (promotionId: string) => {
+    const discounts = await prisma.discount.findMany({
+      where: { promotionId },
+      select: {
+        categoryId: true,
+        products: { select: { productId: true } },
+      },
+    });
+
+    const categoryIds = [
+      ...new Set(
+        discounts
+          .map((d) => d.categoryId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const directProductIds = [
+      ...new Set(discounts.flatMap((d) => d.products.map((p) => p.productId))),
+    ];
+
+    if (categoryIds.length === 0 && directProductIds.length === 0) {
+      return [];
+    }
+
+    return prisma.product.findMany({
+      where: {
+        deletedAt: null,
+        status: "ACTIVE",
+        OR: [
+          ...(categoryIds.length > 0
+            ? [{ categoryId: { in: categoryIds } }]
+            : []),
+          ...(directProductIds.length > 0
+            ? [{ id: { in: directProductIds } }]
+            : []),
+        ],
+      },
+      include: affectedProductInclude,
+      orderBy: { createdAt: "desc" },
     });
   },
 

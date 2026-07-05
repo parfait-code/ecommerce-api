@@ -54,6 +54,39 @@ export const promotionController = {
     }
   },
 
+  // ── Produits affectés ────────────────────────────────────────────────────
+  getAffectedProducts: async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const result = await promotionService.getAffectedProducts(
+        req.params.promotionId as string,
+        false,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  getAffectedProductsBySlug: async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const result = await promotionService.getAffectedProducts(
+        req.params.slug as string,
+        true,
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   create: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await promotionService.create(req.body);

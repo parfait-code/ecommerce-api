@@ -17,11 +17,22 @@ const router = Router();
 // ── Promotions ────────────────────────────────────────────────────────────────
 router.get("/promotions", authGuard, adminGuard, promotionController.getAll);
 router.get("/promotions/slug/:slug", promotionController.getBySlug);
+// ── Produits affectés — publique, pour le flux "clic bannière homepage" ──────
+router.get(
+  "/promotions/slug/:slug/products",
+  promotionController.getAffectedProductsBySlug,
+);
 router.get(
   "/promotions/:promotionId",
   authGuard,
   adminGuard,
   promotionController.getById,
+);
+router.get(
+  "/promotions/:promotionId/products",
+  authGuard,
+  adminGuard,
+  promotionController.getAffectedProducts,
 );
 router.post(
   "/promotions",

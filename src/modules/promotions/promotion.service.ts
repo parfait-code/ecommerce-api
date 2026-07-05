@@ -18,6 +18,7 @@ import { businessLogger, auditLogger } from "../../shared/logger";
 import {
   computeDisplayStatus,
   computeCouponEffectiveStatus,
+  getBestPricing,
 } from "./promotion.pricing";
 
 const withDisplayStatus = <
@@ -64,6 +65,33 @@ export const promotionService = {
       ...c,
       effectiveIsActive: computeCouponEffectiveStatus(c),
     }));
+  },
+
+  // ── Produits affectés par une promotion ─────────────────────────────────
+  // Accepte soit un id, soit un slug (utilisé par les deux routes équivalentes,
+  // admin et publique — voir promotion.router.ts).
+  getAffectedProducts: async (idOrSlug: string, bySlug = false) => {
+    const promotion = bySlug
+      ? await promotionRepository.findBySlug(idOrSlug)
+      : await promotionRepository.findById(idOrSlug);
+    if (!promotion) throw new AppError("Promotion not found", 404);
+
+    const products = await promotionRepository.findAffectedProducts(
+      promotion.id,
+    );
+    const activeDiscounts = await promotionRepository.findActiveDiscounts();
+
+    const productsWithPricing = products.map((product: any) => ({
+      ...product,
+      pricing: getBestPricing(product, activeDiscounts as any),
+    }));
+
+    return {
+      promotionId: promotion.id,
+      promotionName: promotion.name,
+      count: productsWithPricing.length,
+      products: productsWithPricing,
+    };
   },
 
   create: async (dto: CreatePromotionDto) => {
