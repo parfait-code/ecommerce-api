@@ -94,6 +94,19 @@ export const promotionService = {
     };
   },
 
+  // ── Route publique — promotions actives (storefront) ───────────────────────
+  // Filtre sur le statut CALCULÉ (voir promotion.pricing.ts::computeDisplayStatus),
+  // jamais sur le champ `status` stocké — cohérent avec getAll/getById/getBySlug.
+  // Triées par endDate croissante : celles qui expirent bientôt apparaissent
+  // en premier sur la bannière/section storefront.
+  getActive: async () => {
+    const promotions = await promotionRepository.findAll({ isActive: "true" });
+    return promotions
+      .map(withDisplayStatus)
+      .filter((p) => p.status === "ACTIVE")
+      .sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
+  },
+
   create: async (dto: CreatePromotionDto) => {
     const existingSlug = await promotionRepository.existsBySlug(dto.slug);
     if (existingSlug) throw new AppError("Promotion slug already taken", 409);

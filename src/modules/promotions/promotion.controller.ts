@@ -83,6 +83,15 @@ export const promotionController = {
     }
   },
 
+  getActive: async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await promotionService.getActive();
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   create: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await promotionService.create(req.body);

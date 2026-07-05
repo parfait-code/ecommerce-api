@@ -22,6 +22,7 @@ router.get(
   "/promotions/slug/:slug/products",
   promotionController.getAffectedProductsBySlug,
 );
+router.get("/promotions/active", promotionController.getActive);
 router.get(
   "/promotions/:promotionId",
   authGuard,
