@@ -1,17 +1,25 @@
-import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { s3 } from '../config/storage'
-import { env } from '../config/env'
-import crypto from 'crypto'
-import path from 'path'
+import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { s3 } from "../config/storage";
+import { env } from "../config/env";
+import { AppError } from "./app-error";
+import crypto from "crypto";
+import path from "path";
 
-const BUCKET = env.R2_BUCKET_PRODUCTS
+const BUCKET = env.R2_BUCKET_PRODUCTS;
+
+const publicUrlFor = (key: string): string => {
+  if (!env.R2_PUBLIC_URL) {
+    throw new AppError("R2_PUBLIC_URL is not configured", 500);
+  }
+  return `${env.R2_PUBLIC_URL}/${key}`;
+};
 
 export const uploadImage = async (
   file: Express.Multer.File,
-  folder: string = 'products',
+  folder: string = "products",
 ): Promise<string> => {
-  const ext = path.extname(file.originalname)
-  const key = `${folder}/${crypto.randomUUID()}${ext}`
+  const ext = path.extname(file.originalname);
+  const key = `${folder}/${crypto.randomUUID()}${ext}`;
 
   await s3.send(
     new PutObjectCommand({
@@ -20,19 +28,21 @@ export const uploadImage = async (
       Body: file.buffer,
       ContentType: file.mimetype,
     }),
-  )
+  );
 
-  return `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${BUCKET}/${key}`
-}
+  return publicUrlFor(key);
+};
 
 export const deleteImage = async (url: string): Promise<void> => {
-  const key = url.split(`/${BUCKET}/`)[1]
-  if (!key) return
+  if (!env.R2_PUBLIC_URL || !url.startsWith(env.R2_PUBLIC_URL)) return;
+
+  const key = url.slice(env.R2_PUBLIC_URL.length + 1);
+  if (!key) return;
 
   await s3.send(
     new DeleteObjectCommand({
       Bucket: BUCKET,
       Key: key,
     }),
-  )
-}
+  );
+};
