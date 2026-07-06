@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — Architecture de déploiement (VPS unique)
+# ARCHITECTURE — Architecture de déploiement (VPS unique)
 
 ## Environnements
 
@@ -31,47 +31,66 @@
 ecommerce-api/
 ├── src/
 │   ├── modules/
-│   │   ├── auth/
-│   │   ├── users/
-│   │   ├── warehouses/
-│   │   ├── inventory/
-│   │   ├── products/
-│   │   ├── reviews/
-│   │   ├── basket/
-│   │   ├── orders/
-│   │   ├── checkout/
-│   │   ├── payments/
-│   │   ├── shipments/
-│   │   └── notifications/
+│   │   ├── auth/                # Inscription / connexion
+│   │   ├── users/                # Profil & gestion des utilisateurs (admin)
+│   │   ├── categories/            # Catégories (hiérarchie, assets image/icône)
+│   │   ├── attributes/            # Attributs produit & variante (par catégorie)
+│   │   ├── products/             # Catalogue produits + images
+│   │   ├── combinations/          # Combinaisons produit (variantes — remplace l'ancien ProductVariant)
+│   │   ├── tags/                  # Tags produit
+│   │   ├── basket/               # Panier
+│   │   ├── orders/               # Commandes (inclut la création directe depuis panier — pas de module "checkout" séparé)
+│   │   ├── payments/             # Paiements
+│   │   ├── reviews/              # Avis produits
+│   │   ├── warehouses/            # Entrepôts
+│   │   ├── inventory/             # Stocks (multi-entrepôt, réservation FIFO)
+│   │   ├── shipments/             # Expéditions, suivi, étiquettes, demandes d'enlèvement (pickup)
+│   │   ├── shipping-methods/       # Méthodes de livraison & calcul de coût
+│   │   ├── address/              # Adresses utilisateurs + validation
+│   │   ├── promotions/            # Promotions, remises (discounts) & coupons
+│   │   ├── loyalty/                # Programme de fidélité (points)
+│   │   ├── wishlist/               # Liste de souhaits
+│   │   ├── returns/                # Demandes de retour
+│   │   └── dashboard/              # Statistiques admin
 │   ├── shared/
-│   │   ├── middlewares/     # auth, errorHandler, rateLimiter, validate
-│   │   ├── utils/           # response, logger, pagination
-│   │   ├── config/          # env, database, redis, storage
-│   │   └── types/           # types globaux TypeScript
-│   └── app.ts               # setup Express + routes
-├── logs/
+│   │   ├── config/               # database (Prisma+Neon), env (Zod), redis (ioredis), storage (S3/R2)
+│   │   ├── middlewares/          # auth-guard, admin-guard, validate, multer, error-handler,
+│   │   │                         #   morgan, request-id, request-context, audit
+│   │   ├── utils/                 # AppError, cache (Redis), pagination, response, upload (R2)
+│   │   ├── logger/                 # access/business/audit/security/error/system loggers (Winston)
+│   │   └── events/                 # Event bus interne (EventEmitter) + listeners par domaine
+│   │       └── listeners/          # payment, return, shipment, inventory, combination, product, pickup
+│   ├── app.ts                     # Configuration Express (middlewares, routers, event listeners)
+│   └── server.ts                  # Point d'entrée (démarrage du serveur, graceful shutdown)
+├── scripts/
+│   └── create-admin.ts            # Script CLI de création d'un compte admin (npm run seed:admin)
+├── logs/                          # Sorties Winston (access/business/audit/security/error/system/archive)
 ├── prisma/
-│   ├── schema.prisma
-│   └── migrations/
+│   ├── schema.prisma              # Schéma de la base de données
+│   └── migrations/                 # Historique des migrations SQL
 ├── tests/
-│   ├── unit/
-│   └── integration/
-├── .env                     # dev local (gitignore)
-├── .env.example             # template commité
-├── .env.test                # base de test sur Neon (gitignore)
+│   ├── unit/                       # Tests unitaires des services (mock des repositories)
+│   ├── integration/                 # Tests d'intégration (Supertest sur l'app réelle)
+│   │   └── setup/                    # Helpers partagés : app (supertest), auth (JWT de test), db (seed/cleanup)
+│   ├── mocks/
+│   │   └── factories.ts             # Factories de données de test (makeUser, makeProduct, etc.)
+│   └── setup.ts                     # Chargement de `.env.test`, config Jest globale
+├── prisma.config.ts               # Config Prisma 7 (chemin schéma/migrations, datasource migrations)
+├── .env                            # dev local (gitignore)
+├── .env.example                    # template commité
+├── .env.test                       # base de test sur Neon (gitignore)
 └── package.json
 ```
 
-## Structure interne d'un module
+Chaque module suit la même architecture en couches :
 
 ```
-src/modules/products/
-├── product.router.ts       # définition des routes Express
-├── product.controller.ts   # handlers HTTP (req/res)
-├── product.service.ts      # logique métier
-├── product.repository.ts   # accès Prisma (requêtes DB)
-├── product.schema.ts       # schémas Zod (validation)
-└── product.types.ts        # types locaux
+*.router.ts       → définit les routes Express et applique les middlewares
+*.controller.ts   → reçoit la requête HTTP, appelle le service, formate la réponse
+*.service.ts      → logique métier (règles, cache, event bus, erreurs)
+*.repository.ts   → accès aux données via Prisma
+*.schema.ts        → schémas de validation Zod + types DTO
+*.state-machine.ts → (optionnel) transitions de statut valides — voir order/payment
 ```
 
 ## Variables d'environnement
@@ -88,6 +107,11 @@ PORT=3000
 # Format : postgresql://user:pass@ep-xxx.region.aws.neon.tech/ecommerce?sslmode=require
 DATABASE_URL=
 
+# URL utilisée spécifiquement par Prisma pour exécuter les migrations
+# (voir prisma.config.ts) — peut être identique à DATABASE_URL, ou une
+# connexion directe (non poolée) si DATABASE_URL passe par un pooler.
+MIGRATE_DATABASE_URL=
+
 # Redis — Upstash
 # Format : rediss://:token@xxx.upstash.io:6379
 REDIS_URL=
@@ -98,7 +122,14 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET_PRODUCTS=products
 R2_BUCKET_INVOICES=invoices
-# Endpoint : https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+R2_ENDPOINT=
+# URL PUBLIQUE de lecture du bucket produits — distincte de l'endpoint S3 privé
+# ci-dessus (qui sert à signer les requêtes PUT/DELETE). Utilisée pour construire
+# les URLs retournées par uploadImage() (produits, promotions, catégories) et
+# pour retrouver la clé d'objet à supprimer dans deleteImage().
+# Dev  : https://pub-xxxxxxxx.r2.dev
+# Prod : https://cdn.votredomaine.com (Nginx → MinIO, ou domaine custom R2)
+R2_PUBLIC_URL=
 
 # ── Production : services Docker internes ────────────────────────
 # (Ces variables remplacent les précédentes en prod)
@@ -113,12 +144,33 @@ R2_BUCKET_INVOICES=invoices
 JWT_SECRET=change_this_to_a_random_32char_string
 JWT_EXPIRES_IN=3600
 
-# ── Providers externes ────────────────────────────────────────────
+# ── Providers externes (non consommés par le code actuel) ────────
 STRIPE_SECRET_KEY=
 PAYDUNYA_API_KEY=
 AFRICASTALKING_API_KEY=
 RESEND_API_KEY=
 ```
+
+Variables validées via Zod dans `src/shared/config/env.ts` :
+
+| Variable | Obligatoire | Défaut | Notes |
+|---|---|---|---|
+| `NODE_ENV` | oui | — | `development` \| `test` \| `production` |
+| `PORT` | non | `3000` | coercé en nombre |
+| `DATABASE_URL` | oui | — | chaîne de connexion PostgreSQL |
+| `MIGRATE_DATABASE_URL` | non | — | utilisée uniquement par `prisma.config.ts` |
+| `REDIS_URL` | oui | — | — |
+| `JWT_SECRET` | oui | — | minimum 32 caractères |
+| `JWT_EXPIRES_IN` | non | `3600` | coercé en nombre (secondes) |
+| `R2_ACCOUNT_ID` | non | — | requis en pratique si upload utilisé |
+| `R2_ACCESS_KEY_ID` | non | — | idem |
+| `R2_SECRET_ACCESS_KEY` | non | — | idem |
+| `R2_BUCKET_PRODUCTS` | non | `products` | — |
+| `R2_BUCKET_INVOICES` | non | `invoices` | non consommé par le code actuel |
+| `R2_ENDPOINT` | non | — | non consommé directement — `storage.ts` construit l'endpoint depuis `R2_ACCOUNT_ID` |
+| `R2_PUBLIC_URL` | non | — | doit être une URL valide (`.url()`) — **requise en pratique** pour tout upload d'image (produit/promotion/catégorie), sinon `uploadImage()` lève une `AppError 500` |
+
+⚠️ **Note de cohérence** : `src/shared/config/storage.ts` construit systématiquement le client S3 à partir de `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` (Cloudflare R2), quel que soit `NODE_ENV` — il n'existe actuellement **aucune bascule conditionnelle vers MinIO** dans le code, malgré ce que suggèrent les sections Docker Compose/Nginx de ce document plus bas. Si une bascule R2 ↔ MinIO en production est requise, elle doit encore être implémentée dans `storage.ts`.
 
 ## Configuration dev local (sans Docker)
 
@@ -130,16 +182,19 @@ npm install
 npx prisma migrate dev
 
 # Lancer l'API en local
-npm run dev   # ts-node-dev --respawn src/app.ts
+npm run dev   # ts-node-dev --respawn --transpile-only src/server.ts
 ```
 
 ```json
 // package.json scripts
 {
-  "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
+  "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
   "build": "tsc",
-  "start": "node dist/app.js",
+  "start": "node dist/server.js",
+  "seed:admin": "tsx scripts/create-admin.ts",
   "test": "dotenv -e .env.test jest --runInBand",
+  "test:unit": "dotenv -e .env.test jest --runInBand tests/unit",
+  "test:integration": "dotenv -e .env.test jest --runInBand tests/integration",
   "test:watch": "dotenv -e .env.test jest --watch"
 }
 ```
@@ -149,20 +204,15 @@ npm run dev   # ts-node-dev --respawn src/app.ts
 ```ts
 // src/shared/config/storage.ts
 import { S3Client } from '@aws-sdk/client-s3'
-import { env } from './env'
 
-// En dev : Cloudflare R2
-// En prod : MinIO local via Docker
+// Implémentation actuelle — toujours Cloudflare R2, quel que soit NODE_ENV.
 export const s3 = new S3Client({
   region: 'auto',
-  endpoint: env.NODE_ENV === 'production'
-    ? `http://minio:9000`
-    : `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   credentials: {
-    accessKeyId: env.NODE_ENV === 'production' ? env.MINIO_USER : env.R2_ACCESS_KEY_ID,
-    secretAccessKey: env.NODE_ENV === 'production' ? env.MINIO_PASSWORD : env.R2_SECRET_ACCESS_KEY,
+    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
   },
-  forcePathStyle: env.NODE_ENV === 'production', // requis pour MinIO
 })
 ```
 
@@ -279,4 +329,5 @@ git push → GitHub Actions
          └─► docker-compose -f docker-compose.prod.yml pull
          └─► docker-compose -f docker-compose.prod.yml up -d
          └─► npx prisma migrate deploy
+```
 ```

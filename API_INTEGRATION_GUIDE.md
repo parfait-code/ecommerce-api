@@ -81,6 +81,20 @@ Tous les montants numériques (`price`, `amount`, `totalAmount`, etc.) sont en *
 
 Toutes les dates sont des chaînes ISO 8601 (`Date.toISOString()`), sauf mention contraire.
 
+### Upload de fichiers — pattern commun (produits, promotions, catégories)
+
+Trois ressources gèrent l'upload de fichiers, avec le **même pattern** : l'API reçoit le fichier en `multipart/form-data`, l'uploade elle-même vers Cloudflare R2, et renvoie l'URL publique générée. Le frontend n'a **jamais** à connaître ou saisir une URL manuellement pour ces flux :
+
+| Ressource   | Route                                | Champ(s)          | Cardinalité       |
+| ----------- | ------------------------------------- | ----------------- | ------------------ |
+| Produit     | `POST /product/:productId/images`     | `images`          | 1 à 5 fichiers     |
+| Promotion   | `POST /promotions/:promotionId/images` | `images`          | 1 à 5 fichiers     |
+| Catégorie   | `POST /categories/:categoryId/assets`  | `image`, `icon`   | 1 fichier chacun, indépendants (l'un, l'autre, ou les deux) |
+
+Contraintes communes : `image/jpeg`, `image/png`, `image/webp`, `image/gif` uniquement, 5MB max par fichier (validé côté middleware `multer`, avant l'upload R2).
+
+**Recommandation d'implémentation** : créer d'abord la ressource (champs texte uniquement), récupérer son `id`, puis appeler la route d'upload dédiée avec un `FormData` contenant le(s) fichier(s) sélectionné(s) localement.
+
 ---
 
 ## 2. Auth
@@ -291,8 +305,8 @@ interface SetProductAttributesRequest {
 ```
 
 | Action                                   | Appel                                                                        |
-| ---------------------------------------- | ---------------------------------------------------------------------------- |
-| Attributs d'une catégorie                | `GET /categories/:categoryId/attributes` → `AttributeDefinition[]`           |
+| ----------------------------------------- | ------------------------------------------------------------------------------ |
+| Attributs d'une catégorie **(public)**    | `GET /categories/:categoryId/attributes` → `AttributeDefinition[]`           |
 | Création                                 | `POST /categories/:categoryId/attributes` `CreateAttributeDefinitionRequest` |
 | Détail                                   | `GET /attributes/:definitionId` → `AttributeDefinition`                      |
 | Mise à jour                              | `PATCH /attributes/:definitionId` (body partiel)                             |
@@ -301,6 +315,8 @@ interface SetProductAttributesRequest {
 | Mise à jour option                       | `PATCH /attributes/options/:optionId`                                        |
 | Suppression option                       | `DELETE /attributes/options/:optionId`                                       |
 | Valeurs produit (attributs non-variante) | `PUT /product/:productId/attributes` `SetProductAttributesRequest`           |
+
+⚠️ **Correctif catalogue public** : `GET /categories/:categoryId/attributes` ne nécessite plus de token — un visiteur non connecté peut charger les attributs (donc les options de filtre/variante) d'une catégorie pour afficher une fiche produit complète. `GET /attributes/:definitionId` reste protégé.
 
 **⚠️ Point critique frontend** : le champ `isVariant` détermine **totalement** quel flux utiliser pour un attribut donné :
 
@@ -351,6 +367,18 @@ interface UpdateCombinationRequest {
 }
 ```
 
+| Action                                                       | Appel                                                                              |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Combinaisons actives d'un produit **(public)**                 | `GET /product/:productId/combinations` → `ProductCombination[]`                    |
+| Sélections courantes d'options par attribut **(public)**       | `GET /product/:productId/combinations/selections` → `ProductAttributeSelection[]`  |
+| Définir les options disponibles pour un attribut (admin)       | `PUT /product/:productId/combinations/selections/:attributeDefinitionId`           |
+| Générer le produit cartésien (admin)                           | `POST /product/:productId/combinations/generate`                                   |
+| Détail d'une combinaison                                       | `GET /product/:productId/combinations/:combinationId`                              |
+| Mise à jour (admin)                                             | `PATCH /product/:productId/combinations/:combinationId`                            |
+| Suppression (admin)                                             | `DELETE /product/:productId/combinations/:combinationId`                           |
+
+⚠️ **Correctif catalogue public** : les deux routes de lecture (`GET .../combinations` et `GET .../combinations/selections`) ne nécessitent plus de token. C'était bloquant pour la fiche produit publique : le sélecteur de variante (taille, couleur...) ne pouvait pas se charger pour un visiteur non connecté, empêchant l'ajout au panier avant authentification. `GET .../:combinationId` (détail d'une combinaison par id) reste protégé pour le moment.
+
 **Workflow d'intégration recommandé (écran admin "Variantes produit")** :
 
 ```ts
@@ -370,6 +398,18 @@ const combinations = await api.post(
 await api.patch(`/product/${productId}/combinations/${combinationId}`, {
   isActive: false,
 } satisfies UpdateCombinationRequest);
+```
+
+**Workflow côté fiche produit publique (storefront, sans authentification)** :
+
+```ts
+const [combinations, selections] = await Promise.all([
+  api.get(`/product/${productId}/combinations`),   // public
+  api.get(`/product/${productId}/combinations/selections`), // public
+]);
+// → construire le sélecteur Taille/Couleur à partir de `selections`,
+//   puis résoudre la ProductCombination correspondante dans `combinations`
+//   une fois toutes les options choisies, pour connaître prix/stock/sku réels.
 ```
 
 **Points d'attention** :
@@ -400,7 +440,7 @@ interface SetProductTagsRequest {
 ```
 
 | Action                 | Appel                                                                           |
-| ---------------------- | ------------------------------------------------------------------------------- |
+| ---------------------- | --------------------------------------------------------------------------------- |
 | Liste                  | `GET /tags` → `Tag[]`                                                           |
 | Détail (avec produits) | `GET /tags/:tagId`                                                              |
 | Création (admin)       | `POST /tags` `CreateTagRequest`                                                 |
@@ -434,8 +474,8 @@ interface CreateCategoryRequest {
   name: string; // 2-100
   slug: string; // kebab-case
   description?: string;
-  imageUrl?: string;
-  iconUrl?: string;
+  imageUrl?: string;  // optionnel — préférer l'upload dédié, voir ci-dessous
+  iconUrl?: string;   // optionnel — préférer l'upload dédié, voir ci-dessous
   metaTitle?: string; // max 70
   metaDescription?: string; // max 160
   isActive?: boolean; // défaut true
@@ -444,8 +484,8 @@ interface CreateCategoryRequest {
 ```
 
 | Action                       | Appel                                                                          |
-| ---------------------------- | ------------------------------------------------------------------------------ |
-| Liste publique               | `GET /categories` → `Category[]` (uniquement `isActive:true`)                  |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| Liste publique **(public)**   | `GET /categories` → `Category[]` (uniquement `isActive:true`)                  |
 | Liste admin (avec inactives) | `GET /categories?includeInactive=true` (nécessite un JWT ADMIN — sinon ignoré) |
 | Détail admin                 | `GET /categories/:categoryId` (retourne même si inactive)                      |
 | Détail public par slug       | `GET /categories/slug/:slug` (**404 si inactive**)                             |
@@ -453,6 +493,35 @@ interface CreateCategoryRequest {
 | Création (admin)             | `POST /categories` `CreateCategoryRequest`                                     |
 | Mise à jour (admin)          | `PUT /categories/:categoryId`                                                  |
 | Suppression (admin)          | `DELETE /categories/:categoryId` (**400** si `_count.products > 0`)            |
+| **Upload image/icône (admin)** | `POST /categories/:categoryId/assets` (multipart, champs `image?` et/ou `icon?`, 1 fichier chacun) → `Category` |
+| **Suppression image (admin)**  | `DELETE /categories/:categoryId/image` (**404** si aucune image définie)       |
+| **Suppression icône (admin)**  | `DELETE /categories/:categoryId/icon` (**404** si aucune icône définie)        |
+
+⚠️ **Correctif catalogue public** : `GET /categories` ne nécessite plus de token — la navigation par catégories (menu, homepage, page `/categories`) doit fonctionner pour tout visiteur.
+
+⚠️ **Nouveau — upload aligné sur le comportement produit/promotion** : contrairement à ce qui existait initialement, l'API **uploade elle-même** l'image/icône vers Cloudflare R2 — le formulaire de création de catégorie ne doit **plus** demander à l'utilisateur de saisir une URL. Flux recommandé, identique au flux produit :
+
+```ts
+// 1. Créer la catégorie (champs texte uniquement, sans imageUrl/iconUrl)
+const category = await api.post("/categories", {
+  name: "Hauts",
+  slug: "hauts",
+  description: "T-shirts, chemises, pulls et vestes",
+} satisfies CreateCategoryRequest);
+
+// 2. Uploader l'image et/ou l'icône via un input file local
+const formData = new FormData();
+if (imageFile) formData.append("image", imageFile);
+if (iconFile) formData.append("icon", iconFile);
+
+const updatedCategory = await api.post(
+  `/categories/${category.id}/assets`,
+  formData, // Content-Type: multipart/form-data — laisser le navigateur le définir
+);
+// → updatedCategory.imageUrl / updatedCategory.iconUrl sont maintenant remplis par l'API
+```
+
+`imageUrl`/`iconUrl` restent acceptés comme chaînes d'URL directes dans `POST`/`PUT` classiques (`z.string().url()`) si vous voulez conserver une saisie manuelle en complément — mais ce n'est plus le flux recommandé.
 
 **Point d'attention front** : sur le site public (section client), utiliser systématiquement les routes par slug — elles renvoient nativement 404 pour une catégorie désactivée, pas besoin de filtrer `isActive` côté client. Sur le dashboard admin, `GET /categories?includeInactive=true` permet de voir/gérer les catégories désactivées, avec un indicateur visuel (`isActive: false`) sur chaque ligne.
 
@@ -498,7 +567,7 @@ interface RemoveProductRequest {
 ```
 
 | Action                        | Appel                                                                        |
-| ----------------------------- | ---------------------------------------------------------------------------- |
+| ----------------------------- | ------------------------------------------------------------------------------ |
 | Panier unique (get-or-create) | `GET /user/basket` → `Basket`                                                |
 | Nouveau panier (historique)   | `POST /basket` → `Basket` (201)                                              |
 | Détail                        | `GET /basket/:basket_id` → `Basket`                                          |
@@ -650,6 +719,7 @@ interface UpdateOrderStatusRequest {
 
 - Toujours envoyer `items[].id` comme **string** représentant le `productId` (pas un `basketItemId`).
 - `combinationSnapshot` sur chaque `OrderItem` est la source fiable pour afficher les caractéristiques achetées (taille, couleur...) dans l'historique — reste correct même si l'attribut/option source a été renommé ou supprimé depuis. Préférer `combinationSnapshot` à `combination.values` pour l'affichage de l'historique de commande.
+- `couponCode` est validé et appliqué à la commande, mais **ne réduit le total que si la promotion liée a au moins un `Discount`** ciblant les articles du panier — voir §19 pour le détail. Ne pas supposer qu'un coupon accepté réduit automatiquement `totalAmount`.
 - Un échec de stock retourne soit `400` (stock global insuffisant, message explicite avec quantité disponible/demandée), soit `409` (rare — stock pris entre vérification et réservation, la commande n'est pas créée).
 - `statusHistory` est limité aux 10 dernières entrées côté API.
 
@@ -701,7 +771,7 @@ interface UpdatePaymentStatusRequest {
 ```
 
 | Action                    | Appel                                                                             |
-| ------------------------- | --------------------------------------------------------------------------------- |
+| ------------------------- | ----------------------------------------------------------------------------------- |
 | Méthodes disponibles      | `GET /payment-methods` → `PaymentMethodInfo[]`                                    |
 | Créer un paiement         | `POST /payments` `CreatePaymentRequest` → `Payment` (201, ou 503 si indisponible) |
 | Détail                    | `GET /payments/:payment_id` → `Payment`                                           |
@@ -744,7 +814,7 @@ interface CreateReviewRequest {
 ```
 
 | Action      | Appel                                                          |
-| ----------- | -------------------------------------------------------------- |
+| ----------- | --------------------------------------------------------------- |
 | Par produit | `GET /products/:pid/reviews` → `ProductReviewsResponse`        |
 | Détail      | `GET /reviews/:rid` → `Review`                                 |
 | Création    | `POST /reviews` `CreateReviewRequest` → `Review` (201)         |
@@ -1040,7 +1110,7 @@ interface Promotion {
   name: string;
   slug: string;
   description: string | null;
-  images: string[];
+  images: string[]; // tableau — une promotion peut avoir plusieurs visuels
   status: "SCHEDULED" | "ACTIVE" | "EXPIRED" | "CANCELLED"; // calculé à la lecture, voir note
   isActive: boolean;
   startDate: string;
@@ -1102,6 +1172,7 @@ interface CreateCouponRequest {
 interface ValidateCouponRequest {
   code: string;
   basketId?: string;
+  items?: { id: string; combinationId?: string; quantity: number }[]; // preview optionnel
 }
 
 interface ValidateCouponResponse {
@@ -1110,30 +1181,68 @@ interface ValidateCouponResponse {
   code: string;
   promotion: { id: string; name: string; slug: string };
   discounts: Discount[];
+  preview?: {
+    totalAmount: number;
+    meetsMinimum: boolean;
+    minOrderAmount: number | null;
+  };
+}
+
+// ── Produits affectés par une promotion (nouveau) ──────────────────────────
+interface AffectedProductsResponse {
+  promotionId: string;
+  promotionName: string;
+  count: number;
+  products: (Product & { pricing: PricingInfo })[];
 }
 ```
 
-| Action                          | Appel                                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------- |
-| Page publique par slug          | `GET /promotions/slug/:slug` → `Promotion`                                            |
-| Valider un coupon               | `POST /coupons/validate` `ValidateCouponRequest` → `ValidateCouponResponse`           |
-| Liste (admin)                   | `GET /promotions?status&isActive` → `Promotion[]`                                     |
-| Détail (admin)                  | `GET /promotions/:promotionId` → `Promotion`                                          |
-| Création (admin)                | `POST /promotions` `CreatePromotionRequest`                                           |
-| Mise à jour (admin)             | `PUT /promotions/:promotionId`                                                        |
-| Bascule isActive (admin)        | `PATCH /promotions/:promotionId/toggle`                                               |
-| Suppression (admin)             | `DELETE /promotions/:promotionId`                                                     |
-| Upload images (admin)           | `POST /promotions/:promotionId/images` (multipart)                                    |
-| Suppression image (admin)       | `DELETE /promotions/:promotionId/images` `{ imageUrl }`                               |
-| Créer une remise (admin)        | `POST /promotions/:promotionId/discounts` `CreateDiscountRequest`                     |
-| Supprimer une remise (admin)    | `DELETE /promotions/:promotionId/discounts/:discountId`                               |
-| Coupons d'une promotion (admin) | `GET /promotions/:promotionId/coupons` → `CouponSummary[]` (avec `effectiveIsActive`) |
-| Créer un coupon (admin)         | `POST /promotions/:promotionId/coupons` `CreateCouponRequest`                         |
-| Supprimer un coupon (admin)     | `DELETE /promotions/:promotionId/coupons/:couponId`                                   |
+| Action                                | Appel                                                                                    |
+| -------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Page publique par slug                 | `GET /promotions/slug/:slug` → `Promotion`                                               |
+| **Produits affectés (public)**         | `GET /promotions/slug/:slug/products` → `AffectedProductsResponse`                       |
+| **Produits affectés (admin)**          | `GET /promotions/:promotionId/products` → `AffectedProductsResponse`                     |
+| Promotions actives (public)            | `GET /promotions/active` → `Promotion[]` (triées par `endDate` croissante)               |
+| Valider un coupon                      | `POST /coupons/validate` `ValidateCouponRequest` → `ValidateCouponResponse`              |
+| Liste (admin)                          | `GET /promotions?status&isActive` → `Promotion[]`                                        |
+| Détail (admin)                         | `GET /promotions/:promotionId` → `Promotion`                                             |
+| Création (admin)                       | `POST /promotions` `CreatePromotionRequest`                                              |
+| Mise à jour (admin)                    | `PUT /promotions/:promotionId`                                                            |
+| Bascule isActive (admin)               | `PATCH /promotions/:promotionId/toggle`                                                   |
+| Suppression (admin)                    | `DELETE /promotions/:promotionId`                                                         |
+| Upload images (admin)                  | `POST /promotions/:promotionId/images` (multipart, champ `images`, 1-5 fichiers)         |
+| Suppression image (admin)              | `DELETE /promotions/:promotionId/images` `{ imageUrl }`                                  |
+| Créer une remise (admin)               | `POST /promotions/:promotionId/discounts` `CreateDiscountRequest`                        |
+| Supprimer une remise (admin)           | `DELETE /promotions/:promotionId/discounts/:discountId`                                  |
+| Coupons d'une promotion (admin)        | `GET /promotions/:promotionId/coupons` → `CouponSummary[]` (avec `effectiveIsActive`)    |
+| Créer un coupon (admin)                | `POST /promotions/:promotionId/coupons` `CreateCouponRequest`                            |
+| Supprimer un coupon (admin)            | `DELETE /promotions/:promotionId/coupons/:couponId`                                      |
 
 **⚠️ Note importante sur `status`** : ce champ est **recalculé à chaque lecture** à partir de `isActive` + dates (`SCHEDULED` avant `startDate`, `ACTIVE` entre les deux, `EXPIRED` après `endDate` — sauf si `status: CANCELLED` a été posé manuellement, auquel cas il reste figé). Ne pas mettre ce champ en cache local trop longtemps côté dashboard — recharger la promotion après une action qui pourrait faire évoluer son statut effectif (typiquement, simplement le fait qu'une date limite soit franchie entre deux visites de l'écran).
 
 **Point d'attention pour les coupons** : afficher `effectiveIsActive` (pas seulement `isActive`) dans le tableau de gestion des coupons — un coupon avec `isActive: true` mais `effectiveIsActive: false` (épuisé ou expiré) doit être visuellement distingué, même si la seule action possible reste la suppression (pas de route de désactivation dédiée pour un coupon).
+
+**🆕 Flux recommandé pour la homepage (bannière promo cliquable)** :
+
+```ts
+// La promotion est affichée avec promotion.images[0] comme bannière.
+const { count, products } = await api.get(
+  `/promotions/slug/${promotion.slug}/products`,
+) as AffectedProductsResponse;
+
+if (count === 0) {
+  // Promotion "coupon pur" — aucun Discount ciblant un produit/catégorie.
+  // Il n'y a pas de page produits ou de fiche produit à afficher : n'affichez
+  // pas de bannière cliquable pour ce cas, ou redirigez vers une page dédiée
+  // "codes promo" listant simplement le code à copier/appliquer au checkout.
+} else if (count === 1) {
+  router.push(`/products/${products[0].id}`); // fiche produit unique
+} else {
+  router.push(`/promotions/${promotion.slug}`); // page listing des produits en promo
+}
+```
+
+**🆕 Important — coupon sans effet sur le prix** : un `CouponCode` n'a **aucune valeur de réduction propre** dans le schéma actuel (pas de champ `value`/`type` sur `CouponCode`, contrairement à `Discount`). La réduction appliquée à une commande provient exclusivement des `Discount` de la promotion liée. **Conséquence directe** : si vous créez une promotion avec un coupon mais sans aucun `Discount` associé ("un code qui réduit juste le total"), l'API validera bien le coupon (`POST /coupons/validate` répond `valid: true`) et l'appliquera à la commande (`Order.appliedCoupon` renseigné), mais **aucun prix d'article ne sera réduit** — `discountedAmount` restera `null`. Ce cas d'usage n'est pas supporté par l'implémentation actuelle ; si votre besoin métier est "un coupon = X% ou -Y XAF sur le total peu importe le panier", il faut soit créer un `Discount` `PERCENTAGE`/`FIXED_AMOUNT` ciblant toutes les catégories concernées, soit faire évoluer le schéma `CouponCode` (hors périmètre de cette version de l'API — à discuter avec l'équipe backend si besoin).
 
 ---
 
@@ -1248,7 +1357,7 @@ interface SalesChartResponse {
 ```
 
 | Action               | Appel                                                           |
-| -------------------- | --------------------------------------------------------------- |
+| -------------------- | ----------------------------------------------------------------- |
 | Statistiques         | `GET /dashboard/stats` → `DashboardStats`                       |
 | Graphique des ventes | `GET /dashboard/sales-chart?year&period` → `SalesChartResponse` |
 

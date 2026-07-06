@@ -42,14 +42,14 @@ Paramètres `page` (défaut 1) et `limit` (défaut 20) sur toutes les routes pag
 
 Réponse `/signup` et `/login` : `{ user (sans password), token }`.
 
-⚠️ **Nouveau — Protection brute-force (§22)** : après 5 échecs de mot de passe consécutifs sur une fenêtre de 15 minutes pour un même `username`, le compte est automatiquement désactivé (`isActive: false`). Le message d'erreur reste identique à celui d'une désactivation manuelle par un admin (`403 "This account has been deactivated."`) — aucune distinction n'est faite côté client pour ne pas révéler l'état exact du compte à un attaquant. Réactivation possible uniquement par un admin via `PATCH /user/:userId/status`.
+⚠️ **Protection brute-force (§22)** : après 5 échecs de mot de passe consécutifs sur une fenêtre de 15 minutes pour un même `username`, le compte est automatiquement désactivé (`isActive: false`). Le message d'erreur reste identique à celui d'une désactivation manuelle par un admin (`403 "This account has been deactivated."`) — aucune distinction n'est faite côté client pour ne pas révéler l'état exact du compte à un attaquant. Réactivation possible uniquement par un admin via `PATCH /user/:userId/status`.
 
 ---
 
 ## 2. Utilisateurs (`/user`)
 
 | Méthode | Route                       | Auth     | Body                                                                                       |
-| ------- | --------------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| ------- | ---------------------------- | -------- | -------------------------------------------------------------------------------------------- |
 | GET     | `/user`                     | ✅       | —                                                                                            |
 | PATCH   | `/user`                     | ✅       | `email?, firstName?, lastName?, dateOfBirth?, phone?`                                       |
 | GET     | `/user/all`                 | 🔒 ADMIN | —                                                                                            |
@@ -61,9 +61,9 @@ Réponse `/signup` et `/login` : `{ user (sans password), token }`.
 
 ⚠️ Les routes statiques (`/user/all`, `/user` POST, `/user/:userId/status`) sont déclarées **avant** `/user/:userId` dans le router — ordre obligatoire en Express.
 
-⚠️ **Nouveau — Restriction d'auto-suppression** : `DELETE /user/:userId` renvoie **400** `"You cannot delete your own account"` si `userId` correspond au compte de l'appelant (comparé au JWT), même pour un admin.
+⚠️ **Restriction d'auto-suppression** : `DELETE /user/:userId` renvoie **400** `"You cannot delete your own account"` si `userId` correspond au compte de l'appelant (comparé au JWT), même pour un admin.
 
-⚠️ **Nouveau — `PATCH /user/:userId/status`** : bascule uniquement `isActive`, complètement indépendant de `deletedAt`. Ne fonctionne pas sur un compte déjà soft-supprimé (404, car `findById` filtre `deletedAt: null`). C'est la seule route pour lever un verrouillage automatique du brute-force (§22).
+⚠️ **`PATCH /user/:userId/status`** : bascule uniquement `isActive`, complètement indépendant de `deletedAt`. Ne fonctionne pas sur un compte déjà soft-supprimé (404, car `findById` filtre `deletedAt: null`). C'est la seule route pour lever un verrouillage automatique du brute-force (§22).
 
 ---
 
@@ -88,8 +88,8 @@ Réponse `/signup` et `/login` : `{ user (sans password), token }`.
 Un attribut est soit un **attribut produit** (`isVariant: false`, valeur texte libre par produit) soit un **attribut de variante** (`isVariant: true`, régi par le système de combinaisons — voir §5).
 
 | Méthode | Route                                | Auth     | Body                                                                                                                |
-| ------- | ------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------- |
-| GET     | `/categories/:categoryId/attributes` | ✅       | —                                                                                                                    |
+| ------- | ------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/categories/:categoryId/attributes` | ❌       | —                                                                                                                    |
 | POST    | `/categories/:categoryId/attributes` | 🔒 ADMIN | `name, slug, type(TEXT\|NUMBER\|COLOR\|BOOLEAN\|SELECT), unit?, isVariant?, isFilterable?, isRequired?, position?`  |
 | GET     | `/attributes/:definitionId`          | ✅       | —                                                                                                                    |
 | PATCH   | `/attributes/:definitionId`          | 🔒 ADMIN | body partiel                                                                                                         |
@@ -98,6 +98,8 @@ Un attribut est soit un **attribut produit** (`isVariant: false`, valeur texte l
 | PATCH   | `/attributes/options/:optionId`      | 🔒 ADMIN | body partiel                                                                                                         |
 | DELETE  | `/attributes/options/:optionId`      | 🔒 ADMIN | —                                                                                                                    |
 | PUT     | `/product/:productId/attributes`     | 🔒 ADMIN | `attributes: [{attributeDefinitionId, value}]` — **uniquement pour les attributs produit** (`isVariant:false`), remplace toutes les valeurs. Rejette (400) si un attribut ciblé est `isVariant:true`. |
+
+⚠️ **CORRECTIF (bug catalogue public)** : `GET /categories/:categoryId/attributes` est désormais public (❌) — un visiteur non connecté doit pouvoir consulter les attributs disponibles pour filtrer/afficher un produit sans être authentifié. Seul `GET /attributes/:definitionId` reste protégé (`✅`) pour le moment.
 
 **Garde-fou d'activation produit** : un produit ne peut passer `ACTIVE` que si tous les attributs produit `isRequired: true` de sa catégorie sont renseignés. Les attributs de variante ne sont jamais concernés par ce contrôle (voir §5, avertissement `PRODUCT_ACTIVATED_WITHOUT_COMBINATIONS`).
 
@@ -109,13 +111,15 @@ Remplace l'ancien système de "variantes" — `combinationId` remplace `variantI
 
 | Méthode | Route                                                              | Auth     | Body                                          |
 | ------- | ------------------------------------------------------------------- | -------- | ------------------------------------------------ |
-| GET     | `/product/:productId/combinations`                                  | ✅       | → `ProductCombination[]` actives uniquement      |
-| GET     | `/product/:productId/combinations/selections`                       | ✅       | Liste les sélections d'options courantes, par attribut |
+| GET     | `/product/:productId/combinations`                                  | ❌       | → `ProductCombination[]` actives uniquement      |
+| GET     | `/product/:productId/combinations/selections`                       | ❌       | Liste les sélections d'options courantes, par attribut |
 | PUT     | `/product/:productId/combinations/selections/:attributeDefinitionId` | 🔒 ADMIN | `{ optionIds: string[] }` — définit les options disponibles pour CE produit sur un attribut de variante |
 | POST    | `/product/:productId/combinations/generate`                         | 🔒 ADMIN | — → génère le produit cartésien des sélections (crée/réactive les combinaisons correspondantes, désactive les autres — jamais de suppression automatique) |
 | GET     | `/product/:productId/combinations/:combinationId`                   | ✅       | —                                                 |
 | PATCH   | `/product/:productId/combinations/:combinationId`                   | 🔒 ADMIN | `{ sku?, price?, isActive? }`                    |
 | DELETE  | `/product/:productId/combinations/:combinationId`                   | 🔒 ADMIN | **400** si de l'inventaire existe encore dessus  |
+
+⚠️ **CORRECTIF (bug catalogue public)** : `GET .../combinations` et `GET .../combinations/selections` sont désormais publics (❌) — indispensables pour afficher le sélecteur de variante (taille, couleur...) sur une fiche produit sans être connecté. `GET .../:combinationId` (détail d'une combinaison précise par id) reste protégé pour le moment.
 
 ⚠️ Désactiver une combinaison (manuellement ou via `generate()`) **n'est pas bloqué** même si elle a du stock actif — un événement `COMBINATION_DEACTIVATED_WITH_STOCK` est loggé (non bloquant), seule la **suppression** est bloquée par du stock existant.
 
@@ -140,7 +144,7 @@ Remplace l'ancien système de "variantes" — `combinationId` remplace `variantI
 ## 6. Tags (`/tags`, `/product/:productId/tags`)
 
 | Méthode | Route                      | Auth     | Body                                                    |
-| ------- | -------------------------- | -------- | ------------------------------------------------------- |
+| ------- | -------------------------- | -------- | -------------------------------------------------------- |
 | GET     | `/tags`                    | ❌       | —                                                       |
 | GET     | `/tags/:tagId`             | ❌       | — (avec `products`)                                     |
 | POST    | `/tags`                    | 🔒 ADMIN | `name(2-50), slug(2-50, kebab-case)`                    |
@@ -154,16 +158,23 @@ Remplace l'ancien système de "variantes" — `combinationId` remplace `variantI
 ## 7. Catégories (`/categories`)
 
 | Méthode | Route                             | Auth     | Body                                                                                                                          |
-| ------- | ---------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| GET     | `/categories`                     | ✅       | Query `includeInactive?(bool)` — **effectif uniquement si l'appelant est ADMIN**, ignoré sinon. Sans ce paramètre : uniquement les catégories `isActive:true` (mis en cache séparément de la vue admin). |
+| ------- | ---------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/categories`                     | ❌       | Query `includeInactive?(bool)` — **effectif uniquement si l'appelant est ADMIN**, ignoré sinon. Sans ce paramètre : uniquement les catégories `isActive:true` (mis en cache séparément de la vue admin). |
 | GET     | `/categories/:categoryId`         | ✅       | Consultation admin — retourne la catégorie même si `isActive:false`                                                             |
 | GET     | `/categories/slug/:slug`          | ❌       | **404 si la catégorie est `isActive:false`** — route publique                                                                   |
 | GET     | `/categories/slug/:slug/products` | ❌       | **404 si la catégorie est `isActive:false`** — idem, route publique                                                             |
 | POST    | `/categories`                     | 🔒 ADMIN | `name(2-100), slug(2-100, kebab-case), description?, imageUrl?, iconUrl?, metaTitle?, metaDescription?, isActive?, parentId?` |
 | PUT     | `/categories/:categoryId`         | 🔒 ADMIN | body partiel                                                                                                                     |
 | DELETE  | `/categories/:categoryId`         | 🔒 ADMIN | **400** si des produits sont encore rattachés                                                                                    |
+| POST    | `/categories/:categoryId/assets`  | 🔒 ADMIN | `multipart/form-data`, champs `image?` et/ou `icon?` (1 fichier chacun, jpeg/png/webp/gif, 5MB max) — **l'API uploade elle-même le fichier vers R2 et renvoie l'URL**, aligné sur le comportement produit/promotion |
+| DELETE  | `/categories/:categoryId/image`   | 🔒 ADMIN | — supprime le fichier sur R2 et vide `imageUrl`                                                                                  |
+| DELETE  | `/categories/:categoryId/icon`    | 🔒 ADMIN | — supprime le fichier sur R2 et vide `iconUrl`                                                                                   |
 
-⚠️ **Nouveau — `isActive` désormais effectif** (précédemment un champ purement déclaratif) : une catégorie désactivée disparaît de `GET /categories` (sauf admin avec `includeInactive=true`) et devient inaccessible via les deux routes publiques par slug (404). Aucune cascade sur les sous-catégories ou produits — seule la catégorie elle-même est filtrée.
+⚠️ **CORRECTIF (bug catalogue public)** : `GET /categories` est désormais public (❌) — la navigation par catégories doit fonctionner pour un visiteur non connecté.
+
+⚠️ **Nouveau — upload d'assets** : `imageUrl`/`iconUrl` acceptent toujours une URL directe dans le body `POST`/`PUT` classique (`z.string().url()`), mais le flux recommandé est de créer la catégorie sans ces champs, puis d'appeler `POST /categories/:categoryId/assets` avec les fichiers sélectionnés localement — exactement comme pour les images produit. `deleteImage`/`deleteIcon` retournent **404** si l'asset ciblé n'est pas défini sur la catégorie.
+
+⚠️ **`isActive` désormais effectif** (précédemment un champ purement déclaratif) : une catégorie désactivée disparaît de `GET /categories` (sauf admin avec `includeInactive=true`) et devient inaccessible via les deux routes publiques par slug (404). Aucune cascade sur les sous-catégories ou produits — seule la catégorie elle-même est filtrée.
 
 ---
 
@@ -197,7 +208,7 @@ Wishlist unique par utilisateur (`@unique userId`).
 ## 10. Commandes (`/orders`)
 
 | Méthode | Route                     | Auth     | Notes                                                                                                                                |
-| ------- | ------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| ------- | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | GET     | `/orders`                 | ✅       | Query `page?, limit?, status?, customer?` — `customer` (admin uniquement) filtre `user.email` en `contains` insensible à la casse       |
 | POST    | `/orders`                 | ✅       | Voir body ci-dessous                                                                                                                     |
 | GET     | `/orders/:orderId`        | ✅       | 403 si la commande n'appartient pas à l'appelant (sauf admin)                                                                            |
@@ -225,7 +236,7 @@ Wishlist unique par utilisateur (`@unique userId`).
 
 `items[].id` est le `productId` en string. `combinationId` remplace l'ancien `variantId`.
 
-**Logique de stock** (voir doc technique `combinaisons produit & stock multi-entrepôt`) :
+**Logique de stock** (voir `STATUS_MANAGEMENT.md` §9) :
 - Vérification à la commande : somme du stock sur **tous les entrepôts** pour `(productId, combinationId)` ≥ quantité demandée.
 - Réservation FIFO : décrément par entrepôt le plus anciennement approvisionné, tracé dans `OrderItemReservation`.
 - **400** si stock total insuffisant ; **409** si le stock a été pris entre vérification et réservation (rollback automatique complet).
@@ -241,7 +252,7 @@ Wishlist unique par utilisateur (`@unique userId`).
 ## 11. Paiements (`/payment-methods`, `/payments`)
 
 | Méthode | Route                            | Auth     | Notes                                                                                                                                                                        |
-| ------- | --------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------- | --------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET     | `/payment-methods`                | ❌       | Seul `CASH_ON_DELIVERY` a `available: true`                                                                                                                                  |
 | POST    | `/payments`                       | ✅       | `order_id, method, currency?(XAF défaut), notes?` — **503** si méthode indisponible, **403** si commande d'un autre utilisateur. Passe la commande en `CONFIRMED`.          |
 | GET     | `/payments/:payment_id`           | ✅       | —                                                                                                                                                                            |
@@ -259,7 +270,7 @@ Wishlist unique par utilisateur (`@unique userId`).
 ## 12. Avis (`/products/:pid/reviews`, `/reviews`)
 
 | Méthode | Route                    | Auth       | Body                                                           |
-| ------- | ------------------------ | ---------- | -------------------------------------------------------------- |
+| ------- | ------------------------ | ---------- | ---------------------------------------------------------------- |
 | GET     | `/products/:pid/reviews` | ❌         | → `{ product_id, average_rating, total_reviews, reviews[] }` |
 | GET     | `/reviews/:rid`          | ❌         | —                                                              |
 | POST    | `/reviews`               | ✅         | `order_item_id, product_id, rating(1-5), comment?`             |
@@ -278,8 +289,6 @@ Wishlist unique par utilisateur (`@unique userId`).
 | POST    | `/warehouses`                         | 🔒 ADMIN | `name(2-100), location, capacity?`              |
 | PUT     | `/warehouses/:warehouse_id`           | 🔒 ADMIN | body partiel                                    |
 | DELETE  | `/warehouses/:warehouse_id`           | 🔒 ADMIN | **400** si du stock (`quantity > 0`) existe encore dans cet entrepôt — supprimer/transférer le stock d'abord |
-
-⚠️ **Nouveau** : `DELETE` était auparavant une cascade silencieuse (suppression de l'inventaire ET des réservations historiques). Désormais bloqué par 400 tant que du stock actif existe.
 
 ---
 
@@ -327,7 +336,7 @@ Toute mutation de quantité (ajustement manuel, transfert, réservation de comma
 ## 16. Méthodes de livraison (`/shipping-methods`)
 
 | Méthode | Route                         | Auth     | Body                                                                                            |
-| ------- | ----------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| ------- | ----------------------------- | -------- | ------------------------------------------------------------------------------------------------- |
 | GET     | `/shipping-methods`           | ❌       | Query `active?(bool)`                                                                           |
 | GET     | `/shipping-methods/:methodId` | ❌       | —                                                                                                |
 | POST    | `/shipping-methods`           | 🔒 ADMIN | `name, description?, estimatedDays, basePrice, pricePerKg?, isActive?, zones: string[2-letter]` |
@@ -355,14 +364,17 @@ Toute mutation de quantité (ajustement manuel, transfert, réservation de comma
 | Méthode | Route                                            | Auth     | Body                                                                                             |
 | ------- | ------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
 | GET     | `/promotions/slug/:slug`                         | ❌       | Page publique promo (avec `discounts`, `coupons`)                                                |
-| POST    | `/coupons/validate`                              | ✅       | `code, basketId` — vérifie activité, dates, plafond global et par-utilisateur                    |
+| GET     | `/promotions/slug/:slug/products`                | ❌       | **Nouveau** — produits affectés par la promotion (fusion produits ciblés directs + produits des catégories ciblées, dédoublonnés, `ACTIVE` uniquement). Voir note ci-dessous. |
+| GET     | `/promotions/active`                             | ❌       | Promotions actuellement `ACTIVE` (statut calculé), triées par `endDate` croissante              |
+| POST    | `/coupons/validate`                              | ✅       | `code, basketId?, items?` — vérifie activité, dates, plafond global et par-utilisateur. Si `items` fourni, renvoie un `preview` du total estimé. |
 | GET     | `/promotions`                                    | 🔒 ADMIN | Query `status?, isActive?` — `status` filtre sur le **statut calculé** (voir ci-dessous)          |
 | GET     | `/promotions/:promotionId`                       | 🔒 ADMIN | —                                                                                                  |
+| GET     | `/promotions/:promotionId/products`              | 🔒 ADMIN | **Nouveau** — équivalent admin de la route publique par slug ci-dessus                            |
 | POST    | `/promotions`                                    | 🔒 ADMIN | `name, slug, description?, startDate(ISO), endDate(ISO > startDate), isActive?`                  |
 | PUT     | `/promotions/:promotionId`                       | 🔒 ADMIN | body partiel                                                                                       |
 | PATCH   | `/promotions/:promotionId/toggle`                | 🔒 ADMIN | bascule `isActive`                                                                                 |
 | DELETE  | `/promotions/:promotionId`                       | 🔒 ADMIN | —                                                                                                  |
-| POST    | `/promotions/:promotionId/images`                | 🔒 ADMIN | multipart, champ `images` (1-5)                                                                    |
+| POST    | `/promotions/:promotionId/images`                | 🔒 ADMIN | multipart, champ `images` (1-5) — **l'API uploade elle-même vers R2**, `Promotion.images` est un tableau d'URLs (une promotion peut avoir plusieurs visuels) |
 | DELETE  | `/promotions/:promotionId/images`                | 🔒 ADMIN | body `{ imageUrl }`                                                                                |
 | POST    | `/promotions/:promotionId/discounts`             | 🔒 ADMIN | `type(PERCENTAGE\|FIXED_AMOUNT), value, categoryId?, productIds?` — au moins un ciblage requis   |
 | DELETE  | `/promotions/:promotionId/discounts/:discountId` | 🔒 ADMIN | —                                                                                                  |
@@ -374,14 +386,21 @@ Toute mutation de quantité (ajustement manuel, transfert, réservation de comma
 
 ⚠️ **Nouveau — `effectiveIsActive` sur les coupons** (`GET /promotions/:promotionId/coupons`) : champ calculé (`isActive` stocké + dates + `usedCount >= maxUses`) reflétant si le coupon est réellement utilisable maintenant, sans jamais modifier `isActive` en base.
 
-Le prix affiché sur `GET /product` / `GET /product/:id` inclut un objet `pricing` (`{ originalPrice, finalPrice, discountAmount, discountPercentage, hasDiscount, promotionId, discountId }`) calculé à partir des remises actives — utilise désormais le même calcul de date/activité que le statut affiché des promotions.
+⚠️ **Nouveau — produits affectés par une promotion (`GET .../products`)** : réponse `{ promotionId, promotionName, count, products[] }`, chaque `product` incluant `pricing` (identique à `GET /product`). Cas particuliers :
+- `count === 0` → **la promotion n'a aucun `Discount` ciblant un produit ou une catégorie** (typiquement une promotion portée uniquement par un coupon, sans remise sur article — voir note ci-dessous). Il n'y a alors rien à afficher/rediriger côté storefront.
+- `count === 1` → redirection directe possible vers la fiche produit.
+- `count > 1` → page listing.
+
+⚠️ **Important — un coupon sans `Discount` associé n'a aucun effet monétaire** : la réduction appliquée à une commande provient exclusivement des `Discount` de la promotion (via `getBestPricing`, calculé par article du panier/de la commande) — **jamais** d'une valeur portée par le `CouponCode` lui-même (qui n'a ni `value` ni `type` de remise dans le schéma actuel, uniquement des règles d'usage : `maxUses`, `perUserLimit`, `minOrderAmount`, dates). Un coupon appliqué à une commande sans aucun `Discount` sur sa promotion sera bien enregistré (`Order.appliedCoupon`), mais `discountedAmount` restera nul — aucun prix d'article n'est réduit. Le scénario "coupon = réduction fixe/pourcentage sur le total, indépendamment des produits" n'est **pas implémenté** dans l'état actuel du code.
+
+Le prix affiché sur `GET /product` / `GET /product/:id` inclut un objet `pricing` (`{ originalPrice, finalPrice, discountAmount, discountPercentage, hasDiscount, promotionId, discountId }`) calculé à partir des remises actives.
 
 ---
 
 ## 19. Programme fidélité (`/loyalty`)
 
 | Méthode | Route                      | Auth     | Notes                                                                                                                                                                                                                                               |
-| ------- | -------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------- | -------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET     | `/loyalty/:userId/balance` | ✅       | ⚠️ Aucun contrôle d'appartenance : tout utilisateur authentifié peut consulter le solde de n'importe quel `userId`                                                                                                                                  |
 | GET     | `/loyalty/:userId/history` | ✅       | Même remarque                                                                                                                                                                                                                                        |
 | POST    | `/loyalty/adjust`          | 🔒 ADMIN | `userId, points(≠0), type(EARNED\|REDEEMED\|EXPIRED\|ADJUSTED), orderId?` — rejette un `REDEEMED` si le solde résultant serait négatif                                                                                                             |
@@ -393,7 +412,7 @@ Le prix affiché sur `GET /product` / `GET /product/:id` inclut un objet `pricin
 ## 20. Retours (`/returns`)
 
 | Méthode | Route                       | Auth                | Body                                                                                                                                                                                                  |
-| ------- | --------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------- | --------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET     | `/returns`                  | 🔒 ADMIN            | Query `page?, limit?, status?`                                                                                                                                                                        |
 | GET     | `/returns/:returnId`        | ✅ (owner ou admin) | —                                                                                                                                                                                                     |
 | POST    | `/returns`                  | ✅                  | `order_id, reason(min2), notes?, items: [{order_item_id, quantity, condition?}] (min1)` — requiert `Order.status = DELIVERED`                                                                        |
@@ -413,7 +432,7 @@ Un passage à `COMPLETED` déclenche automatiquement : `Order.status → REFUNDE
 
 ---
 
-## 22. Sécurité des comptes — verrouillage automatique (nouveau)
+## 22. Sécurité des comptes — verrouillage automatique
 
 Non exposé via une route dédiée, mais affecte directement `POST /login` et `PATCH /user/:userId/status` :
 
