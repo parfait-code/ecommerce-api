@@ -178,4 +178,67 @@ export const inventoryRepository = {
 
     return updated;
   },
+
+  deleteByProduct: (productId: number) =>
+    prisma.inventory.deleteMany({ where: { productId } }),
+
+  findGroupedByProduct: async (query: {
+    category?: string;
+    location?: string;
+    page?: string;
+    limit?: string;
+  }) => {
+    const { skip, take } = paginate(query);
+    const where = {
+      ...(query.category && {
+        product: {
+          category: {
+            name: { contains: query.category, mode: "insensitive" as const },
+          },
+        },
+      }),
+      ...(query.location && {
+        warehouse: { location: { contains: query.location } },
+      }),
+    };
+
+    // Produits distincts correspondant aux filtres, ordonnés pour une
+    // pagination stable, PUIS pagination sur cette liste (pas sur les lignes).
+    const distinctProducts = await prisma.inventory.findMany({
+      where,
+      distinct: ["productId"],
+      select: { productId: true },
+      orderBy: { productId: "asc" },
+    });
+
+    const total = distinctProducts.length;
+    const pageProductIds = distinctProducts
+      .slice(skip, skip + take)
+      .map((p) => p.productId);
+
+    if (pageProductIds.length === 0) {
+      return { items: [] as any[], total };
+    }
+
+    const lines = await prisma.inventory.findMany({
+      where: { ...where, productId: { in: pageProductIds } },
+      include: inventoryInclude,
+    });
+
+    const items = pageProductIds.map((productId) => {
+      const productLines = lines.filter((l) => l.productId === productId);
+      return {
+        product: productLines[0]?.product ?? null,
+        totalQuantity: productLines.reduce((sum, l) => sum + l.quantity, 0),
+        lines: productLines.map((l) => ({
+          id: l.id,
+          warehouseId: l.warehouseId,
+          combinationId: l.combinationId,
+          quantity: l.quantity,
+        })),
+      };
+    });
+
+    return { items, total };
+  },
 };

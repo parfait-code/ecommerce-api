@@ -3,6 +3,7 @@ import { combinationRepository } from "../combinations/combination.repository";
 import { attributeRepository } from "../attributes/attribute.repository";
 import { promotionRepository } from "../promotions/promotion.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
+import { inventoryRepository } from "../inventory/inventory.repository";
 import { CreateProductDto, UpdateProductDto } from "./product.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
@@ -198,6 +199,14 @@ export const productService = {
   delete: async (id: number) => {
     const product = await productRepository.findById(id);
     if (!product) throw new AppError("Product not found", 404);
+
+    // Cascade — un produit soft-supprimé ne doit plus immobiliser de fichiers
+    // R2 ni de lignes de stock consultables/gérables (voir resolve.md #3).
+    for (const image of product.images) {
+      await deleteImage(image.url);
+    }
+    await productRepository.deleteImagesByProduct(id);
+    await inventoryRepository.deleteByProduct(id);
 
     await productRepository.delete(id);
     await cache.del(CACHE_KEYS.single(id));

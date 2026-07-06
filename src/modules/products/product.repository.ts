@@ -97,4 +97,7 @@ export const productRepository = {
 
   findImageById: (id: string) =>
     prisma.productImage.findUnique({ where: { id } }),
+
+  deleteImagesByProduct: (productId: number) =>
+    prisma.productImage.deleteMany({ where: { productId } }),
 };

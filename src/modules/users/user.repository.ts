@@ -1,10 +1,15 @@
 import { prisma } from "../../shared/config/database";
+import { AppError } from "../../shared/utils/app-error";
 import { UpdateUserDto } from "./user.schema";
 import { UserRole } from "@prisma/client";
 
 export const userRepository = {
-  findById: (id: number) =>
-    prisma.user.findUnique({ where: { id, deletedAt: null } }),
+  findById: (id: number) => {
+    if (id === undefined || id === null || Number.isNaN(id)) {
+      throw new AppError("A valid user id is required", 400);
+    }
+    return prisma.user.findUnique({ where: { id, deletedAt: null } });
+  },
 
   findAll: () => prisma.user.findMany({ where: { deletedAt: null } }),
 

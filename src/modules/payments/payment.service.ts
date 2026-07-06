@@ -11,6 +11,7 @@ import {
   BusinessEvent,
   AuditEvent,
   ActorRole,
+  systemLogger,
 } from "../../shared/logger";
 
 const UNAVAILABLE_METHODS: PaymentMethod[] = ["PAYPAL", "STRIPE", "CINETPAY"];
@@ -105,18 +106,25 @@ export const paymentService = {
       notes: dto.notes,
     });
 
-    // Confirme la prise en charge de la commande — ne signifie PAS que
-    // l'argent a été encaissé pour un COD (voir paymentService.updateStatus).
-    await orderService.updateStatus(
-      dto.order_id,
-      { status: "CONFIRMED", reason: "Payment recorded — order confirmed" },
-      userId,
-      "SYSTEM",
-    );
+    // resolve.md #5.3 — PENDING → CONFIRMED n'est plus systématique : seule
+    // une méthode COD (prise en charge sans encaissement réel, par nature)
+    // confirme automatiquement à la création. Un paiement PENDING sur une
+    // méthode "réellement encaissée" confirmera la commande via updateStatus
+    // → COMPLETED (voir plus haut), pas à la simple création du paiement.
+    if (dto.method === "CASH_ON_DELIVERY" && order.status === "PENDING") {
+      await orderService.updateStatus(
+        dto.order_id,
+        {
+          status: "CONFIRMED",
+          reason: "COD payment recorded — order confirmed",
+        },
+        userId,
+        "SYSTEM",
+      );
+    }
 
     return payment;
   },
-
   /**
    * Change le statut d'un paiement existant (ex: confirmer un encaissement COD
    * réel à la livraison, marquer un échec, ou rembourser).
@@ -130,6 +138,16 @@ export const paymentService = {
   ) => {
     const payment = await paymentRepository.findById(paymentId);
     if (!payment) throw new AppError("Payment not found", 404);
+
+    // resolve.md #5.2 — les transitions manuelles admin ne peuvent viser que
+    // REFUNDED ; PENDING → COMPLETED/FAILED/CANCELLED restent exclusivement
+    // automatiques (event bus : complétion COD à la livraison, etc.).
+    if (actorRole === "ADMIN" && dto.status !== "REFUNDED") {
+      throw new AppError(
+        "Manual payment status changes are restricted to REFUNDED — other transitions happen automatically as part of the order/return lifecycle.",
+        400,
+      );
+    }
 
     assertValidPaymentTransition(payment.status, dto.status);
 
@@ -171,8 +189,6 @@ export const paymentService = {
       });
     }
 
-    // Un passage à COMPLETED confirme définitivement l'encaissement — si la
-    // commande était restée PENDING (cas rare), on l'aligne sur CONFIRMED.
     if (dto.status === "COMPLETED") {
       const order = await orderRepository.findById(payment.orderId);
       if (order && order.status === "PENDING") {
@@ -182,6 +198,35 @@ export const paymentService = {
           adminUserId,
           actorRole,
         );
+      }
+    }
+
+    // resolve.md #5.2 — cascade Payment → Order sur remboursement, cohérent
+    // avec la transition DELIVERED → REFUNDED déjà utilisée pour les retours.
+    // Best-effort : si la commande n'est pas dans un état compatible (rare,
+    // ex. remboursement d'un paiement d'une commande jamais livrée), on ne
+    // bloque pas le remboursement du paiement lui-même — on trace l'échec.
+    if (dto.status === "REFUNDED") {
+      const order = await orderRepository.findById(payment.orderId);
+      if (order && order.status !== "REFUNDED") {
+        try {
+          await orderService.updateStatus(
+            payment.orderId,
+            { status: "REFUNDED", reason: `Payment ${paymentId} refunded` },
+            adminUserId,
+            actorRole,
+          );
+        } catch (err) {
+          systemLogger.error("ORDER_SYNC_FAILED", {
+            service: "payment-service",
+            metadata: {
+              orderId: payment.orderId,
+              paymentId,
+              reason: "Failed to sync order status after payment refund",
+              error: (err as Error).message,
+            },
+          });
+        }
       }
     }
 

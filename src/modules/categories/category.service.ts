@@ -7,6 +7,7 @@ import {
   uploadImage,
   deleteImage as deleteR2Image,
 } from "../../shared/utils/upload";
+import { prisma } from "../../shared/config/database";
 
 const CACHE_KEYS = {
   all: "categories:all",
@@ -171,6 +172,18 @@ export const categoryService = {
     if (category._count.products > 0)
       throw new AppError(
         `Cannot delete category with ${category._count.products} product(s) attached`,
+        400,
+      );
+
+    // resolve.md #4 — bloque tant que la catégorie est ciblée par au moins
+    // un Discount, quel que soit le statut de la promotion parente, plutôt
+    // que de laisser le FK SetNull créer un Discount orphelin sans cible.
+    const discountCount = await prisma.discount.count({
+      where: { categoryId: id },
+    });
+    if (discountCount > 0)
+      throw new AppError(
+        `Cannot delete category: ${discountCount} discount(s) still target it — remove or retarget them first`,
         400,
       );
 

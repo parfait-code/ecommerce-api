@@ -4,7 +4,7 @@ import { CreateCategoryDto, UpdateCategoryDto } from "./category.schema";
 const categoryInclude = {
   parent: { select: { id: true, name: true, slug: true } },
   children: { select: { id: true, name: true, slug: true } },
-  _count: { select: { products: true } },
+  _count: { select: { products: { where: { deletedAt: null } } } },
 };
 
 export const categoryRepository = {

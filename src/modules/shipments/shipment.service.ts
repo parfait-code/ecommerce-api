@@ -42,6 +42,16 @@ export const shipmentService = {
   },
 
   create: async (dto: CreateShipmentDto) => {
+    if (dto.order_id) {
+      const order = await orderRepository.findById(dto.order_id);
+      if (!order) throw new AppError("Order not found", 404);
+      if (order.status !== "PROCESSING")
+        throw new AppError(
+          `Cannot create a shipment for an order with status ${order.status} — order must be PROCESSING`,
+          400,
+        );
+    }
+
     const estimatedDeliveryDate =
       dto.estimated_delivery_at ?? generateEstimatedDelivery();
 
