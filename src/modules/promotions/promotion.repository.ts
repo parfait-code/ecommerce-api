@@ -70,7 +70,7 @@ export const promotionRepository = {
       where: {
         promotion: {
           isActive: true,
-          status: "ACTIVE",
+          status: { not: "CANCELLED" }, // ne plus filtrer sur ACTIVE stocké
           startDate: { lte: now },
           endDate: { gte: now },
         },
