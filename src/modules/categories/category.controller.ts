@@ -17,8 +17,11 @@ export const categoryController = {
 
   getById: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
       const result = await categoryService.getById(
         req.params.categoryId as string,
+        includeInactive,
       );
       respond(res, result);
     } catch (err) {

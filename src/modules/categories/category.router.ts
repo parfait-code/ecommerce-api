@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { categoryController } from "./category.controller";
 import { authGuard } from "../../shared/middlewares/auth-guard";
+import { optionalAuthGuard } from "../../shared/middlewares/optional-auth-guard";
 import { adminGuard } from "../../shared/middlewares/admin-guard";
 import { validate } from "../../shared/middlewares/validate";
 import { upload } from "../../shared/middlewares/multer";
@@ -8,8 +9,12 @@ import { createCategorySchema, updateCategorySchema } from "./category.schema";
 
 const router = Router();
 
-router.get("/categories", categoryController.getAll);
-router.get("/categories/:categoryId", authGuard, categoryController.getById);
+router.get("/categories", optionalAuthGuard, categoryController.getAll);
+router.get(
+  "/categories/:categoryId",
+  optionalAuthGuard,
+  categoryController.getById,
+);
 router.get("/categories/slug/:slug", categoryController.getBySlug);
 router.get("/categories/slug/:slug/products", categoryController.getProducts);
 router.post(

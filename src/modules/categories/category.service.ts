@@ -32,15 +32,19 @@ export const categoryService = {
     return categories;
   },
 
-  getById: async (id: string) => {
+  getById: async (id: string, includeInactive = false) => {
     const cacheKey = CACHE_KEYS.single(id);
-    const cached = await cache.get(cacheKey);
-    if (cached) return cached;
+    if (!includeInactive) {
+      const cached = await cache.get(cacheKey);
+      if (cached) return cached;
+    }
 
     const category = await categoryRepository.findById(id);
     if (!category) throw new AppError("Category not found", 404);
+    if (!includeInactive && !category.isActive)
+      throw new AppError("Category not found", 404);
 
-    await cache.set(cacheKey, category);
+    if (!includeInactive) await cache.set(cacheKey, category);
     return category;
   },
 
