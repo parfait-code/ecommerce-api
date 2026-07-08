@@ -6,6 +6,8 @@ import { AppError } from "../../shared/utils/app-error";
 export const productController = {
   getAll: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
       const result = await productService.getAll(
         req.query as {
           page?: string;
@@ -13,6 +15,7 @@ export const productController = {
           categoryId?: string;
           search?: string;
         },
+        includeInactive,
       );
       respond(res, result);
     } catch (err) {
@@ -22,7 +25,12 @@ export const productController = {
 
   getById: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await productService.getById(Number(req.params.productId));
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
+      const result = await productService.getById(
+        Number(req.params.productId),
+        includeInactive,
+      );
       respond(res, result);
     } catch (err) {
       next(err);

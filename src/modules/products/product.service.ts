@@ -55,7 +55,7 @@ const assertReadyForActivation = async (product: {
 };
 
 export const productService = {
-  getAll: async (query: ProductQuery) => {
+  getAll: async (query: ProductQuery, includeInactive = false) => {
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
     const cacheKey = CACHE_KEYS.all(
@@ -65,16 +65,21 @@ export const productService = {
       query.search,
     );
 
-    const cached = await cache.get<{
-      items: any[];
-      total: number;
-      page: number;
-      limit: number;
-      totalPages: number;
-    }>(cacheKey);
-    if (cached) return cached;
+    if (!includeInactive) {
+      const cached = await cache.get<{
+        items: any[];
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+      }>(cacheKey);
+      if (cached) return cached;
+    }
 
-    const [items, total] = await productRepository.findAll(query);
+    const [items, total] = await productRepository.findAll(
+      query,
+      includeInactive,
+    );
     const activeDiscounts = await promotionRepository.findActiveDiscounts();
 
     const itemsWithPricing = items.map((item: any) => ({
@@ -90,16 +95,18 @@ export const productService = {
       totalPages: Math.ceil(total / limit),
     };
 
-    await cache.set(cacheKey, result);
+    if (!includeInactive) await cache.set(cacheKey, result);
     return result;
   },
 
-  getById: async (id: number) => {
+  getById: async (id: number, includeInactive = false) => {
     const cacheKey = CACHE_KEYS.single(id);
-    const cached = await cache.get(cacheKey);
-    if (cached) return cached;
+    if (!includeInactive) {
+      const cached = await cache.get(cacheKey);
+      if (cached) return cached;
+    }
 
-    const product = await productRepository.findById(id);
+    const product = await productRepository.findById(id, includeInactive);
     if (!product) throw new AppError("Product not found", 404);
 
     const activeDiscounts = await promotionRepository.findActiveDiscounts();
@@ -108,7 +115,7 @@ export const productService = {
       pricing: getBestPricing(product, activeDiscounts as any),
     };
 
-    await cache.set(cacheKey, productWithPricing);
+    if (!includeInactive) await cache.set(cacheKey, productWithPricing);
     return productWithPricing;
   },
 

@@ -36,15 +36,19 @@ const productInclude = {
 };
 
 export const productRepository = {
-  findAll: async (query: {
-    page?: string;
-    limit?: string;
-    categoryId?: string;
-    search?: string;
-  }) => {
+  findAll: async (
+    query: {
+      page?: string;
+      limit?: string;
+      categoryId?: string;
+      search?: string;
+    },
+    includeInactive = false,
+  ) => {
     const { skip, take } = paginate(query);
     const where = {
       deletedAt: null,
+      ...(!includeInactive && { status: "ACTIVE" as const }),
       ...(query.categoryId && { categoryId: query.categoryId }),
       ...(query.search && {
         OR: [
@@ -66,9 +70,13 @@ export const productRepository = {
     return [items, total] as const;
   },
 
-  findById: (id: number) =>
+  findById: (id: number, includeInactive = false) =>
     prisma.product.findUnique({
-      where: { id, deletedAt: null },
+      where: {
+        id,
+        deletedAt: null,
+        ...(!includeInactive && { status: "ACTIVE" as const }),
+      },
       include: productInclude,
     }),
 
