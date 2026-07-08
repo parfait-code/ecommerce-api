@@ -30,8 +30,11 @@ export const promotionController = {
 
   getBySlug: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
       const result = await promotionService.getBySlug(
         req.params.slug as string,
+        includeInactive,
       );
       respond(res, result);
     } catch (err) {
@@ -51,6 +54,9 @@ export const promotionController = {
   },
 
   // ── Produits affectés ────────────────────────────────────────────────────
+  // Route admin déjà protégée par authGuard+adminGuard — includeInactive forcé à
+  // true : un admin qui consulte une promotion par son id doit toujours la voir,
+  // active ou non, sans avoir à ajouter le paramètre.
   getAffectedProducts: async (
     req: Request,
     res: Response,
@@ -60,6 +66,7 @@ export const promotionController = {
       const result = await promotionService.getAffectedProducts(
         req.params.promotionId as string,
         false,
+        true,
       );
       respond(res, result);
     } catch (err) {
@@ -73,9 +80,12 @@ export const promotionController = {
     next: NextFunction,
   ) => {
     try {
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
       const result = await promotionService.getAffectedProducts(
         req.params.slug as string,
         true,
+        includeInactive,
       );
       respond(res, result);
     } catch (err) {

@@ -50,10 +50,15 @@ export const promotionService = {
     return withDisplayStatus(promotion);
   },
 
-  getBySlug: async (slug: string) => {
+  getBySlug: async (slug: string, includeInactive = false) => {
     const promotion = await promotionRepository.findBySlug(slug);
     if (!promotion) throw new AppError("Promotion not found", 404);
-    return withDisplayStatus(promotion);
+
+    const withStatus = withDisplayStatus(promotion);
+    if (!includeInactive && withStatus.status !== "ACTIVE")
+      throw new AppError("Promotion not found", 404);
+
+    return withStatus;
   },
 
   getCoupons: async (promotionId: string) => {
@@ -70,11 +75,19 @@ export const promotionService = {
   // ── Produits affectés par une promotion ─────────────────────────────────
   // Accepte soit un id, soit un slug (utilisé par les deux routes équivalentes,
   // admin et publique — voir promotion.router.ts).
-  getAffectedProducts: async (idOrSlug: string, bySlug = false) => {
+  getAffectedProducts: async (
+    idOrSlug: string,
+    bySlug = false,
+    includeInactive = false,
+  ) => {
     const promotion = bySlug
       ? await promotionRepository.findBySlug(idOrSlug)
       : await promotionRepository.findById(idOrSlug);
     if (!promotion) throw new AppError("Promotion not found", 404);
+
+    const displayStatus = computeDisplayStatus(promotion);
+    if (!includeInactive && displayStatus !== "ACTIVE")
+      throw new AppError("Promotion not found", 404);
 
     const products = await promotionRepository.findAffectedProducts(
       promotion.id,

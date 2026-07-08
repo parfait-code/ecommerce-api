@@ -2,6 +2,7 @@ import { Router } from "express";
 import { promotionController } from "./promotion.controller";
 import { authGuard } from "../../shared/middlewares/auth-guard";
 import { adminGuard } from "../../shared/middlewares/admin-guard";
+import { optionalAuthGuard } from "../../shared/middlewares/optional-auth-guard";
 import { validate } from "../../shared/middlewares/validate";
 import { upload } from "../../shared/middlewares/multer";
 import {
@@ -16,10 +17,15 @@ const router = Router();
 
 // ── Promotions ────────────────────────────────────────────────────────────────
 router.get("/promotions", authGuard, adminGuard, promotionController.getAll);
-router.get("/promotions/slug/:slug", promotionController.getBySlug);
+router.get(
+  "/promotions/slug/:slug",
+  optionalAuthGuard,
+  promotionController.getBySlug,
+);
 // ── Produits affectés — publique, pour le flux "clic bannière homepage" ──────
 router.get(
   "/promotions/slug/:slug/products",
+  optionalAuthGuard,
   promotionController.getAffectedProductsBySlug,
 );
 router.get("/promotions/active", promotionController.getActive);
