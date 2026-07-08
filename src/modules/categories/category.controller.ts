@@ -40,9 +40,12 @@ export const categoryController = {
 
   getProducts: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
       const result = await categoryService.getProducts(
         req.params.slug as string,
         req.query as { page?: string; limit?: string },
+        includeInactive,
       );
       respond(res, result);
     } catch (err) {

@@ -13,6 +13,7 @@ interface DiscountWithRelations {
   type: DiscountType;
   value: number;
   categoryId: string | null;
+  applicableCategoryIds: string[];
   promotion: PromotionInfo;
   products: { productId: number }[];
 }
@@ -58,8 +59,9 @@ export const getBestPricing = (
 ): PricingInfo => {
   const applicable = activeDiscounts.filter((d) => {
     if (!isPromotionActiveNow(d.promotion)) return false;
-    const matchesCategory =
-      d.categoryId !== null && d.categoryId === product.categoryId;
+    const matchesCategory = d.applicableCategoryIds.includes(
+      product.categoryId,
+    );
     const matchesProduct = d.products.some((p) => p.productId === product.id);
     return matchesCategory || matchesProduct;
   });

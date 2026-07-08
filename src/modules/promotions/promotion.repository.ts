@@ -1,4 +1,5 @@
 import { prisma } from "../../shared/config/database";
+import { categoryRepository } from "../categories/category.repository";
 import {
   CreatePromotionDto,
   UpdatePromotionDto,
@@ -64,13 +65,13 @@ export const promotionRepository = {
 
   // ── Pricing ──────────────────────────────────────────────────────────────
 
-  findActiveDiscounts: () => {
+  findActiveDiscounts: async () => {
     const now = new Date();
-    return prisma.discount.findMany({
+    const discounts = await prisma.discount.findMany({
       where: {
         promotion: {
           isActive: true,
-          status: { not: "CANCELLED" }, // ne plus filtrer sur ACTIVE stocké
+          status: { not: "CANCELLED" },
           startDate: { lte: now },
           endDate: { gte: now },
         },
@@ -87,6 +88,22 @@ export const promotionRepository = {
         products: { select: { productId: true } },
       },
     });
+
+    // Pour chaque discount ciblant une catégorie, résout catégorie + tous ses
+    // descendants — le pricing doit s'appliquer à toute la sous-arborescence.
+    return Promise.all(
+      discounts.map(async (d) => {
+        if (!d.categoryId)
+          return { ...d, applicableCategoryIds: [] as string[] };
+        const descendantIds = await categoryRepository.findDescendantIds(
+          d.categoryId,
+        );
+        return {
+          ...d,
+          applicableCategoryIds: [d.categoryId, ...descendantIds],
+        };
+      }),
+    );
   },
 
   // ── Produits affectés par une promotion ─────────────────────────────────
@@ -103,13 +120,21 @@ export const promotionRepository = {
       },
     });
 
-    const categoryIds = [
+    const directCategoryIds = [
       ...new Set(
         discounts
           .map((d) => d.categoryId)
           .filter((id): id is string => id !== null),
       ),
     ];
+
+    const descendantsByCategory = await Promise.all(
+      directCategoryIds.map((id) => categoryRepository.findDescendantIds(id)),
+    );
+    const categoryIds = [
+      ...new Set([...directCategoryIds, ...descendantsByCategory.flat()]),
+    ];
+
     const directProductIds = [
       ...new Set(discounts.flatMap((d) => d.products.map((p) => p.productId))),
     ];

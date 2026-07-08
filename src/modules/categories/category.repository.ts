@@ -27,21 +27,52 @@ export const categoryRepository = {
       include: categoryInclude,
     }),
 
-  findProducts: (slug: string, query: { page?: string; limit?: string }) => {
+  findProducts: (
+    categoryIds: string[],
+    query: { page?: string; limit?: string },
+    includeInactive = false,
+  ) => {
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
     const skip = (page - 1) * limit;
 
+    const where = {
+      categoryId: { in: categoryIds },
+      deletedAt: null,
+      ...(!includeInactive && { status: "ACTIVE" as const }),
+    };
+
     return Promise.all([
       prisma.product.findMany({
-        where: { category: { slug } },
+        where,
         skip,
         take: limit,
         include: { category: { select: { id: true, name: true, slug: true } } },
         orderBy: { createdAt: "desc" },
       }),
-      prisma.product.count({ where: { category: { slug } } }),
+      prisma.product.count({ where }),
     ]);
+  },
+
+  // Résout tous les descendants (enfants, petits-enfants, ...) d'une catégorie.
+  // Jamais l'inverse : un ciblage sur une catégorie parente couvre ses enfants,
+  // une catégorie enfant ne remonte jamais vers son parent.
+  findDescendantIds: async (categoryId: string): Promise<string[]> => {
+    const result: string[] = [];
+    let currentLevel = [categoryId];
+
+    while (currentLevel.length > 0) {
+      const children = await prisma.category.findMany({
+        where: { parentId: { in: currentLevel } },
+        select: { id: true },
+      });
+      const childIds = children.map((c) => c.id);
+      if (childIds.length === 0) break;
+      result.push(...childIds);
+      currentLevel = childIds;
+    }
+
+    return result;
   },
 
   create: (data: CreateCategoryDto) =>

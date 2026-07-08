@@ -66,18 +66,31 @@ export const categoryService = {
   getProducts: async (
     slug: string,
     query: { page?: string; limit?: string },
+    includeInactive = false,
   ) => {
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
     const cacheKey = CACHE_KEYS.products(slug, page, limit);
-    const cached = await cache.get(cacheKey);
-    if (cached) return cached;
+
+    if (!includeInactive) {
+      const cached = await cache.get(cacheKey);
+      if (cached) return cached;
+    }
 
     const category = await categoryRepository.findBySlug(slug);
-    if (!category || !category.isActive)
+    if (!category || (!includeInactive && !category.isActive))
       throw new AppError("Category not found", 404);
 
-    const [items, total] = await categoryRepository.findProducts(slug, query);
+    const descendantIds = await categoryRepository.findDescendantIds(
+      category.id,
+    );
+    const categoryIds = [category.id, ...descendantIds];
+
+    const [items, total] = await categoryRepository.findProducts(
+      categoryIds,
+      query,
+      includeInactive,
+    );
     const result = {
       category: { id: category.id, name: category.name, slug: category.slug },
       items,
@@ -87,7 +100,7 @@ export const categoryService = {
       totalPages: Math.ceil(total / limit),
     };
 
-    await cache.set(cacheKey, result);
+    if (!includeInactive) await cache.set(cacheKey, result);
     return result;
   },
 

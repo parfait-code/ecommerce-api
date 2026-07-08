@@ -16,7 +16,11 @@ router.get(
   categoryController.getById,
 );
 router.get("/categories/slug/:slug", categoryController.getBySlug);
-router.get("/categories/slug/:slug/products", categoryController.getProducts);
+router.get(
+  "/categories/slug/:slug/products",
+  optionalAuthGuard,
+  categoryController.getProducts,
+);
 router.post(
   "/categories",
   authGuard,
