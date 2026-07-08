@@ -3,6 +3,8 @@ import { CreateInventoryDto, UpdateInventoryDto } from "./inventory.schema";
 import { paginate } from "../../shared/utils/pagination";
 import { eventBus } from "../../shared/events/event-bus";
 
+const LOW_STOCK_THRESHOLD = 10;
+
 const inventoryInclude = {
   product: true,
   warehouse: true,
@@ -24,6 +26,7 @@ export const inventoryRepository = {
   findAll: (query: {
     category?: string;
     location?: string;
+    warehouse_id?: string;
     page?: string;
     limit?: string;
   }) => {
@@ -39,6 +42,7 @@ export const inventoryRepository = {
       ...(query.location && {
         warehouse: { location: { contains: query.location } },
       }),
+      ...(query.warehouse_id && { warehouseId: query.warehouse_id }),
     };
     return Promise.all([
       prisma.inventory.findMany({
@@ -182,14 +186,20 @@ export const inventoryRepository = {
   deleteByProduct: (productId: number) =>
     prisma.inventory.deleteMany({ where: { productId } }),
 
+  // Dupliqué volontairement — même seuil que dans inventory.service.ts et
+  // inventory.listeners.ts (pattern déjà établi dans ce module).
+
   findGroupedByProduct: async (query: {
     category?: string;
-    location?: string;
+    warehouse_id?: string;
+    low_stock?: string;
+    out_of_stock?: string;
     page?: string;
     limit?: string;
   }) => {
     const { skip, take } = paginate(query);
-    const where = {
+
+    const scopeWhere = {
       ...(query.category && {
         product: {
           category: {
@@ -197,15 +207,22 @@ export const inventoryRepository = {
           },
         },
       }),
-      ...(query.location && {
-        warehouse: { location: { contains: query.location } },
-      }),
+      ...(query.warehouse_id && { warehouseId: query.warehouse_id }),
     };
 
-    // Produits distincts correspondant aux filtres, ordonnés pour une
-    // pagination stable, PUIS pagination sur cette liste (pas sur les lignes).
+    // Filtres indépendants — chacun sélectionne un ensemble de PRODUITS distinct.
+    // out_of_stock : lignes à quantité 0.
+    // low_stock : lignes en dessous du seuil MAIS pas encore à 0 (catégorie
+    // distincte de out_of_stock, pas un sur-ensemble).
+    const selectionWhere =
+      query.out_of_stock === "true"
+        ? { ...scopeWhere, quantity: 0 }
+        : query.low_stock === "true"
+          ? { ...scopeWhere, quantity: { lte: LOW_STOCK_THRESHOLD, gt: 0 } }
+          : scopeWhere;
+
     const distinctProducts = await prisma.inventory.findMany({
-      where,
+      where: selectionWhere,
       distinct: ["productId"],
       select: { productId: true },
       orderBy: { productId: "asc" },
@@ -215,30 +232,76 @@ export const inventoryRepository = {
     const pageProductIds = distinctProducts
       .slice(skip, skip + take)
       .map((p) => p.productId);
-
-    if (pageProductIds.length === 0) {
-      return { items: [] as any[], total };
-    }
+    if (pageProductIds.length === 0) return { items: [] as any[], total };
 
     const lines = await prisma.inventory.findMany({
-      where: { ...where, productId: { in: pageProductIds } },
-      include: inventoryInclude,
+      where: {
+        productId: { in: pageProductIds },
+        ...(query.warehouse_id && { warehouseId: query.warehouse_id }),
+      },
+      select: {
+        id: true,
+        productId: true,
+        warehouseId: true,
+        combinationId: true,
+        quantity: true,
+        product: { select: { id: true, name: true, sku: true, status: true } },
+        warehouse: { select: { id: true, name: true } },
+      },
     });
 
     const items = pageProductIds.map((productId) => {
       const productLines = lines.filter((l) => l.productId === productId);
+      const hasVariants = productLines.some((l) => l.combinationId !== null);
+      const totalQuantity = productLines.reduce(
+        (sum, l) => sum + l.quantity,
+        0,
+      );
+
       return {
         product: productLines[0]?.product ?? null,
-        totalQuantity: productLines.reduce((sum, l) => sum + l.quantity, 0),
-        lines: productLines.map((l) => ({
-          id: l.id,
-          warehouseId: l.warehouseId,
-          combinationId: l.combinationId,
-          quantity: l.quantity,
-        })),
+        hasVariants,
+        totalQuantity,
+        warehouseCount: new Set(productLines.map((l) => l.warehouseId)).size,
+        combinationsWithStockCount: hasVariants
+          ? new Set(productLines.map((l) => l.combinationId)).size
+          : 0,
+        lowStockLineCount: productLines.filter(
+          (l) => l.quantity > 0 && l.quantity <= LOW_STOCK_THRESHOLD,
+        ).length,
+        outOfStockLineCount: productLines.filter((l) => l.quantity === 0)
+          .length,
+        lines: hasVariants
+          ? undefined
+          : productLines.map((l) => ({
+              id: l.id,
+              warehouseId: l.warehouseId,
+              warehouse: l.warehouse,
+              quantity: l.quantity,
+            })),
       };
     });
 
     return { items, total };
+  },
+
+  // Drill-down — toutes les lignes d'UN produit (combinaisons × entrepôts),
+  // paginé, SANS filtre additionnel. Pour filtrer, revenir à la liste groupée.
+  findLinesByProduct: (
+    productId: number,
+    query: { page?: string; limit?: string },
+  ) => {
+    const { skip, take } = paginate(query);
+    const where = { productId };
+    return Promise.all([
+      prisma.inventory.findMany({
+        where,
+        skip,
+        take,
+        include: inventoryInclude,
+        orderBy: [{ combinationId: "asc" }, { warehouseId: "asc" }],
+      }),
+      prisma.inventory.count({ where }),
+    ]);
   },
 };

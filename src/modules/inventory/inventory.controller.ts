@@ -9,6 +9,7 @@ export const inventoryController = {
         req.query as {
           category?: string;
           location?: string;
+          warehouse_id?: string;
           page?: string;
           limit?: string;
         },
@@ -30,34 +31,29 @@ export const inventoryController = {
     }
   },
 
-  getLowStock: async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const threshold = Number(req.query.threshold ?? 10);
-      const result = await inventoryService.getLowStock(threshold);
-      respond(res, result);
-    } catch (err) {
-      next(err);
-    }
-  },
-
-  getOutOfStock: async (_req: Request, res: Response, next: NextFunction) => {
-    try {
-      const result = await inventoryService.getOutOfStock();
-      respond(res, result);
-    } catch (err) {
-      next(err);
-    }
-  },
-
   getGrouped: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await inventoryService.getGrouped(
         req.query as {
           category?: string;
-          location?: string;
+          warehouse_id?: string;
+          low_stock?: string;
+          out_of_stock?: string;
           page?: string;
           limit?: string;
         },
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  getProductLines: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await inventoryService.getProductLines(
+        Number(req.params.productId),
+        req.query as { page?: string; limit?: string },
       );
       respond(res, result);
     } catch (err) {

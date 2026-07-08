@@ -16,10 +16,27 @@ export const inventoryService = {
   getAll: async (query: {
     category?: string;
     location?: string;
+    warehouse_id?: string;
     page?: string;
     limit?: string;
   }) => {
     const [items, total] = await inventoryRepository.findAll(query);
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  },
+
+  getProductLines: async (
+    productId: number,
+    query: { page?: string; limit?: string },
+  ) => {
+    const product = await productRepository.findById(productId);
+    if (!product) throw new AppError("Product not found", 404);
+
+    const [items, total] = await inventoryRepository.findLinesByProduct(
+      productId,
+      query,
+    );
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -31,14 +48,13 @@ export const inventoryService = {
     return item;
   },
 
-  getLowStock: (threshold: number) =>
-    inventoryRepository.findLowStock(threshold),
-  getOutOfStock: () => inventoryRepository.findOutOfStock(),
   search: (keyword: string) => inventoryRepository.search(keyword),
 
   getGrouped: async (query: {
     category?: string;
-    location?: string;
+    warehouse_id?: string;
+    low_stock?: string;
+    out_of_stock?: string;
     page?: string;
     limit?: string;
   }) => {

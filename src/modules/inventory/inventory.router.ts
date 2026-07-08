@@ -11,16 +11,31 @@ import {
 
 const router = Router();
 
-router.get("/inventory", authGuard, inventoryController.getAll);
-router.get("/inventory/low-stock", authGuard, inventoryController.getLowStock);
+router.get("/inventory", authGuard, adminGuard, inventoryController.getAll);
 router.get(
-  "/inventory/out-of-stock",
+  "/inventory/search",
   authGuard,
-  inventoryController.getOutOfStock,
+  adminGuard,
+  inventoryController.search,
 );
-router.get("/inventory/search", authGuard, inventoryController.search);
-router.get("/inventory/grouped", authGuard, inventoryController.getGrouped);
-router.get("/inventory/:item_id", authGuard, inventoryController.getById);
+router.get(
+  "/inventory/grouped",
+  authGuard,
+  adminGuard,
+  inventoryController.getGrouped,
+);
+router.get(
+  "/inventory/grouped/:productId",
+  authGuard,
+  adminGuard,
+  inventoryController.getProductLines,
+);
+router.get(
+  "/inventory/:item_id",
+  authGuard,
+  adminGuard,
+  inventoryController.getById,
+);
 router.post(
   "/inventory",
   authGuard,
