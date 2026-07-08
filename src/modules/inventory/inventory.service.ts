@@ -1,6 +1,7 @@
 import { inventoryRepository } from "./inventory.repository";
 import { warehouseRepository } from "../warehouses/warehouse.repository";
 import { productRepository } from "../products/product.repository";
+import { combinationRepository } from "../combinations/combination.repository";
 import {
   CreateInventoryDto,
   UpdateInventoryDto,
@@ -55,13 +56,32 @@ export const inventoryService = {
     const warehouse = await warehouseRepository.findById(dto.warehouse_id);
     if (!warehouse) throw new AppError("Warehouse not found", 404);
 
+    const combinations = await combinationRepository.findByProduct(
+      dto.product_id,
+    );
+    const hasActiveCombinations = combinations.some((c) => c.isActive);
+
+    if (dto.combination_id) {
+      const combination = combinations.find((c) => c.id === dto.combination_id);
+      if (!combination)
+        throw new AppError("Combination not found on this product", 404);
+      if (!combination.isActive)
+        throw new AppError("Cannot add stock to an inactive combination", 400);
+    } else if (hasActiveCombinations) {
+      throw new AppError(
+        "This product has active combinations — stock must be attached to a specific combination, not to the product directly",
+        400,
+      );
+    }
+
     const existing = await inventoryRepository.findByProductAndWarehouse(
       dto.product_id,
       dto.warehouse_id,
+      dto.combination_id,
     );
     if (existing)
       throw new AppError(
-        "Inventory item already exists for this product and warehouse",
+        "Inventory item already exists for this product, warehouse and combination",
         409,
       );
 
@@ -75,14 +95,21 @@ export const inventoryService = {
         productId: dto.product_id,
         warehouseId: dto.warehouse_id,
       },
-      metadata: { quantity: dto.quantity },
+      metadata: {
+        quantity: dto.quantity,
+        combinationId: dto.combination_id ?? null,
+      },
     });
 
     auditLogger.log("STOCK_ADDED", {
       service: "inventory",
       actor: { userId: null, role: "ADMIN" },
       target: { inventoryId: item.id, productId: dto.product_id },
-      metadata: { quantity: dto.quantity, warehouseId: dto.warehouse_id },
+      metadata: {
+        quantity: dto.quantity,
+        warehouseId: dto.warehouse_id,
+        combinationId: dto.combination_id ?? null,
+      },
     });
 
     return item;
@@ -91,6 +118,22 @@ export const inventoryService = {
   update: async (id: string, dto: UpdateInventoryDto) => {
     const item = await inventoryRepository.findById(id);
     if (!item) throw new AppError("Inventory item not found", 404);
+
+    if (dto.warehouse_id && dto.warehouse_id !== item.warehouseId) {
+      const warehouse = await warehouseRepository.findById(dto.warehouse_id);
+      if (!warehouse) throw new AppError("Warehouse not found", 404);
+
+      const existing = await inventoryRepository.findByProductAndWarehouse(
+        item.productId,
+        dto.warehouse_id,
+        item.combinationId ?? undefined,
+      );
+      if (existing)
+        throw new AppError(
+          "Inventory item already exists for this product, warehouse and combination",
+          409,
+        );
+    }
 
     const updated = await inventoryRepository.update(id, dto);
 
@@ -108,7 +151,6 @@ export const inventoryService = {
       metadata: { oldQuantity: item.quantity, newQuantity: dto.quantity },
     });
 
-    // Alertes stock
     if (dto.quantity !== undefined) {
       if (dto.quantity === 0) {
         businessLogger.log("OUT_OF_STOCK", {
@@ -153,10 +195,12 @@ export const inventoryService = {
 
   transfer: async (dto: TransferInventoryDto) => {
     const itemById = await inventoryRepository.findById(dto.item_id);
+    if (!itemById) throw new AppError("Inventory item not found", 404);
 
     const source = await inventoryRepository.findByProductAndWarehouse(
-      itemById!.productId,
+      itemById.productId,
       dto.from_warehouse,
+      itemById.combinationId ?? undefined,
     );
     if (!source) throw new AppError("Source inventory not found", 404);
     if (source.quantity < dto.quantity)
@@ -165,6 +209,7 @@ export const inventoryService = {
     const destination = await inventoryRepository.findByProductAndWarehouse(
       source.productId,
       dto.to_warehouse,
+      source.combinationId ?? undefined,
     );
 
     await inventoryRepository.decrementQuantity(source.id, dto.quantity);
@@ -175,6 +220,7 @@ export const inventoryService = {
       await inventoryRepository.create({
         product_id: source.productId,
         warehouse_id: dto.to_warehouse,
+        combination_id: source.combinationId ?? undefined,
         quantity: dto.quantity,
       });
     }
@@ -187,6 +233,7 @@ export const inventoryService = {
         fromWarehouse: dto.from_warehouse,
         toWarehouse: dto.to_warehouse,
         quantity: dto.quantity,
+        combinationId: source.combinationId ?? null,
       },
     });
 
@@ -198,6 +245,7 @@ export const inventoryService = {
         fromWarehouse: dto.from_warehouse,
         toWarehouse: dto.to_warehouse,
         quantity: dto.quantity,
+        combinationId: source.combinationId ?? null,
       },
     });
 
@@ -205,6 +253,7 @@ export const inventoryService = {
       item_id: dto.item_id,
       from_warehouse: dto.from_warehouse,
       to_warehouse: dto.to_warehouse,
+      combination_id: source.combinationId ?? null,
       quantity: dto.quantity,
     };
   },

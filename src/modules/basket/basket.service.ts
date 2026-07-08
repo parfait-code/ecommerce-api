@@ -1,6 +1,7 @@
 import { basketRepository } from "./basket.repository";
 import { productRepository } from "../products/product.repository";
 import { combinationRepository } from "../combinations/combination.repository";
+import { inventoryRepository } from "../inventory/inventory.repository";
 import {
   AddProductDto,
   UpdateQuantityDto,
@@ -31,6 +32,13 @@ export const basketService = {
     const product = await productRepository.findById(dto.product_id);
     if (!product) throw new AppError("Product not found", 404);
 
+    // product.combinations est déjà filtré isActive:true par productInclude
+    if (!dto.combination_id && product.combinations.length > 0)
+      throw new AppError(
+        "This product requires selecting a combination before adding it to the basket",
+        400,
+      );
+
     if (dto.combination_id) {
       const combination = await combinationRepository.findById(
         dto.combination_id,
@@ -40,6 +48,18 @@ export const basketService = {
       if (!combination.isActive)
         throw new AppError("This combination is not available", 400);
     }
+
+    // Vérification de disponibilité seule — AUCUNE réservation ici, le stock
+    // n'est décrémenté qu'à la commande (order.service.ts::create).
+    const available = await inventoryRepository.sumAvailable(
+      dto.product_id,
+      dto.combination_id ?? null,
+    );
+    if (available < dto.quantity)
+      throw new AppError(
+        `Insufficient stock for product "${product.name}": ${available} available, ${dto.quantity} requested`,
+        400,
+      );
 
     await basketRepository.addItem(
       basketId,
@@ -71,6 +91,16 @@ export const basketService = {
         i.combinationId === (dto.combination_id ?? null),
     );
     if (!item) throw new AppError("Product not in basket", 404);
+
+    const available = await inventoryRepository.sumAvailable(
+      dto.product_id,
+      dto.combination_id ?? null,
+    );
+    if (available < dto.quantity)
+      throw new AppError(
+        `Insufficient stock: ${available} available, ${dto.quantity} requested`,
+        400,
+      );
 
     await basketRepository.updateQuantity(
       basketId,

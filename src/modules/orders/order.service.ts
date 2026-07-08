@@ -189,6 +189,13 @@ export const orderService = {
       const product = await productRepository.findById(Number(item.id));
       if (!product) throw new AppError(`Product ${item.id} not found`, 404);
 
+      // product.combinations est déjà filtré isActive:true
+      if (!item.combinationId && product.combinations.length > 0)
+        throw new AppError(
+          `Product "${product.name}" requires selecting a combination`,
+          400,
+        );
+
       let unitPrice = product.price;
       let combinationSnapshot: Record<string, string> | null = null;
 

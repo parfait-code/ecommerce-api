@@ -9,6 +9,7 @@ import {
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
 import { eventBus } from "../../shared/events/event-bus";
+import { businessLogger } from "../../shared/logger";
 
 const buildOptionsKey = (optionIds: string[]) =>
   [...optionIds].sort().join(":");
@@ -215,11 +216,36 @@ export const combinationService = {
     if (!combination) throw new AppError("Combination not found", 404);
     if (combination.productId !== productId)
       throw new AppError("Combination not found on this product", 404);
-    if (combination.inventory.length > 0)
+
+    const totalQuantity = combination.inventory.reduce(
+      (sum, i) => sum + i.quantity,
+      0,
+    );
+    if (totalQuantity > 0)
       throw new AppError(
-        "Cannot delete a combination that still has inventory entries — remove stock first",
+        `Cannot delete a combination that still has ${totalQuantity} unit(s) in stock — remove stock first`,
         400,
       );
+
+    const affectedBasketItems = await prisma.basketItem.findMany({
+      where: { combinationId: id },
+      select: { basketId: true },
+    });
+
+    if (affectedBasketItems.length > 0) {
+      await prisma.basketItem.deleteMany({ where: { combinationId: id } });
+
+      businessLogger.log("ITEM_REMOVED", {
+        service: "combinations",
+        actor: { userId: null, role: "ADMIN" },
+        target: { productId, combinationId: id } as any,
+        metadata: {
+          reason: "Combination deleted",
+          removedCount: affectedBasketItems.length,
+          basketIds: affectedBasketItems.map((b) => b.basketId),
+        },
+      });
+    }
 
     await combinationRepository.delete(id);
     await cache.del(`products:${productId}`);
