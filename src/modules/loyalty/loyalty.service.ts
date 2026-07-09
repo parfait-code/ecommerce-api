@@ -5,20 +5,35 @@ import { AppError } from "../../shared/utils/app-error";
 
 const POINTS_PER_XAF = 0.01; // 1 point par 100 XAF dépensés
 
+const assertOwnerOrAdmin = (
+  targetUserId: number,
+  callerId: number,
+  isAdmin: boolean,
+): void => {
+  if (!isAdmin && callerId !== targetUserId) {
+    throw new AppError("Forbidden", 403);
+  }
+};
+
 export const loyaltyService = {
-  getBalance: async (userId: number) => {
+  getBalance: async (userId: number, callerId: number, isAdmin: boolean) => {
+    assertOwnerOrAdmin(userId, callerId, isAdmin);
+
     const user = await userRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
     const balance = await loyaltyRepository.getBalance(userId);
     return { userId, balance };
   },
 
-  getHistory: async (userId: number) => {
+  getHistory: async (userId: number, callerId: number, isAdmin: boolean) => {
+    assertOwnerOrAdmin(userId, callerId, isAdmin);
+
     const user = await userRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
     return loyaltyRepository.findByUser(userId);
   },
 
+  // Usage interne (event listeners order.service / return.listeners) — pas de contrôle d'accès ici
   earnFromOrder: async (
     userId: number,
     orderId: string,
@@ -34,8 +49,6 @@ export const loyaltyService = {
     });
   },
 
-  // R4 — reversal des points gagnés sur une commande dont le retour est complété.
-  // Idempotent : si un reversal a déjà été fait pour cette commande, ne rien refaire.
   reverseForOrder: async (userId: number, orderId: string) => {
     const transactions = await loyaltyRepository.findByOrder(orderId);
 

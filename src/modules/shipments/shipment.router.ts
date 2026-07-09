@@ -27,9 +27,11 @@ router.post(
 );
 router.get("/shipments/:shipmentId", authGuard, shipmentController.getById);
 router.get("/shipments", authGuard, adminGuard, shipmentController.getAll);
+// Corrigé — action transporteur/opérationnelle, réservée admin (comme updateStatus)
 router.post(
   "/shipments/:shipmentId/track",
   authGuard,
+  adminGuard,
   validate(trackingEventSchema),
   shipmentController.addTrackingEvent,
 );

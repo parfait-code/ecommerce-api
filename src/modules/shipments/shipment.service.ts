@@ -21,6 +21,25 @@ const generateEstimatedDelivery = () => {
   return date.toISOString();
 };
 
+/**
+ * Shipment.orderId n'est PAS une relation Prisma (juste un champ texte dans le
+ * schéma) — on doit donc résoudre la commande liée séparément pour vérifier
+ * qu'un client ne peut agir/lire que sur les expéditions de ses propres
+ * commandes. Sans orderId (expédition créée hors commande), seul un admin
+ * peut y accéder.
+ */
+const assertShipmentAccess = async (
+  shipment: { orderId: string | null },
+  userId: number,
+  isAdmin: boolean,
+): Promise<void> => {
+  if (isAdmin) return;
+  if (!shipment.orderId) throw new AppError("Forbidden", 403);
+
+  const order = await orderRepository.findById(shipment.orderId);
+  if (!order || order.userId !== userId) throw new AppError("Forbidden", 403);
+};
+
 export const shipmentService = {
   calculateCost: (dto: ShippingCostDto) => {
     const baseCost = 5;
@@ -75,22 +94,23 @@ export const shipmentService = {
     return shipment;
   },
 
-  getById: async (id: string) => {
+  getById: async (id: string, userId: number, isAdmin: boolean) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
+    await assertShipmentAccess(shipment, userId, isAdmin);
     return shipment;
   },
 
-  // ── Nouveau : visibilité croisée commande → expédition ──
   getByOrder: async (orderId: string, userId: number, isAdmin: boolean) => {
     const order = await orderRepository.findById(orderId);
     if (!order) throw new AppError("Order not found", 404);
     if (!isAdmin && order.userId !== userId)
       throw new AppError("Forbidden", 403);
 
-    return shipmentRepository.findByOrderId(orderId); // null si aucune expédition encore créée
+    return shipmentRepository.findByOrderId(orderId);
   },
 
+  // Réservé admin au niveau router — action opérationnelle transporteur
   addTrackingEvent: async (id: string, dto: TrackingEventDto) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
@@ -106,7 +126,7 @@ export const shipmentService = {
           : "SHIPMENT_SENT",
         {
           service: "shipments",
-          actor: { userId: null, role: "SYSTEM" },
+          actor: { userId: null, role: "ADMIN" },
           target: { shipmentId: id },
           metadata: { location: dto.location, status: dto.shipment_status },
         },
@@ -160,9 +180,11 @@ export const shipmentService = {
     return updated;
   },
 
-  getTracking: async (id: string) => {
+  getTracking: async (id: string, userId: number, isAdmin: boolean) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
+    await assertShipmentAccess(shipment, userId, isAdmin);
+
     return {
       current_status: shipment.status,
       current_location: shipment.trackingEvents[0]?.location ?? null,
@@ -170,9 +192,11 @@ export const shipmentService = {
     };
   },
 
-  cancel: async (id: string) => {
+  cancel: async (id: string, userId: number, isAdmin: boolean) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
+    await assertShipmentAccess(shipment, userId, isAdmin);
+
     if (shipment.status === "CANCELLED")
       throw new AppError("Shipment already cancelled", 400);
 
@@ -180,17 +204,25 @@ export const shipmentService = {
 
     businessLogger.log("SHIPMENT_FAILED", {
       service: "shipments",
-      actor: { userId: null, role: "CUSTOMER" },
+      actor: { userId, role: isAdmin ? "ADMIN" : "CUSTOMER" },
       target: { shipmentId: id },
       metadata: { reason: "Cancelled by user" },
+    });
+
+    eventBus.emit("shipment.status.changed", {
+      shipmentId: id,
+      orderId: shipment.orderId ?? null,
+      fromStatus: shipment.status,
+      toStatus: "CANCELLED" as ShipmentStatus,
     });
 
     return cancelled;
   },
 
-  getLabel: async (shipmentId: string) => {
+  getLabel: async (shipmentId: string, userId: number, isAdmin: boolean) => {
     const shipment = await shipmentRepository.findById(shipmentId);
     if (!shipment) throw new AppError("Shipment not found", 404);
+    await assertShipmentAccess(shipment, userId, isAdmin);
 
     let label = await shipmentRepository.findLabel(shipmentId);
     if (!label) {
@@ -221,9 +253,14 @@ export const shipmentService = {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
-  getPickupRequest: async (id: string) => {
+  // Corrigé — même garde-fou de propriété que cancelPickupRequest juste à côté,
+  // qui l'appliquait déjà (`request.userId !== userId`) alors que cette
+  // méthode-ci ne vérifiait rien.
+  getPickupRequest: async (id: string, userId: number, isAdmin: boolean) => {
     const request = await pickupRepository.findById(id);
     if (!request) throw new AppError("Pickup request not found", 404);
+    if (!isAdmin && request.userId !== userId)
+      throw new AppError("Forbidden", 403);
     return request;
   },
 

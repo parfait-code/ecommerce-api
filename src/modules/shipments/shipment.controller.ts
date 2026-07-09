@@ -34,8 +34,11 @@ export const shipmentController = {
 
   getById: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await shipmentService.getById(
         req.params.shipmentId as string,
+        req.user!.userId,
+        isAdmin,
       );
       respond(res, result);
     } catch (err) {
@@ -69,8 +72,11 @@ export const shipmentController = {
 
   getTracking: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await shipmentService.getTracking(
         req.params.shipmentId as string,
+        req.user!.userId,
+        isAdmin,
       );
       respond(res, result);
     } catch (err) {
@@ -80,8 +86,11 @@ export const shipmentController = {
 
   cancel: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await shipmentService.cancel(
         req.params.shipmentId as string,
+        req.user!.userId,
+        isAdmin,
       );
       respond(res, result);
     } catch (err) {
@@ -91,8 +100,11 @@ export const shipmentController = {
 
   getLabel: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await shipmentService.getLabel(
         req.params.shipmentId as string,
+        req.user!.userId,
+        isAdmin,
       );
       respond(res, result);
     } catch (err) {
@@ -146,8 +158,11 @@ export const shipmentController = {
 
   getPickupRequest: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await shipmentService.getPickupRequest(
         req.params.requestId as string,
+        req.user!.userId,
+        isAdmin,
       );
       respond(res, result);
     } catch (err) {
