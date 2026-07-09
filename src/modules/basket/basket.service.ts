@@ -10,10 +10,15 @@ import {
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
 
-const findOwnedBasket = async (basketId: string, userId: number) => {
+const findOwnedBasket = async (
+  basketId: string,
+  userId: number,
+  isAdmin: boolean,
+) => {
   const basket = await basketRepository.findById(basketId);
   if (!basket) throw new AppError("Basket not found", 404);
-  if (basket.userId !== userId) throw new AppError("Forbidden", 403);
+  if (!isAdmin && basket.userId !== userId)
+    throw new AppError("Forbidden", 403);
   return basket;
 };
 
@@ -26,11 +31,16 @@ export const basketService = {
 
   create: (userId: number) => basketService.getOrCreateForUser(userId),
 
-  getById: async (basketId: string, userId: number) =>
-    findOwnedBasket(basketId, userId),
+  getById: async (basketId: string, userId: number, isAdmin: boolean) =>
+    findOwnedBasket(basketId, userId, isAdmin),
 
-  addProduct: async (basketId: string, userId: number, dto: AddProductDto) => {
-    const basket = await findOwnedBasket(basketId, userId);
+  addProduct: async (
+    basketId: string,
+    userId: number,
+    isAdmin: boolean,
+    dto: AddProductDto,
+  ) => {
+    const basket = await findOwnedBasket(basketId, userId, isAdmin);
 
     const product = await productRepository.findById(dto.product_id);
     if (!product) throw new AppError("Product not found", 404);
@@ -84,9 +94,10 @@ export const basketService = {
   updateQuantity: async (
     basketId: string,
     userId: number,
+    isAdmin: boolean,
     dto: UpdateQuantityDto,
   ) => {
-    const basket = await findOwnedBasket(basketId, userId);
+    const basket = await findOwnedBasket(basketId, userId, isAdmin);
 
     const item = basket.items.find(
       (i) =>
@@ -117,9 +128,10 @@ export const basketService = {
   removeProduct: async (
     basketId: string,
     userId: number,
+    isAdmin: boolean,
     dto: RemoveProductDto,
   ) => {
-    const basket = await findOwnedBasket(basketId, userId);
+    const basket = await findOwnedBasket(basketId, userId, isAdmin);
 
     const item = basket.items.find(
       (i) =>

@@ -23,9 +23,11 @@ export const basketController = {
 
   getById: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await basketService.getById(
         req.params.basket_id as string,
         req.user!.userId,
+        isAdmin,
       );
       respond(res, result);
     } catch (err) {
@@ -35,9 +37,11 @@ export const basketController = {
 
   addProduct: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await basketService.addProduct(
         req.params.basket_id as string,
         req.user!.userId,
+        isAdmin,
         req.body,
       );
       respond(res, result);
@@ -48,9 +52,11 @@ export const basketController = {
 
   updateQuantity: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await basketService.updateQuantity(
         req.params.basket_id as string,
         req.user!.userId,
+        isAdmin,
         req.body,
       );
       respond(res, result);
@@ -61,9 +67,11 @@ export const basketController = {
 
   removeProduct: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await basketService.removeProduct(
         req.params.basket_id as string,
         req.user!.userId,
+        isAdmin,
         req.body,
       );
       respond(res, result);
