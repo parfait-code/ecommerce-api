@@ -48,7 +48,12 @@ export const inventoryService = {
     return item;
   },
 
-  search: (keyword: string) => inventoryRepository.search(keyword),
+  search: async (keyword: string, query: { page?: string; limit?: string }) => {
+    const [items, total] = await inventoryRepository.search(keyword, query);
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  },
 
   getGrouped: async (query: {
     category?: string;

@@ -108,11 +108,22 @@ export const inventoryRepository = {
       include: inventoryInclude,
     }),
 
-  search: (keyword: string) =>
-    prisma.inventory.findMany({
-      where: { product: { name: { contains: keyword, mode: "insensitive" } } },
-      include: inventoryInclude,
-    }),
+  search: (keyword: string, query: { page?: string; limit?: string }) => {
+    const { skip, take } = paginate(query);
+    const where = {
+      product: { name: { contains: keyword, mode: "insensitive" as const } },
+    };
+    return Promise.all([
+      prisma.inventory.findMany({
+        where,
+        skip,
+        take,
+        include: inventoryInclude,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.inventory.count({ where }),
+    ]);
+  },
 
   create: (data: CreateInventoryDto) =>
     prisma.inventory.create({
