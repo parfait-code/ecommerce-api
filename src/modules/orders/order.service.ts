@@ -174,6 +174,8 @@ export const orderService = {
 
     const orderItems: {
       productId: number;
+      productName: string;
+      productSku: string;
       combinationId?: string | null;
       combinationSnapshot?: Record<string, string> | null;
       quantity: number;
