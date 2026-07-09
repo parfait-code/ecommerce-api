@@ -68,6 +68,10 @@ const releaseReservedStock = async (orderId: string) => {
   const reservations = await orderReservationRepository.findByOrder(orderId);
 
   for (const r of reservations) {
+    // Produit supprimé (hard delete) depuis la réservation — sa ligne
+    // d'inventaire a déjà été supprimée en cascade, rien à restituer.
+    if (r.orderItem.productId === null) continue;
+
     const invRow = await inventoryRepository.findByProductAndWarehouse(
       r.orderItem.productId,
       r.warehouseId,
@@ -286,31 +290,48 @@ export const orderService = {
     );
 
     try {
-      for (const orderItem of order.items) {
-        const rows = await inventoryRepository.findAvailableOrdered(
-          orderItem.productId,
-          orderItem.combinationId ?? null,
-        );
-        let remaining = orderItem.quantity;
+      try {
+        for (const orderItem of order.items) {
+          // Invariant : le produit vient d'être vérifié existant juste avant
+          // (productRepository.findById plus haut dans cette même méthode) —
+          // productId ne peut pas être null ici. Garde explicite pour TS et
+          // pour détecter toute violation future de cet invariant.
+          if (orderItem.productId === null) {
+            throw new AppError(
+              `Order item ${orderItem.id} has no associated product`,
+              500,
+            );
+          }
 
-        for (const row of rows) {
-          if (remaining <= 0) break;
-          const take = Math.min(row.quantity, remaining);
-          await inventoryRepository.decrementQuantity(row.id, take);
-          await orderReservationRepository.create(
-            orderItem.id,
-            row.warehouseId,
-            take,
+          const rows = await inventoryRepository.findAvailableOrdered(
+            orderItem.productId,
+            orderItem.combinationId ?? null,
           );
-          remaining -= take;
-        }
+          let remaining = orderItem.quantity;
 
-        if (remaining > 0) {
-          throw new AppError(
-            `Stock became unavailable while placing the order for product ${orderItem.productId}`,
-            409,
-          );
+          for (const row of rows) {
+            if (remaining <= 0) break;
+            const take = Math.min(row.quantity, remaining);
+            await inventoryRepository.decrementQuantity(row.id, take);
+            await orderReservationRepository.create(
+              orderItem.id,
+              row.warehouseId,
+              take,
+            );
+            remaining -= take;
+          }
+
+          if (remaining > 0) {
+            throw new AppError(
+              `Stock became unavailable while placing the order for product ${orderItem.productId}`,
+              409,
+            );
+          }
         }
+      } catch (err) {
+        await releaseReservedStock(order.id);
+        await orderRepository.delete(order.id);
+        throw err;
       }
     } catch (err) {
       await releaseReservedStock(order.id);
