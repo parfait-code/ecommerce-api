@@ -2,6 +2,7 @@ import { Router } from "express";
 import { attributeController } from "./attribute.controller";
 import { authGuard } from "../../shared/middlewares/auth-guard";
 import { adminGuard } from "../../shared/middlewares/admin-guard";
+import { optionalAuthGuard } from "../../shared/middlewares/optional-auth-guard";
 import { validate } from "../../shared/middlewares/validate";
 import {
   createAttributeDefinitionSchema,
@@ -13,10 +14,10 @@ import {
 
 const router = Router();
 
-// ── Definitions par catégorie ─────────────────────────────────────────────────
+// ── Definitions par catégorie — lecture publique (nécessaire aux filtres catégorie / fiche produit) ──
 router.get(
   "/categories/:categoryId/attributes",
-  authGuard,
+  optionalAuthGuard,
   attributeController.getByCategory,
 );
 
@@ -30,7 +31,7 @@ router.post(
 
 router.get(
   "/attributes/:definitionId",
-  authGuard,
+  optionalAuthGuard,
   attributeController.getDefinitionById,
 );
 

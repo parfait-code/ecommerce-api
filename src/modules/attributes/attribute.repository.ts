@@ -65,11 +65,35 @@ export const attributeRepository = {
   findOptionById: (id: string) =>
     prisma.attributeOption.findUnique({ where: { id } }),
 
+  // Nouveau — vérification d'unicité (attributeDefinitionId + value) explicite,
+  // pour retourner un 409 propre au lieu de laisser remonter l'erreur Prisma P2002.
+  findOptionByValue: (attributeDefinitionId: string, value: string) =>
+    prisma.attributeOption.findUnique({
+      where: { attributeDefinitionId_value: { attributeDefinitionId, value } },
+    }),
+
   updateOption: (id: string, data: UpdateAttributeOptionDto) =>
     prisma.attributeOption.update({ where: { id }, data }),
 
   deleteOption: (id: string) =>
     prisma.attributeOption.delete({ where: { id } }),
+
+  // Nouveau — détecte si une option est utilisée par au moins une combinaison
+  // ayant encore du stock actif (quantity > 0), pour bloquer la suppression
+  // dans ce cas au lieu de corrompre silencieusement la combinaison.
+  findCombinationsWithStockUsingOption: (optionId: string) =>
+    prisma.productCombinationValue.findMany({
+      where: { attributeOptionId: optionId },
+      include: {
+        combination: {
+          select: {
+            id: true,
+            optionsKey: true,
+            inventory: { select: { quantity: true } },
+          },
+        },
+      },
+    }),
 
   // ── Product attribute values ──────────────────────────────────────────────
 

@@ -75,16 +75,69 @@ export const attributeService = {
     const definition =
       await attributeRepository.findDefinitionById(definitionId);
     if (!definition) throw new AppError("Attribute definition not found", 404);
+
+    const existing = await attributeRepository.findOptionByValue(
+      definitionId,
+      dto.value,
+    );
+    if (existing)
+      throw new AppError(
+        "An option with this value already exists for this attribute",
+        409,
+      );
+
     return attributeRepository.createOption(definitionId, dto);
   },
 
   updateOption: async (optionId: string, dto: UpdateAttributeOptionDto) => {
     const option = await attributeRepository.findOptionById(optionId);
     if (!option) throw new AppError("Option not found", 404);
+
+    // Corrigé — vérification explicite d'unicité (attributeDefinitionId + value)
+    // avant l'update, pour retourner un 409 propre plutôt que de laisser
+    // remonter l'erreur Prisma P2002 brute en 500.
+    if (dto.value && dto.value !== option.value) {
+      const existing = await attributeRepository.findOptionByValue(
+        option.attributeDefinitionId,
+        dto.value,
+      );
+      if (existing && existing.id !== optionId)
+        throw new AppError(
+          "An option with this value already exists for this attribute",
+          409,
+        );
+    }
+
     return attributeRepository.updateOption(optionId, dto);
   },
 
   deleteOption: async (optionId: string) => {
+    // Corrigé — l'existence de l'option est désormais vérifiée avant la
+    // suppression (comme deleteDefinition), au lieu de laisser Prisma
+    // remonter une erreur brute (500) sur un ID invalide.
+    const option = await attributeRepository.findOptionById(optionId);
+    if (!option) throw new AppError("Option not found", 404);
+
+    // Corrigé — intégrité des données : une option supprimée cascade la
+    // suppression de ProductCombinationValue (onDelete: Cascade), ce qui
+    // corromprait silencieusement toute combinaison utilisant cette option
+    // si elle a encore du stock actif (elle perdrait sa valeur d'attribut
+    // tout en gardant son stock/historique de commandes). On applique le
+    // même garde-fou que pour la suppression directe d'une combinaison.
+    const usages =
+      await attributeRepository.findCombinationsWithStockUsingOption(optionId);
+    const withStock = usages.filter(
+      (u) =>
+        u.combination.inventory.reduce((sum, i) => sum + i.quantity, 0) > 0,
+    );
+
+    if (withStock.length > 0) {
+      throw new AppError(
+        `Cannot delete option: it is used by ${withStock.length} combination(s) that still have stock — remove stock from those combinations first`,
+        400,
+      );
+    }
+
     await attributeRepository.deleteOption(optionId);
     return { message: "Option deleted successfully" };
   },
