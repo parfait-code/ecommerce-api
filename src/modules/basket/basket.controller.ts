@@ -3,7 +3,6 @@ import { basketService } from "./basket.service";
 import { respond } from "../../shared/utils/response";
 
 export const basketController = {
-  // GET /user/basket — récupère (ou crée) le panier unique de l'utilisateur connecté
   getMine: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await basketService.getOrCreateForUser(req.user!.userId);
@@ -26,6 +25,7 @@ export const basketController = {
     try {
       const result = await basketService.getById(
         req.params.basket_id as string,
+        req.user!.userId,
       );
       respond(res, result);
     } catch (err) {
@@ -37,6 +37,7 @@ export const basketController = {
     try {
       const result = await basketService.addProduct(
         req.params.basket_id as string,
+        req.user!.userId,
         req.body,
       );
       respond(res, result);
@@ -49,6 +50,7 @@ export const basketController = {
     try {
       const result = await basketService.updateQuantity(
         req.params.basket_id as string,
+        req.user!.userId,
         req.body,
       );
       respond(res, result);
@@ -61,6 +63,7 @@ export const basketController = {
     try {
       const result = await basketService.removeProduct(
         req.params.basket_id as string,
+        req.user!.userId,
         req.body,
       );
       respond(res, result);

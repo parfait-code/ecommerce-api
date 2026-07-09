@@ -10,6 +10,13 @@ import {
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
 
+const findOwnedBasket = async (basketId: string, userId: number) => {
+  const basket = await basketRepository.findById(basketId);
+  if (!basket) throw new AppError("Basket not found", 404);
+  if (basket.userId !== userId) throw new AppError("Forbidden", 403);
+  return basket;
+};
+
 export const basketService = {
   getOrCreateForUser: async (userId: number) => {
     const existing = await basketRepository.findByUserId(userId);
@@ -19,20 +26,15 @@ export const basketService = {
 
   create: (userId: number) => basketService.getOrCreateForUser(userId),
 
-  getById: async (basketId: string) => {
-    const basket = await basketRepository.findById(basketId);
-    if (!basket) throw new AppError("Basket not found", 404);
-    return basket;
-  },
+  getById: async (basketId: string, userId: number) =>
+    findOwnedBasket(basketId, userId),
 
-  addProduct: async (basketId: string, dto: AddProductDto) => {
-    const basket = await basketRepository.findById(basketId);
-    if (!basket) throw new AppError("Basket not found", 404);
+  addProduct: async (basketId: string, userId: number, dto: AddProductDto) => {
+    const basket = await findOwnedBasket(basketId, userId);
 
     const product = await productRepository.findById(dto.product_id);
     if (!product) throw new AppError("Product not found", 404);
 
-    // product.combinations est déjà filtré isActive:true par productInclude
     if (!dto.combination_id && product.combinations.length > 0)
       throw new AppError(
         "This product requires selecting a combination before adding it to the basket",
@@ -49,8 +51,6 @@ export const basketService = {
         throw new AppError("This combination is not available", 400);
     }
 
-    // Vérification de disponibilité seule — AUCUNE réservation ici, le stock
-    // n'est décrémenté qu'à la commande (order.service.ts::create).
     const available = await inventoryRepository.sumAvailable(
       dto.product_id,
       dto.combination_id ?? null,
@@ -81,9 +81,12 @@ export const basketService = {
     return basketRepository.findById(basketId);
   },
 
-  updateQuantity: async (basketId: string, dto: UpdateQuantityDto) => {
-    const basket = await basketRepository.findById(basketId);
-    if (!basket) throw new AppError("Basket not found", 404);
+  updateQuantity: async (
+    basketId: string,
+    userId: number,
+    dto: UpdateQuantityDto,
+  ) => {
+    const basket = await findOwnedBasket(basketId, userId);
 
     const item = basket.items.find(
       (i) =>
@@ -111,9 +114,12 @@ export const basketService = {
     return basketRepository.findById(basketId);
   },
 
-  removeProduct: async (basketId: string, dto: RemoveProductDto) => {
-    const basket = await basketRepository.findById(basketId);
-    if (!basket) throw new AppError("Basket not found", 404);
+  removeProduct: async (
+    basketId: string,
+    userId: number,
+    dto: RemoveProductDto,
+  ) => {
+    const basket = await findOwnedBasket(basketId, userId);
 
     const item = basket.items.find(
       (i) =>

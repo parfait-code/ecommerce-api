@@ -254,13 +254,20 @@ export const paymentService = {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
-  getById: async (id: string) => {
+  getById: async (id: string, userId: number, isAdmin: boolean) => {
     const payment = await paymentRepository.findById(id);
     if (!payment) throw new AppError("Payment not found", 404);
+    if (!isAdmin && payment.userId !== userId)
+      throw new AppError("Forbidden", 403);
     return payment;
   },
 
-  getByOrderId: async (orderId: string) => {
+  getByOrderId: async (orderId: string, userId: number, isAdmin: boolean) => {
+    const order = await orderRepository.findById(orderId);
+    if (!order) throw new AppError("Order not found", 404);
+    if (!isAdmin && order.userId !== userId)
+      throw new AppError("Forbidden", 403);
+
     return paymentRepository.findByOrderId(orderId);
   },
 };

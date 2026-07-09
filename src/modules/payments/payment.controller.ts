@@ -12,7 +12,6 @@ export const paymentController = {
     }
   },
 
-  // Conservé pour compat ascendante — voir aussi PUT /payments/:payment_id/status
   complete: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await paymentService.complete(
@@ -60,8 +59,11 @@ export const paymentController = {
 
   getById: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await paymentService.getById(
         req.params.payment_id as string,
+        req.user!.userId,
+        isAdmin,
       );
       respond(res, result);
     } catch (err) {
@@ -71,8 +73,11 @@ export const paymentController = {
 
   getByOrderId: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user!.role === "ADMIN";
       const result = await paymentService.getByOrderId(
         req.params.orderId as string,
+        req.user!.userId,
+        isAdmin,
       );
       respond(res, result);
     } catch (err) {
