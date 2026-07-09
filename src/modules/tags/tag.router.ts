@@ -30,8 +30,6 @@ router.patch(
 router.delete("/tags/:tagId", authGuard, adminGuard, tagController.delete);
 router.put(
   "/product/:productId/tags",
-  authGuard,
-  adminGuard,
   validate(setProductTagsSchema),
   tagController.setProductTags,
 );

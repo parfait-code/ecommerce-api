@@ -10,8 +10,8 @@ import {
 
 const router = Router({ mergeParams: true });
 
-router.get("/", authGuard, combinationController.getByProduct);
-router.get("/selections", authGuard, combinationController.getSelections);
+router.get("/", combinationController.getByProduct);
+router.get("/selections", combinationController.getSelections);
 router.put(
   "/selections/:attributeDefinitionId",
   authGuard,
