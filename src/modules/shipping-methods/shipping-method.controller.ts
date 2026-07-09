@@ -5,8 +5,9 @@ import { respond } from "../../shared/utils/response";
 export const shippingMethodController = {
   getAll: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const onlyActive = req.query.active === "true";
-      respond(res, await shippingMethodService.getAll(onlyActive));
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
+      respond(res, await shippingMethodService.getAll(includeInactive));
     } catch (err) {
       next(err);
     }
@@ -14,9 +15,14 @@ export const shippingMethodController = {
 
   getById: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
       respond(
         res,
-        await shippingMethodService.getById(req.params.methodId as string),
+        await shippingMethodService.getById(
+          req.params.methodId as string,
+          includeInactive,
+        ),
       );
     } catch (err) {
       next(err);

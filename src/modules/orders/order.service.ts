@@ -8,6 +8,7 @@ import { basketRepository } from "../basket/basket.repository";
 import { inventoryRepository } from "../inventory/inventory.repository";
 import { loyaltyService } from "../loyalty/loyalty.service";
 import { promotionRepository } from "../promotions/promotion.repository";
+import { shippingMethodRepository } from "../shipping-methods/shipping-method.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
 import { assertValidTransition } from "./order.state-machine";
 import {
@@ -63,10 +64,6 @@ const resolveCoupon = async (
   return coupon;
 };
 
-/**
- * Libère le stock réservé pour une commande : réincrémente chaque entrepôt
- * exactement de la quantité qui lui avait été retirée, puis efface la trace.
- */
 const releaseReservedStock = async (orderId: string) => {
   const reservations = await orderReservationRepository.findByOrder(orderId);
 
@@ -80,7 +77,6 @@ const releaseReservedStock = async (orderId: string) => {
     if (invRow) {
       await inventoryRepository.incrementQuantity(invRow.id, r.quantity);
     } else {
-      // La ligne d'inventaire a été supprimée entre-temps — on la recrée
       await inventoryRepository.create({
         product_id: r.orderItem.productId,
         warehouse_id: r.warehouseId,
@@ -148,6 +144,19 @@ export const orderService = {
   },
 
   create: async (userId: number, dto: CreateOrderDto) => {
+    // Corrigé — le calculateur (/shipments/cost) vérifiait déjà isActive,
+    // mais rien n'empêchait de construire directement la requête de commande
+    // avec un shippingMethodId désactivé. Contrôle déplacé ici, avant toute
+    // écriture, pour couvrir le chemin réel de création de commande.
+    if (dto.shippingMethodId) {
+      const shippingMethod = await shippingMethodRepository.findById(
+        dto.shippingMethodId,
+      );
+      if (!shippingMethod) throw new AppError("Shipping method not found", 404);
+      if (!shippingMethod.isActive)
+        throw new AppError("This shipping method is not available", 400);
+    }
+
     const activeDiscounts = await promotionRepository.findActiveDiscounts();
 
     let sourceItems: { id: string; combinationId?: string; quantity: number }[];
@@ -191,7 +200,6 @@ export const orderService = {
       const product = await productRepository.findById(Number(item.id));
       if (!product) throw new AppError(`Product ${item.id} not found`, 404);
 
-      // product.combinations est déjà filtré isActive:true
       if (!item.combinationId && product.combinations.length > 0)
         throw new AppError(
           `Product "${product.name}" requires selecting a combination`,
@@ -224,7 +232,6 @@ export const orderService = {
         }
       }
 
-      // ── Vérification de disponibilité : somme sur TOUS les entrepôts, pas un seul ──
       const available = await inventoryRepository.sumAvailable(
         product.id,
         item.combinationId ?? null,
@@ -278,7 +285,6 @@ export const orderService = {
       discountedAmount,
     );
 
-    // ── Réservation FIFO : entrepôt par entrepôt jusqu'à couvrir la quantité demandée ──
     try {
       for (const orderItem of order.items) {
         const rows = await inventoryRepository.findAvailableOrdered(
@@ -300,7 +306,6 @@ export const orderService = {
         }
 
         if (remaining > 0) {
-          // Cas rare : stock pris entre la vérification et la réservation
           throw new AppError(
             `Stock became unavailable while placing the order for product ${orderItem.productId}`,
             409,
@@ -416,9 +421,6 @@ export const orderService = {
       await loyaltyService.earnFromOrder(order.userId, id, order.totalAmount);
     }
 
-    // Émission de l'événement — les listeners (payment auto-complete R1, etc.)
-    // réagissent de façon découplée, sans que order.service n'ait besoin de
-    // les connaître.
     eventBus.emit("order.status.changed", {
       orderId: id,
       userId: order.userId,

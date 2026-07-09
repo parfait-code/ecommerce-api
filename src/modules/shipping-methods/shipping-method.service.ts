@@ -7,11 +7,19 @@ import {
 import { AppError } from "../../shared/utils/app-error";
 
 export const shippingMethodService = {
-  getAll: (onlyActive = false) => shippingMethodRepository.findAll(onlyActive),
+  // Corrigé — logique inversée : par défaut, seules les méthodes actives
+  // sont visibles. `includeInactive` n'est honoré que si le contrôleur l'a
+  // déjà restreint aux admins (voir shipping-method.controller.ts).
+  getAll: (includeInactive = false) =>
+    shippingMethodRepository.findAll(!includeInactive),
 
-  getById: async (id: string) => {
+  // Corrigé — getById ne filtrait pas isActive du tout ; un client pouvait
+  // consulter et donc potentiellement sélectionner une méthode désactivée.
+  getById: async (id: string, includeInactive = false) => {
     const method = await shippingMethodRepository.findById(id);
     if (!method) throw new AppError("Shipping method not found", 404);
+    if (!includeInactive && !method.isActive)
+      throw new AppError("Shipping method not found", 404);
     return method;
   },
 
