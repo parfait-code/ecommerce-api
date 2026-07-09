@@ -2,6 +2,7 @@ import { productRepository } from "./product.repository";
 import { combinationRepository } from "../combinations/combination.repository";
 import { attributeRepository } from "../attributes/attribute.repository";
 import { promotionRepository } from "../promotions/promotion.repository";
+import { categoryRepository } from "../categories/category.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
 import { inventoryRepository } from "../inventory/inventory.repository";
 import { CreateProductDto, UpdateProductDto } from "./product.schema";
@@ -120,9 +121,11 @@ export const productService = {
   },
 
   create: async (dto: CreateProductDto) => {
+    const category = await categoryRepository.findById(dto.categoryId);
+    if (!category) throw new AppError("Category not found", 404);
+
     // Un produit naît toujours en DRAFT — il ne peut avoir d'attributs
-    // renseignés avant d'exister, donc jamais ACTIVE à la création,
-    // quelle que soit la valeur envoyée par le client.
+    // renseignés avant d'exister, donc jamais ACTIVE à la création.
     const product = await productRepository.create({
       ...dto,
       status: ProductStatus.DRAFT,
@@ -204,16 +207,17 @@ export const productService = {
   },
 
   delete: async (id: number) => {
-    const product = await productRepository.findById(id);
+    const product = await productRepository.findById(id, true);
     if (!product) throw new AppError("Product not found", 404);
 
-    // Cascade — un produit soft-supprimé ne doit plus immobiliser de fichiers
-    // R2 ni de lignes de stock consultables/gérables (voir resolve.md #3).
+    // Les lignes DB liées (images, combinaisons, avis, stock, panier, wishlist,
+    // tags, discounts) sont supprimées automatiquement en cascade par le schéma
+    // dès que la ligne Product disparaît réellement. Les OrderItem historiques
+    // ne sont PAS supprimés : leur productId passe à NULL (onDelete: SetNull),
+    // et productName/productSku conservent la trace pour l'historique de commande.
     for (const image of product.images) {
       await deleteImage(image.url);
     }
-    await productRepository.deleteImagesByProduct(id);
-    await inventoryRepository.deleteByProduct(id);
 
     await productRepository.delete(id);
     await cache.del(CACHE_KEYS.single(id));
@@ -223,7 +227,7 @@ export const productService = {
       service: "products",
       actor: { userId: null, role: "ADMIN" },
       target: { productId: id },
-      metadata: { name: product.name },
+      metadata: { name: product.name, sku: product.sku },
     });
 
     auditLogger.log("PRODUCT_DELETED", {

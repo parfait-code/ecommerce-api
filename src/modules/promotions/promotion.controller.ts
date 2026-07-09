@@ -9,7 +9,73 @@ export const promotionController = {
   getAll: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await promotionService.getAll(
-        req.query as { status?: string; isActive?: string },
+        req.query as {
+          status?: string;
+          isActive?: string;
+          page?: string;
+          limit?: string;
+        },
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  getActive: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await promotionService.getActive(
+        req.query as { page?: string; limit?: string },
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  getCoupons: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await promotionService.getCoupons(
+        req.params.promotionId as string,
+        req.query as { page?: string; limit?: string },
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  getAffectedProducts: async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const result = await promotionService.getAffectedProducts(
+        req.params.promotionId as string,
+        false,
+        true,
+        req.query as { page?: string; limit?: string },
+      );
+      respond(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  getAffectedProductsBySlug: async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
+      const result = await promotionService.getAffectedProducts(
+        req.params.slug as string,
+        true,
+        includeInactive,
+        req.query as { page?: string; limit?: string },
       );
       respond(res, result);
     } catch (err) {
@@ -36,66 +102,6 @@ export const promotionController = {
         req.params.slug as string,
         includeInactive,
       );
-      respond(res, result);
-    } catch (err) {
-      next(err);
-    }
-  },
-
-  getCoupons: async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const result = await promotionService.getCoupons(
-        req.params.promotionId as string,
-      );
-      respond(res, result);
-    } catch (err) {
-      next(err);
-    }
-  },
-
-  // ── Produits affectés ────────────────────────────────────────────────────
-  // Route admin déjà protégée par authGuard+adminGuard — includeInactive forcé à
-  // true : un admin qui consulte une promotion par son id doit toujours la voir,
-  // active ou non, sans avoir à ajouter le paramètre.
-  getAffectedProducts: async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
-    try {
-      const result = await promotionService.getAffectedProducts(
-        req.params.promotionId as string,
-        false,
-        true,
-      );
-      respond(res, result);
-    } catch (err) {
-      next(err);
-    }
-  },
-
-  getAffectedProductsBySlug: async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
-    try {
-      const isAdmin = req.user?.role === "ADMIN";
-      const includeInactive = isAdmin && req.query.includeInactive === "true";
-      const result = await promotionService.getAffectedProducts(
-        req.params.slug as string,
-        true,
-        includeInactive,
-      );
-      respond(res, result);
-    } catch (err) {
-      next(err);
-    }
-  },
-
-  getActive: async (_req: Request, res: Response, next: NextFunction) => {
-    try {
-      const result = await promotionService.getActive();
       respond(res, result);
     } catch (err) {
       next(err);

@@ -48,7 +48,7 @@ export const tagService = {
   },
 
   setProductTags: async (productId: number, dto: SetProductTagsDto) => {
-    const product = await productRepository.findById(productId);
+    const product = await productRepository.findById(productId, true);
     if (!product) throw new AppError("Product not found", 404);
 
     for (const tagId of dto.tagIds) {
@@ -61,8 +61,11 @@ export const tagService = {
     return result;
   },
 
-  getByProduct: async (productId: number) => {
-    const product = await productRepository.findById(productId);
+  getByProduct: async (productId: number, includeInactive = false) => {
+    const product = await productRepository.findById(
+      productId,
+      includeInactive,
+    );
     if (!product) throw new AppError("Product not found", 404);
     return tagRepository.findByProduct(productId);
   },

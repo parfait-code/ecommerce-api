@@ -49,16 +49,18 @@ export const categoryService = {
   },
 
   // U1 — une catégorie désactivée n'est plus consultable via cette route publique
-  getBySlug: async (slug: string) => {
+  getBySlug: async (slug: string, includeInactive = false) => {
     const cacheKey = CACHE_KEYS.bySlug(slug);
-    const cached = await cache.get(cacheKey);
-    if (cached) return cached;
+    if (!includeInactive) {
+      const cached = await cache.get(cacheKey);
+      if (cached) return cached;
+    }
 
     const category = await categoryRepository.findBySlug(slug);
-    if (!category || !category.isActive)
+    if (!category || (!includeInactive && !category.isActive))
       throw new AppError("Category not found", 404);
 
-    await cache.set(cacheKey, category);
+    if (!includeInactive) await cache.set(cacheKey, category);
     return category;
   },
 
@@ -153,6 +155,14 @@ export const categoryService = {
     if (dto.parentId) {
       if (dto.parentId === id)
         throw new AppError("A category cannot be its own parent", 400);
+
+      const descendantIds = await categoryRepository.findDescendantIds(id);
+      if (descendantIds.includes(dto.parentId))
+        throw new AppError(
+          "A category cannot have one of its own descendants as parent",
+          400,
+        );
+
       const parent = await categoryRepository.findById(dto.parentId);
       if (!parent) throw new AppError("Parent category not found", 404);
     }
@@ -192,9 +202,6 @@ export const categoryService = {
         400,
       );
 
-    // resolve.md #4 — bloque tant que la catégorie est ciblée par au moins
-    // un Discount, quel que soit le statut de la promotion parente, plutôt
-    // que de laisser le FK SetNull créer un Discount orphelin sans cible.
     const discountCount = await prisma.discount.count({
       where: { categoryId: id },
     });
@@ -204,19 +211,34 @@ export const categoryService = {
         400,
       );
 
+    // Les enfants directs sont automatiquement orphelinés (parentId -> null)
+    // par le schéma (onDelete: SetNull sur Category.parent) — supprimer un
+    // parent ne supprime jamais sa descendance. On capture enfants avant
+    // suppression pour invalider leur cache : leur champ `parent` inclus
+    // dans les réponses change silencieusement sinon.
+    const children = category.children;
+
     await categoryRepository.delete(id);
 
     await cache.del(
       CACHE_KEYS.single(id),
       CACHE_KEYS.bySlug(category.slug),
       CACHE_KEYS.all,
+      ...children.flatMap((c) => [
+        CACHE_KEYS.single(c.id),
+        CACHE_KEYS.bySlug(c.slug),
+      ]),
     );
 
     businessLogger.log("CATEGORY_DELETED", {
       service: "categories",
       actor: { userId: null, role: "ADMIN" },
       target: { categoryId: id },
-      metadata: { name: category.name, slug: category.slug },
+      metadata: {
+        name: category.name,
+        slug: category.slug,
+        orphanedChildren: children.length,
+      },
     });
 
     auditLogger.log("CATEGORY_DELETED", {

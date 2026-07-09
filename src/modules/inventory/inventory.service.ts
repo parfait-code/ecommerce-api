@@ -71,7 +71,7 @@ export const inventoryService = {
   },
 
   create: async (dto: CreateInventoryDto) => {
-    const product = await productRepository.findById(dto.product_id);
+    const product = await productRepository.findById(dto.product_id, true);
     if (!product) throw new AppError("Product not found", 404);
 
     const warehouse = await warehouseRepository.findById(dto.warehouse_id);

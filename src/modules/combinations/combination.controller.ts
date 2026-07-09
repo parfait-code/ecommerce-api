@@ -41,11 +41,13 @@ export const combinationController = {
       next(err);
     }
   },
-
   getByProduct: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
       const result = await combinationService.getByProduct(
         Number(req.params.productId),
+        includeInactive,
       );
       respond(res, result);
     } catch (err) {

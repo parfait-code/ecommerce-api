@@ -95,7 +95,7 @@ export const attributeService = {
     productId: number,
     dto: SetProductAttributesDto,
   ) => {
-    const product = await productRepository.findById(productId);
+    const product = await productRepository.findById(productId, true);
     if (!product) throw new AppError("Product not found", 404);
 
     for (const attr of dto.attributes) {

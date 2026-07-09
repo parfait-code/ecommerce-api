@@ -36,12 +36,109 @@ const withDisplayStatus = <
 });
 
 export const promotionService = {
-  getAll: async (query: { status?: string; isActive?: string }) => {
-    const promotions = await promotionRepository.findAll(query);
+  getAll: async (query: {
+    status?: string;
+    isActive?: string;
+    page?: string;
+    limit?: string;
+  }) => {
+    // Le statut affiché est calculé (dates + isActive), pas filtrable/paginable
+    // en SQL. On charge l'ensemble correspondant à isActive, on filtre par
+    // statut calculé en mémoire si demandé, PUIS on pagine en mémoire — pour
+    // garder un total et des pages cohérents avec le filtre appliqué.
+    const promotions = await promotionRepository.findAll({
+      isActive: query.isActive,
+    });
     const withStatus = promotions.map(withDisplayStatus);
-    return query.status
+    const filtered = query.status
       ? withStatus.filter((p) => p.status === query.status)
       : withStatus;
+
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    const total = filtered.length;
+    const items = filtered.slice(
+      (page - 1) * limit,
+      (page - 1) * limit + limit,
+    );
+
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  },
+
+  getActive: async (query: { page?: string; limit?: string }) => {
+    const promotions = await promotionRepository.findAll({ isActive: "true" });
+    const active = promotions
+      .map(withDisplayStatus)
+      .filter((p) => p.status === "ACTIVE")
+      .sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
+
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    const total = active.length;
+    const items = active.slice((page - 1) * limit, (page - 1) * limit + limit);
+
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  },
+
+  getCoupons: async (
+    promotionId: string,
+    query: { page?: string; limit?: string } = {},
+  ) => {
+    const promotion = await promotionRepository.findById(promotionId);
+    if (!promotion) throw new AppError("Promotion not found", 404);
+
+    const [coupons, total] = await promotionRepository.findCouponsByPromotion(
+      promotionId,
+      query,
+    );
+    const items = coupons.map((c) => ({
+      ...c,
+      effectiveIsActive: computeCouponEffectiveStatus(c),
+    }));
+
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  },
+
+  getAffectedProducts: async (
+    idOrSlug: string,
+    bySlug = false,
+    includeInactive = false,
+    query: { page?: string; limit?: string } = {},
+  ) => {
+    const promotion = bySlug
+      ? await promotionRepository.findBySlug(idOrSlug)
+      : await promotionRepository.findById(idOrSlug);
+    if (!promotion) throw new AppError("Promotion not found", 404);
+
+    const displayStatus = computeDisplayStatus(promotion);
+    if (!includeInactive && displayStatus !== "ACTIVE")
+      throw new AppError("Promotion not found", 404);
+
+    const [products, total] = await promotionRepository.findAffectedProducts(
+      promotion.id,
+      query,
+    );
+    const activeDiscounts = await promotionRepository.findActiveDiscounts();
+
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+
+    const items = products.map((product: any) => ({
+      ...product,
+      pricing: getBestPricing(product, activeDiscounts as any),
+    }));
+
+    return {
+      promotionId: promotion.id,
+      promotionName: promotion.name,
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   },
 
   getById: async (id: string) => {
@@ -61,64 +158,9 @@ export const promotionService = {
     return withStatus;
   },
 
-  getCoupons: async (promotionId: string) => {
-    const promotion = await promotionRepository.findById(promotionId);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-    const coupons =
-      await promotionRepository.findCouponsByPromotion(promotionId);
-    return coupons.map((c) => ({
-      ...c,
-      effectiveIsActive: computeCouponEffectiveStatus(c),
-    }));
-  },
-
   // ── Produits affectés par une promotion ─────────────────────────────────
   // Accepte soit un id, soit un slug (utilisé par les deux routes équivalentes,
   // admin et publique — voir promotion.router.ts).
-  getAffectedProducts: async (
-    idOrSlug: string,
-    bySlug = false,
-    includeInactive = false,
-  ) => {
-    const promotion = bySlug
-      ? await promotionRepository.findBySlug(idOrSlug)
-      : await promotionRepository.findById(idOrSlug);
-    if (!promotion) throw new AppError("Promotion not found", 404);
-
-    const displayStatus = computeDisplayStatus(promotion);
-    if (!includeInactive && displayStatus !== "ACTIVE")
-      throw new AppError("Promotion not found", 404);
-
-    const products = await promotionRepository.findAffectedProducts(
-      promotion.id,
-    );
-    const activeDiscounts = await promotionRepository.findActiveDiscounts();
-
-    const productsWithPricing = products.map((product: any) => ({
-      ...product,
-      pricing: getBestPricing(product, activeDiscounts as any),
-    }));
-
-    return {
-      promotionId: promotion.id,
-      promotionName: promotion.name,
-      count: productsWithPricing.length,
-      products: productsWithPricing,
-    };
-  },
-
-  // ── Route publique — promotions actives (storefront) ───────────────────────
-  // Filtre sur le statut CALCULÉ (voir promotion.pricing.ts::computeDisplayStatus),
-  // jamais sur le champ `status` stocké — cohérent avec getAll/getById/getBySlug.
-  // Triées par endDate croissante : celles qui expirent bientôt apparaissent
-  // en premier sur la bannière/section storefront.
-  getActive: async () => {
-    const promotions = await promotionRepository.findAll({ isActive: "true" });
-    return promotions
-      .map(withDisplayStatus)
-      .filter((p) => p.status === "ACTIVE")
-      .sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
-  },
 
   create: async (dto: CreatePromotionDto) => {
     const existingSlug = await promotionRepository.existsBySlug(dto.slug);

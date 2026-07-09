@@ -20,7 +20,7 @@ export const combinationService = {
     attributeDefinitionId: string,
     dto: SetVariantOptionsDto,
   ) => {
-    const product = await productRepository.findById(productId);
+    const product = await productRepository.findById(productId, true);
     if (!product) throw new AppError("Product not found", 404);
 
     const definition = await attributeRepository.findDefinitionById(
@@ -67,7 +67,7 @@ export const combinationService = {
   },
 
   getSelections: async (productId: number) => {
-    const product = await productRepository.findById(productId);
+    const product = await productRepository.findById(productId, true);
     if (!product) throw new AppError("Product not found", 404);
 
     return prisma.productAttributeSelection.findMany({
@@ -80,7 +80,7 @@ export const combinationService = {
   },
 
   generate: async (productId: number) => {
-    const product = await productRepository.findById(productId);
+    const product = await productRepository.findById(productId, true);
     if (!product) throw new AppError("Product not found", 404);
 
     const selections = await prisma.productAttributeSelection.findMany({
@@ -164,8 +164,11 @@ export const combinationService = {
     return combinationRepository.findByProduct(productId);
   },
 
-  getByProduct: async (productId: number) => {
-    const product = await productRepository.findById(productId);
+  getByProduct: async (productId: number, includeInactive = false) => {
+    const product = await productRepository.findById(
+      productId,
+      includeInactive,
+    );
     if (!product) throw new AppError("Product not found", 404);
     return combinationRepository.findByProduct(productId);
   },

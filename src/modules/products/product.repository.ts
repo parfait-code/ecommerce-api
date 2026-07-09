@@ -47,7 +47,6 @@ export const productRepository = {
   ) => {
     const { skip, take } = paginate(query);
     const where = {
-      deletedAt: null,
       ...(!includeInactive && { status: "ACTIVE" as const }),
       ...(query.categoryId && { categoryId: query.categoryId }),
       ...(query.search && {
@@ -74,7 +73,6 @@ export const productRepository = {
     prisma.product.findUnique({
       where: {
         id,
-        deletedAt: null,
         ...(!includeInactive && { status: "ACTIVE" as const }),
       },
       include: productInclude,
@@ -86,8 +84,7 @@ export const productRepository = {
   update: (id: number, data: UpdateProductDto) =>
     prisma.product.update({ where: { id }, data, include: productInclude }),
 
-  delete: (id: number) =>
-    prisma.product.update({ where: { id }, data: { deletedAt: new Date() } }),
+  delete: (id: number) => prisma.product.delete({ where: { id } }),
 
   addImages: (productId: number, urls: string[], combinationId?: string) =>
     prisma.productImage.createMany({

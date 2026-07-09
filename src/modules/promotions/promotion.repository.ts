@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/config/database";
 import { categoryRepository } from "../categories/category.repository";
+import { paginate } from "../../shared/utils/pagination";
 import {
   CreatePromotionDto,
   UpdatePromotionDto,
@@ -111,13 +112,13 @@ export const promotionRepository = {
   // appartenant aux catégories ciblées (Discount.categoryId), sur TOUS les
   // discounts de la promotion, dédoublonnés. Une promotion sans aucun
   // discount (ex: coupon seul, sans ciblage produit) retourne un tableau vide.
-  findAffectedProducts: async (promotionId: string) => {
+  findAffectedProducts: async (
+    promotionId: string,
+    query: { page?: string; limit?: string } = {},
+  ) => {
     const discounts = await prisma.discount.findMany({
       where: { promotionId },
-      select: {
-        categoryId: true,
-        products: { select: { productId: true } },
-      },
+      select: { categoryId: true, products: { select: { productId: true } } },
     });
 
     const directCategoryIds = [
@@ -127,38 +128,44 @@ export const promotionRepository = {
           .filter((id): id is string => id !== null),
       ),
     ];
-
     const descendantsByCategory = await Promise.all(
       directCategoryIds.map((id) => categoryRepository.findDescendantIds(id)),
     );
     const categoryIds = [
       ...new Set([...directCategoryIds, ...descendantsByCategory.flat()]),
     ];
-
     const directProductIds = [
       ...new Set(discounts.flatMap((d) => d.products.map((p) => p.productId))),
     ];
 
     if (categoryIds.length === 0 && directProductIds.length === 0) {
-      return [];
+      return [[], 0] as const;
     }
 
-    return prisma.product.findMany({
-      where: {
-        deletedAt: null,
-        status: "ACTIVE",
-        OR: [
-          ...(categoryIds.length > 0
-            ? [{ categoryId: { in: categoryIds } }]
-            : []),
-          ...(directProductIds.length > 0
-            ? [{ id: { in: directProductIds } }]
-            : []),
-        ],
-      },
-      include: affectedProductInclude,
-      orderBy: { createdAt: "desc" },
-    });
+    const where = {
+      status: "ACTIVE" as const,
+      OR: [
+        ...(categoryIds.length > 0
+          ? [{ categoryId: { in: categoryIds } }]
+          : []),
+        ...(directProductIds.length > 0
+          ? [{ id: { in: directProductIds } }]
+          : []),
+      ],
+    };
+
+    const { skip, take } = paginate(query);
+    const [items, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        skip,
+        take,
+        include: affectedProductInclude,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.product.count({ where }),
+    ]);
+    return [items, total] as const;
   },
 
   create: (data: CreatePromotionDto) =>
@@ -305,21 +312,32 @@ export const promotionRepository = {
 
   findCouponById: (id: string) =>
     prisma.couponCode.findUnique({ where: { id } }),
-  findCouponsByPromotion: (promotionId: string) =>
-    prisma.couponCode.findMany({
-      where: { promotionId },
-      select: {
-        id: true,
-        code: true,
-        maxUses: true,
-        usedCount: true,
-        perUserLimit: true,
-        startDate: true,
-        endDate: true,
-        isActive: true,
-      },
-      orderBy: { createdAt: "desc" },
-    }),
+  findCouponsByPromotion: (
+    promotionId: string,
+    query: { page?: string; limit?: string } = {},
+  ) => {
+    const { skip, take } = paginate(query);
+    const where = { promotionId };
+    return Promise.all([
+      prisma.couponCode.findMany({
+        where,
+        skip,
+        take,
+        select: {
+          id: true,
+          code: true,
+          maxUses: true,
+          usedCount: true,
+          perUserLimit: true,
+          startDate: true,
+          endDate: true,
+          isActive: true,
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.couponCode.count({ where }),
+    ]);
+  },
 
   deleteCoupon: (id: string) => prisma.couponCode.delete({ where: { id } }),
 

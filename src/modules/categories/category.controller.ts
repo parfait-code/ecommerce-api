@@ -31,7 +31,12 @@ export const categoryController = {
 
   getBySlug: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await categoryService.getBySlug(req.params.slug as string);
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
+      const result = await categoryService.getBySlug(
+        req.params.slug as string,
+        includeInactive,
+      );
       respond(res, result);
     } catch (err) {
       next(err);

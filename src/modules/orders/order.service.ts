@@ -240,6 +240,8 @@ export const orderService = {
 
       orderItems.push({
         productId: product.id,
+        productName: product.name,
+        productSku: product.sku,
         combinationId: item.combinationId ?? null,
         combinationSnapshot,
         quantity: item.quantity,

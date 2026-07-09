@@ -150,7 +150,7 @@ model Category {
   metaDescription String?
   isActive        Boolean    @default(true)
   parentId        String?
-  parent          Category?  @relation("subcategories", fields: [parentId], references: [id])
+  parent          Category?  @relation("subcategories", fields: [parentId], references: [id], onDelete: SetNull)
   children        Category[] @relation("subcategories")
   products        Product[]
   discounts       Discount[]
@@ -217,7 +217,6 @@ model Product {
   brand           String?
   metaTitle       String?
   metaDescription String?
-  deletedAt       DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -235,7 +234,6 @@ model Product {
 
   @@index([categoryId])
   @@index([status])
-  @@index([deletedAt])
 }
 
 // ─── ProductImage ─────────────────────────────────────────────────────────────
@@ -428,11 +426,13 @@ model OrderItem {
   id                   String              @id @default(cuid())
   orderId              String
   order                Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId            Int
-  product              Product             @relation(fields: [productId], references: [id])
+  productId            Int?
+  product              Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName          String?             // instantané — survit à la suppression réelle du produit
+  productSku           String?
   combinationId        String?
   combination          ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
-  combinationSnapshot  Json?               // ex: {"Taille":"M","Couleur":"Orange"} — conservé même si l'attribut change après coup
+  combinationSnapshot  Json?
   quantity             Int
   price                Float
   originalPrice        Float

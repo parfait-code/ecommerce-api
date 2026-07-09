@@ -91,6 +91,8 @@ export const orderRepository = {
     totalAmount: number,
     items: {
       productId: number;
+      productName: string;
+      productSku: string;
       combinationId?: string | null;
       combinationSnapshot?: Record<string, string> | null;
       quantity: number;
@@ -117,6 +119,8 @@ export const orderRepository = {
         items: {
           create: items.map((i) => ({
             productId: i.productId,
+            productName: i.productName,
+            productSku: i.productSku,
             combinationId: i.combinationId,
             combinationSnapshot: i.combinationSnapshot as object,
             quantity: i.quantity,

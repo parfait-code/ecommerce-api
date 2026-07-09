@@ -1,12 +1,6 @@
 import { prisma } from "../../shared/config/database";
 import { CreateCategoryDto, UpdateCategoryDto } from "./category.schema";
 
-const categoryInclude = {
-  parent: { select: { id: true, name: true, slug: true } },
-  children: { select: { id: true, name: true, slug: true } },
-  _count: { select: { products: { where: { deletedAt: null } } } },
-};
-
 export const categoryRepository = {
   findAll: (includeInactive = false) =>
     prisma.category.findMany({
@@ -59,6 +53,7 @@ export const categoryRepository = {
   // une catégorie enfant ne remonte jamais vers son parent.
   findDescendantIds: async (categoryId: string): Promise<string[]> => {
     const result: string[] = [];
+    const visited = new Set<string>([categoryId]);
     let currentLevel = [categoryId];
 
     while (currentLevel.length > 0) {
@@ -66,8 +61,11 @@ export const categoryRepository = {
         where: { parentId: { in: currentLevel } },
         select: { id: true },
       });
-      const childIds = children.map((c) => c.id);
+      const childIds = children
+        .map((c) => c.id)
+        .filter((cid) => !visited.has(cid));
       if (childIds.length === 0) break;
+      childIds.forEach((cid) => visited.add(cid));
       result.push(...childIds);
       currentLevel = childIds;
     }
