@@ -1,4 +1,31 @@
-import { prisma } from "../../shared/config/database";
+import {
+  dashboardRepository,
+  buildStatusDict,
+  PRODUCT_STATUSES,
+  ORDER_STATUSES,
+  USER_ROLES,
+} from "./dashboard.repository";
+import { computeDisplayStatus } from "../promotions/promotion.pricing";
+
+const calcTrend = (current: number, previous: number) =>
+  previous === 0 ? 0 : Math.round(((current - previous) / previous) * 100);
+
+const MONTH_LABELS = [
+  "Jan",
+  "Fév",
+  "Mar",
+  "Avr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Aoû",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Déc",
+];
+
+const LOW_STOCK_THRESHOLD = 10; // cohérent avec inventory.service.ts / inventory.listeners.ts
 
 export const dashboardService = {
   getStats: async () => {
@@ -8,64 +35,99 @@ export const dashboardService = {
 
     const [
       totalProducts,
+      productsByStatusRaw,
       addedThisMonth,
+
       totalOrders,
+      ordersByStatusRaw,
       ordersThisMonth,
       ordersLastMonth,
+
       totalUsers,
+      activeUsers,
+      newUsersThisMonth,
+      usersByRoleRaw,
+
       paymentsThisMonth,
       paymentsLastMonth,
-      lowStockCount,
+      paymentsAllTime,
+      pendingCodCount,
+
+      stockByProduct,
+
       shipmentsInProgress,
+      shipmentsThisMonth,
       shipmentsLastMonth,
-      activePromotions,
+      pendingPickupRequests,
+
+      promotionsForStatusCheck,
       couponUsageThisMonth,
       revenueFromCoupons,
+
+      returnsPending,
+      returnsThisMonth,
+
+      reviewAgg,
     ] = await Promise.all([
-      prisma.product.count(),
-      prisma.product.count({ where: { createdAt: { gte: startOfMonth } } }),
-      prisma.order.count(),
-      prisma.order.count({ where: { createdAt: { gte: startOfMonth } } }),
-      prisma.order.count({
-        where: { createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
-      }),
-      prisma.user.count(),
-      prisma.payment.aggregate({
-        where: { createdAt: { gte: startOfMonth }, status: "COMPLETED" },
-        _sum: { amount: true },
-      }),
-      prisma.payment.aggregate({
-        where: {
-          createdAt: { gte: startOfLastMonth, lt: startOfMonth },
-          status: "COMPLETED",
-        },
-        _sum: { amount: true },
-      }),
-      prisma.inventory.count({ where: { quantity: { lte: 10, gt: 0 } } }),
-      prisma.shipment.count({ where: { status: "IN_TRANSIT" } }),
-      prisma.shipment.count({
-        where: {
-          status: "IN_TRANSIT",
-          createdAt: { gte: startOfLastMonth, lt: startOfMonth },
-        },
-      }),
-      prisma.promotion.count({ where: { isActive: true, status: "ACTIVE" } }),
-      prisma.couponCode.aggregate({
-        where: { createdAt: { gte: startOfMonth } },
-        _sum: { usedCount: true },
-      }),
-      prisma.payment.aggregate({
-        where: {
-          createdAt: { gte: startOfMonth },
-          status: "COMPLETED",
-          order: { couponCodeId: { not: null } },
-        },
-        _sum: { amount: true },
-      }),
+      dashboardRepository.countAllProducts(),
+      dashboardRepository.countProductsByStatus(),
+      dashboardRepository.countProductsCreatedSince(startOfMonth),
+
+      dashboardRepository.countAllOrders(),
+      dashboardRepository.countOrdersByStatus(),
+      dashboardRepository.countOrdersCreatedBetween(startOfMonth),
+      dashboardRepository.countOrdersCreatedBetween(
+        startOfLastMonth,
+        startOfMonth,
+      ),
+
+      dashboardRepository.countTotalUsers(),
+      dashboardRepository.countActiveUsers(),
+      dashboardRepository.countNewUsersSince(startOfMonth),
+      dashboardRepository.countUsersByRole(),
+
+      dashboardRepository.sumCompletedPayments(startOfMonth),
+      dashboardRepository.sumCompletedPayments(startOfLastMonth, startOfMonth),
+      dashboardRepository.sumCompletedPayments(),
+      dashboardRepository.countPendingCodPayments(),
+
+      dashboardRepository.stockSumByProduct(),
+
+      dashboardRepository.countShipmentsInTransit(),
+      dashboardRepository.countShipmentsCreatedBetween(startOfMonth, now),
+      dashboardRepository.countShipmentsCreatedBetween(
+        startOfLastMonth,
+        startOfMonth,
+      ),
+      dashboardRepository.countPendingPickupRequests(),
+
+      dashboardRepository.findPromotionsForStatusCheck(),
+      dashboardRepository.sumCouponUsageSince(startOfMonth),
+      dashboardRepository.sumRevenueFromCouponsSince(startOfMonth),
+
+      dashboardRepository.countReturnsByStatus("PENDING"),
+      dashboardRepository.countReturnsCreatedSince(startOfMonth),
+
+      dashboardRepository.reviewStats(),
     ]);
 
-    const calcTrend = (current: number, previous: number) =>
-      previous === 0 ? 0 : Math.round(((current - previous) / previous) * 100);
+    // ── Corrigé — promotions.active ne peut pas se fier au champ `status`
+    // stocké (figé à la création/au dernier toggle manuel) : recalcul via
+    // computeDisplayStatus, comme le fait déjà promotion.service.ts à la lecture.
+    const activePromotionsCount = promotionsForStatusCheck.filter(
+      (p) => computeDisplayStatus(p) === "ACTIVE",
+    ).length;
+
+    // ── Corrigé — agrégation PAR PRODUIT (somme de toutes les lignes
+    // d'inventaire), pas par ligne individuelle, pour un compte low/out of
+    // stock qui reflète le stock réel disponible d'un produit.
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
+    for (const row of stockByProduct) {
+      const total = row._sum.quantity ?? 0;
+      if (total === 0) outOfStockCount++;
+      else if (total <= LOW_STOCK_THRESHOLD) lowStockCount++;
+    }
 
     const paymentAmountThisMonth = paymentsThisMonth._sum.amount ?? 0;
     const paymentAmountLastMonth = paymentsLastMonth._sum.amount ?? 0;
@@ -73,34 +135,61 @@ export const dashboardService = {
     return {
       products: {
         total: totalProducts,
+        byStatus: buildStatusDict(
+          PRODUCT_STATUSES,
+          productsByStatusRaw,
+          "status",
+        ),
         addedThisMonth,
       },
       orders: {
         total: totalOrders,
+        byStatus: buildStatusDict(ORDER_STATUSES, ordersByStatusRaw, "status"),
         thisMonth: ordersThisMonth,
         trend: calcTrend(ordersThisMonth, ordersLastMonth),
       },
       users: {
         total: totalUsers,
-        active: totalUsers,
+        // Corrigé — reflète désormais réellement les comptes actifs
+        // (isActive: true, deletedAt: null), au lieu de dupliquer `total`.
+        active: activeUsers,
+        newThisMonth: newUsersThisMonth,
+        byRole: buildStatusDict(USER_ROLES, usersByRoleRaw, "role"),
       },
       payments: {
         totalAmountThisMonth: paymentAmountThisMonth,
+        totalAmountAllTime: paymentsAllTime._sum.amount ?? 0,
         currency: "XAF",
         trend: calcTrend(paymentAmountThisMonth, paymentAmountLastMonth),
+        pendingCodCount,
       },
       inventory: {
         lowStockCount,
+        outOfStockCount,
       },
       shipments: {
         inProgress: shipmentsInProgress,
-        trend: calcTrend(shipmentsInProgress, shipmentsLastMonth),
+        // Corrigé — trend cohérent (créations ce mois vs mois dernier),
+        // l'ancienne version comparait un snapshot courant à un filtre
+        // historique incohérent (IN_TRANSIT ET créé le mois dernier).
+        trend: calcTrend(shipmentsThisMonth, shipmentsLastMonth),
+        pendingPickupRequests,
       },
       promotions: {
-        active: activePromotions,
+        active: activePromotionsCount,
         couponUsageThisMonth: couponUsageThisMonth._sum.usedCount ?? 0,
         revenueFromCouponsThisMonth: revenueFromCoupons._sum.amount ?? 0,
         currency: "XAF",
+      },
+      returns: {
+        pending: returnsPending,
+        thisMonth: returnsThisMonth,
+      },
+      reviews: {
+        total: reviewAgg._count._all,
+        averageRating: reviewAgg._avg.rating
+          ? Math.round(reviewAgg._avg.rating * 10) / 10
+          : 0,
       },
     };
   },
@@ -109,38 +198,15 @@ export const dashboardService = {
     const year = Number(query.year ?? new Date().getFullYear());
     const period = query.period ?? "monthly";
 
-    const MONTH_LABELS = [
-      "Jan",
-      "Fév",
-      "Mar",
-      "Avr",
-      "Mai",
-      "Jun",
-      "Jul",
-      "Aoû",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Déc",
-    ];
-
     const points = await Promise.all(
       MONTH_LABELS.map(async (label, index) => {
         const start = new Date(year, index, 1);
         const end = new Date(year, index + 1, 1);
 
-        const [agg, orderCount] = await Promise.all([
-          prisma.payment.aggregate({
-            where: {
-              createdAt: { gte: start, lt: end },
-              status: "COMPLETED",
-            },
-            _sum: { amount: true },
-          }),
-          prisma.order.count({
-            where: { createdAt: { gte: start, lt: end } },
-          }),
-        ]);
+        const [agg, orderCount] = await dashboardRepository.salesPointsForMonth(
+          start,
+          end,
+        );
 
         return {
           label,
