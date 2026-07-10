@@ -5,6 +5,7 @@ import { CreateReturnDto, UpdateReturnStatusDto } from "./return.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
 import { eventBus } from "../../shared/events/event-bus";
+import { assertValidReturnTransition } from "./return.state-machine";
 import { ReturnStatus } from "@prisma/client";
 
 export const returnService = {
@@ -77,8 +78,8 @@ export const returnService = {
   ) => {
     const returnRequest = await returnRepository.findById(id);
     if (!returnRequest) throw new AppError("Return request not found", 404);
-    if (returnRequest.status === ReturnStatus.COMPLETED)
-      throw new AppError("This return request is already completed", 400);
+
+    assertValidReturnTransition(returnRequest.status, dto.status);
 
     const updated = await returnRepository.updateStatus(
       id,
