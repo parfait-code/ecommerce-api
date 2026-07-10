@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/config/database";
 import { CreateReviewDto, UpdateReviewDto } from "./review.schema";
+import { paginate } from "../../shared/utils/pagination";
 
 const reviewInclude = {
   user: {
@@ -8,11 +9,30 @@ const reviewInclude = {
 };
 
 export const reviewRepository = {
-  findByProduct: (productId: number) =>
+  findByProduct: (
+    productId: number,
+    query: { page?: string; limit?: string },
+  ) => {
+    const { skip, take } = paginate(query);
+    const where = { productId };
+    return Promise.all([
+      prisma.review.findMany({
+        where,
+        skip,
+        take,
+        include: reviewInclude,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.review.count({ where }),
+    ]);
+  },
+
+  // Utilisé pour le calcul de la moyenne — doit porter sur TOUS les avis,
+  // pas seulement la page courante, sinon average_rating varie selon la page.
+  findAllRatingsByProduct: (productId: number) =>
     prisma.review.findMany({
       where: { productId },
-      include: reviewInclude,
-      orderBy: { createdAt: "desc" },
+      select: { rating: true },
     }),
 
   findById: (id: string) =>

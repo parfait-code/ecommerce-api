@@ -5,21 +5,36 @@ import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
 
 export const reviewService = {
-  getByProduct: async (productId: number) => {
+  getByProduct: async (
+    productId: number,
+    query: { page?: string; limit?: string },
+  ) => {
     const product = await productRepository.findById(productId);
     if (!product) throw new AppError("Product not found", 404);
 
-    const reviews = await reviewRepository.findByProduct(productId);
+    const [reviews, total] = await reviewRepository.findByProduct(
+      productId,
+      query,
+    );
+
+    const allRatings =
+      await reviewRepository.findAllRatingsByProduct(productId);
     const averageRating =
-      reviews.length > 0
-        ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+      allRatings.length > 0
+        ? allRatings.reduce((sum, r) => sum + r.rating, 0) / allRatings.length
         : 0;
+
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
 
     return {
       product_id: productId,
       average_rating: Math.round(averageRating * 10) / 10,
-      total_reviews: reviews.length,
+      total_reviews: total,
       reviews,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     };
   },
 
@@ -67,16 +82,24 @@ export const reviewService = {
     return review;
   },
 
-  update: async (id: string, userId: number, dto: UpdateReviewDto) => {
+  // Bypass admin — même pattern que orders/returns/baskets/shipments :
+  // le propriétaire OU un admin peut agir, sinon 403.
+  update: async (
+    id: string,
+    userId: number,
+    isAdmin: boolean,
+    dto: UpdateReviewDto,
+  ) => {
     const review = await reviewRepository.findById(id);
     if (!review) throw new AppError("Review not found", 404);
-    if (review.userId !== userId) throw new AppError("Forbidden", 403);
+    if (!isAdmin && review.userId !== userId)
+      throw new AppError("Forbidden", 403);
 
     const updated = await reviewRepository.update(id, dto);
 
     businessLogger.log("REVIEW_UPDATED", {
       service: "reviews",
-      actor: { userId, role: "CUSTOMER" },
+      actor: { userId, role: isAdmin ? "ADMIN" : "CUSTOMER" },
       target: { reviewId: id, productId: review.productId },
       metadata: { fields: Object.keys(dto) },
     });
@@ -84,16 +107,17 @@ export const reviewService = {
     return updated;
   },
 
-  delete: async (id: string, userId: number) => {
+  delete: async (id: string, userId: number, isAdmin: boolean) => {
     const review = await reviewRepository.findById(id);
     if (!review) throw new AppError("Review not found", 404);
-    if (review.userId !== userId) throw new AppError("Forbidden", 403);
+    if (!isAdmin && review.userId !== userId)
+      throw new AppError("Forbidden", 403);
 
     await reviewRepository.delete(id);
 
     businessLogger.log("REVIEW_DELETED", {
       service: "reviews",
-      actor: { userId, role: "CUSTOMER" },
+      actor: { userId, role: isAdmin ? "ADMIN" : "CUSTOMER" },
       target: { reviewId: id, productId: review.productId },
     });
 
