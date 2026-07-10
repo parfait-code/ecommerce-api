@@ -619,7 +619,7 @@ model Address {
   id            String   @id @default(cuid())
   userId        Int
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recipientName String
+  recipientName String   @default("")
   phone         String?
   street        String
   addressLine2  String?

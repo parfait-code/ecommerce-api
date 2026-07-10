@@ -11,6 +11,7 @@ import { promotionRepository } from "../promotions/promotion.repository";
 import { shippingMethodRepository } from "../shipping-methods/shipping-method.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
 import { assertValidTransition } from "./order.state-machine";
+import { normalizeCountry } from "../../shared/constants/countries";
 import {
   CreateOrderDto,
   UpdateOrderDto,
@@ -68,8 +69,6 @@ const releaseReservedStock = async (orderId: string) => {
   const reservations = await orderReservationRepository.findByOrder(orderId);
 
   for (const r of reservations) {
-    // Produit supprimé (hard delete) depuis la réservation — sa ligne
-    // d'inventaire a déjà été supprimée en cascade, rien à restituer.
     if (r.orderItem.productId === null) continue;
 
     const invRow = await inventoryRepository.findByProductAndWarehouse(
@@ -148,6 +147,44 @@ export const orderService = {
   },
 
   create: async (userId: number, dto: CreateOrderDto) => {
+    // Nouveau — normalisation pays, même source de vérité que le module
+    // address (shared/constants/countries.ts). Avant ça, un snapshot de
+    // commande pouvait contenir n'importe quelle string en `country`,
+    // y compris des valeurs non reconnues (cf. audit).
+    const normalizedShippingCountry = normalizeCountry(
+      dto.shippingAddress.country,
+    );
+    if (!normalizedShippingCountry)
+      throw new AppError(
+        `"${dto.shippingAddress.country}" is not a supported country`,
+        400,
+      );
+
+    let normalizedBillingCountry: string | undefined;
+    if (dto.billingAddress) {
+      normalizedBillingCountry =
+        normalizeCountry(dto.billingAddress.country) ?? undefined;
+      if (!normalizedBillingCountry)
+        throw new AppError(
+          `"${dto.billingAddress.country}" is not a supported country`,
+          400,
+        );
+    }
+
+    dto = {
+      ...dto,
+      shippingAddress: {
+        ...dto.shippingAddress,
+        country: normalizedShippingCountry,
+      },
+      ...(dto.billingAddress && {
+        billingAddress: {
+          ...dto.billingAddress,
+          country: normalizedBillingCountry!,
+        },
+      }),
+    };
+
     // Corrigé — le calculateur (/shipments/cost) vérifiait déjà isActive,
     // mais rien n'empêchait de construire directement la requête de commande
     // avec un shippingMethodId désactivé. Contrôle déplacé ici, avant toute
@@ -159,6 +196,13 @@ export const orderService = {
       if (!shippingMethod) throw new AppError("Shipping method not found", 404);
       if (!shippingMethod.isActive)
         throw new AppError("This shipping method is not available", 400);
+
+      // Nouveau — rapprochement Address.country ↔ ShippingMethod.zones.
+      if (!shippingMethod.zones.includes(normalizedShippingCountry))
+        throw new AppError(
+          `Shipping method "${shippingMethod.name}" does not deliver to ${normalizedShippingCountry}`,
+          400,
+        );
     }
 
     const activeDiscounts = await promotionRepository.findActiveDiscounts();
@@ -292,10 +336,6 @@ export const orderService = {
     try {
       try {
         for (const orderItem of order.items) {
-          // Invariant : le produit vient d'être vérifié existant juste avant
-          // (productRepository.findById plus haut dans cette même méthode) —
-          // productId ne peut pas être null ici. Garde explicite pour TS et
-          // pour détecter toute violation future de cet invariant.
           if (orderItem.productId === null) {
             throw new AppError(
               `Order item ${orderItem.id} has no associated product`,
@@ -375,6 +415,58 @@ export const orderService = {
     if (!order) throw new AppError("Order not found", 404);
     if (!isAdmin && order.userId !== userId)
       throw new AppError("Forbidden", 403);
+
+    // Nouveau — même normalisation qu'à la création, si l'adresse change.
+    if (dto.shippingAddress) {
+      const normalized = normalizeCountry(dto.shippingAddress.country);
+      if (!normalized)
+        throw new AppError(
+          `"${dto.shippingAddress.country}" is not a supported country`,
+          400,
+        );
+      dto = {
+        ...dto,
+        shippingAddress: { ...dto.shippingAddress, country: normalized },
+      };
+    }
+
+    if (dto.billingAddress) {
+      const normalized = normalizeCountry(dto.billingAddress.country);
+      if (!normalized)
+        throw new AppError(
+          `"${dto.billingAddress.country}" is not a supported country`,
+          400,
+        );
+      dto = {
+        ...dto,
+        billingAddress: { ...dto.billingAddress, country: normalized },
+      };
+    }
+
+    // Nouveau — si la méthode de livraison change (ou si l'adresse change
+    // pour une méthode déjà choisie), on revérifie la couverture de zone.
+    if (dto.shippingMethodId) {
+      const shippingMethod = await shippingMethodRepository.findById(
+        dto.shippingMethodId,
+      );
+      if (!shippingMethod) throw new AppError("Shipping method not found", 404);
+      if (!shippingMethod.isActive)
+        throw new AppError("This shipping method is not available", 400);
+
+      const effectiveCountry =
+        dto.shippingAddress?.country ??
+        (order.shippingAddressSnapshot as { country?: string })?.country;
+
+      if (
+        effectiveCountry &&
+        !shippingMethod.zones.includes(effectiveCountry)
+      ) {
+        throw new AppError(
+          `Shipping method "${shippingMethod.name}" does not deliver to ${effectiveCountry}`,
+          400,
+        );
+      }
+    }
 
     const updated = await orderRepository.update(id, dto);
     await cache.del(CACHE_KEYS.single(id));

@@ -5,16 +5,12 @@ import {
   CalculateShippingDto,
 } from "./shipping-method.schema";
 import { AppError } from "../../shared/utils/app-error";
+import { normalizeCountry } from "../../shared/constants/countries";
 
 export const shippingMethodService = {
-  // Corrigé — logique inversée : par défaut, seules les méthodes actives
-  // sont visibles. `includeInactive` n'est honoré que si le contrôleur l'a
-  // déjà restreint aux admins (voir shipping-method.controller.ts).
   getAll: (includeInactive = false) =>
     shippingMethodRepository.findAll(!includeInactive),
 
-  // Corrigé — getById ne filtrait pas isActive du tout ; un client pouvait
-  // consulter et donc potentiellement sélectionner une méthode désactivée.
   getById: async (id: string, includeInactive = false) => {
     const method = await shippingMethodRepository.findById(id);
     if (!method) throw new AppError("Shipping method not found", 404);
@@ -46,6 +42,17 @@ export const shippingMethodService = {
     if (!method) throw new AppError("Shipping method not found", 404);
     if (!method.isActive)
       throw new AppError("Shipping method is not available", 400);
+
+    // Nouveau — rapprochement Address.country ↔ zones, absent jusqu'ici
+    // (cf. audit : "calculate() ignore totalement zones").
+    const normalizedCountry = normalizeCountry(dto.country);
+    if (!normalizedCountry)
+      throw new AppError(`"${dto.country}" is not a supported country`, 400);
+    if (!method.zones.includes(normalizedCountry))
+      throw new AppError(
+        `Shipping method "${method.name}" does not deliver to ${normalizedCountry}`,
+        400,
+      );
 
     const cost =
       Math.round((method.basePrice + method.pricePerKg * dto.weight) * 100) /
