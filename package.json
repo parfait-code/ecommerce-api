@@ -8,6 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "seed:admin": "tsx scripts/create-admin.ts",
+    "seed:category": "tsx scripts/create-categories.ts",
+    "seed:products": "tsx scripts/create-products.ts",
     "test": "dotenv -e .env.test jest --runInBand",
     "test:unit": "dotenv -e .env.test jest --runInBand tests/unit",
     "test:integration": "dotenv -e .env.test jest --runInBand tests/integration",
