@@ -54,6 +54,7 @@ export const dashboardService = {
       pendingCodCount,
 
       stockByProduct,
+      neverStockedActiveCount,
 
       shipmentsInProgress,
       shipmentsThisMonth,
@@ -92,6 +93,7 @@ export const dashboardService = {
       dashboardRepository.countPendingCodPayments(),
 
       dashboardRepository.stockSumByProduct(),
+      dashboardRepository.countActiveProductsWithoutInventory(),
 
       dashboardRepository.countShipmentsInTransit(),
       dashboardRepository.countShipmentsCreatedBetween(startOfMonth, now),
@@ -129,6 +131,11 @@ export const dashboardService = {
       else if (total <= LOW_STOCK_THRESHOLD) lowStockCount++;
     }
 
+    // Corrigé — un produit ACTIVE jamais stocké (aucune ligne Inventory)
+    // n'apparaît pas dans stockByProduct et était donc invisible du compte
+    // ci-dessus. On le traite comme rupture de stock, cas le plus grave.
+    outOfStockCount += neverStockedActiveCount;
+
     const paymentAmountThisMonth = paymentsThisMonth._sum.amount ?? 0;
     const paymentAmountLastMonth = paymentsLastMonth._sum.amount ?? 0;
 
@@ -150,8 +157,6 @@ export const dashboardService = {
       },
       users: {
         total: totalUsers,
-        // Corrigé — reflète désormais réellement les comptes actifs
-        // (isActive: true, deletedAt: null), au lieu de dupliquer `total`.
         active: activeUsers,
         newThisMonth: newUsersThisMonth,
         byRole: buildStatusDict(USER_ROLES, usersByRoleRaw, "role"),
@@ -169,9 +174,6 @@ export const dashboardService = {
       },
       shipments: {
         inProgress: shipmentsInProgress,
-        // Corrigé — trend cohérent (créations ce mois vs mois dernier),
-        // l'ancienne version comparait un snapshot courant à un filtre
-        // historique incohérent (IN_TRANSIT ET créé le mois dernier).
         trend: calcTrend(shipmentsThisMonth, shipmentsLastMonth),
         pendingPickupRequests,
       },

@@ -62,12 +62,22 @@ export const dashboardRepository = {
       where: { method: "CASH_ON_DELIVERY", status: "PENDING" },
     }),
 
-  // ── Inventory — agrégé PAR PRODUIT (somme toutes lignes confondues),
+  /// ── Inventory — agrégé PAR PRODUIT (somme toutes lignes confondues),
   // pas par ligne, pour éviter de fausser le compte low/out of stock. ──────
   stockSumByProduct: () =>
     prisma.inventory.groupBy({
       by: ["productId"],
       _sum: { quantity: true },
+    }),
+
+  // Nouveau — produits ACTIVE n'ayant AUCUNE ligne d'inventaire du tout.
+  // stockSumByProduct() ne les voit jamais (ils n'apparaissent pas dans le
+  // groupBy), donc sans cette requête dédiée un produit actif jamais stocké
+  // n'était compté ni en low stock ni en out of stock — silencieusement
+  // invisible du dashboard alors que c'est le cas le plus grave.
+  countActiveProductsWithoutInventory: () =>
+    prisma.product.count({
+      where: { status: "ACTIVE", inventory: { none: {} } },
     }),
 
   // ── Shipments ───────────────────────────────────────────────────────────
