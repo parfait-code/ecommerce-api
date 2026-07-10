@@ -29,7 +29,7 @@ export const reviewRepository = {
       select: {
         id: true,
         productId: true,
-        order: { select: { userId: true } },
+        order: { select: { userId: true, status: true } },
       },
     }),
 

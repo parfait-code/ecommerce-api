@@ -42,6 +42,12 @@ export const reviewService = {
         400,
       );
 
+    if (orderItem.order.status !== "DELIVERED")
+      throw new AppError(
+        "You can only review products from delivered orders",
+        400,
+      );
+
     const existingReview = await reviewRepository.findByOrderItemAndUser(
       dto.order_item_id,
       userId,
