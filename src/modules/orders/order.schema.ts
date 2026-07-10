@@ -1,13 +1,11 @@
 import { z } from "zod";
 import { OrderStatus } from "@prisma/client";
+import { addressFieldsSchema } from "../../shared/schemas/address.schema";
 
-const addressSchema = z.object({
-  street: z.string(),
-  city: z.string(),
-  state: z.string().optional(),
-  country: z.string(),
-  postalCode: z.string(),
-});
+// Anciennement redéfini localement avec des règles plus permissives (pas de
+// .min(2), pas de recipientName/phone). Utilise désormais le même DTO que
+// le module address — cf. audit "3 représentations différentes d'une adresse".
+const addressSchema = addressFieldsSchema;
 
 export const createOrderSchema = z
   .object({

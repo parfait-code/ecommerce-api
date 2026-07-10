@@ -1,19 +1,9 @@
 import { z } from "zod";
+import { addressFieldsSchema } from "../../shared/schemas/address.schema";
 
-export const validateAddressSchema = z.object({
-  street: z.string().min(2),
-  city: z.string().min(2),
-  state: z.string().optional(),
-  country: z.string().min(2),
-  postalCode: z.string().min(2),
-});
+export const validateAddressSchema = addressFieldsSchema;
 
-export const createAddressSchema = z.object({
-  street: z.string().min(2),
-  city: z.string().min(2),
-  state: z.string().optional(),
-  country: z.string().min(2),
-  postalCode: z.string().min(2),
+export const createAddressSchema = addressFieldsSchema.extend({
   isDefault: z.boolean().default(false),
 });
 

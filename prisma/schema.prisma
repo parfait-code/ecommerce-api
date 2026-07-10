@@ -616,17 +616,20 @@ model PickupRequest {
 // ─── Address ──────────────────────────────────────────────────────────────────
 
 model Address {
-  id         String   @id @default(cuid())
-  userId     Int
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  street     String
-  city       String
-  state      String?
-  country    String
-  postalCode String
-  isDefault  Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String   @id @default(cuid())
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipientName String
+  phone         String?
+  street        String
+  addressLine2  String?
+  city          String
+  state         String?
+  country       String
+  postalCode    String?
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   shippingOrders Order[] @relation("shippingAddress")
   billingOrders  Order[] @relation("billingAddress")

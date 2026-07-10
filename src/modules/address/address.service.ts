@@ -6,56 +6,40 @@ import {
 } from "./address.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
+import { normalizeCountry } from "../../shared/constants/countries";
 
-const VALID_COUNTRIES = [
-  "CM",
-  "Cameroon",
-  "FR",
-  "France",
-  "US",
-  "United States",
-  "GB",
-  "United Kingdom",
-  "SN",
-  "Senegal",
-  "CI",
-  "Côte d'Ivoire",
-  "NG",
-  "Nigeria",
-  "GH",
-  "Ghana",
-];
-
-const isValidCountry = (country: string): boolean =>
-  VALID_COUNTRIES.some((c) => c.toLowerCase() === country.toLowerCase());
-
-const assertValidCountry = (country: string): void => {
-  if (!isValidCountry(country)) {
+const assertNormalizedCountry = (country: string): string => {
+  const normalized = normalizeCountry(country);
+  if (!normalized) {
     throw new AppError(
       `"${country}" is not a supported country. Use POST /address/validate to check supported values.`,
       400,
     );
   }
+  return normalized;
 };
 
 export const addressService = {
   validate: (dto: ValidateAddressDto) => {
+    const normalizedCountry = normalizeCountry(dto.country);
     const isValid =
       dto.street.length >= 2 &&
       dto.city.length >= 2 &&
       dto.country.length >= 2 &&
-      dto.postalCode.length >= 2 &&
-      isValidCountry(dto.country);
+      normalizedCountry !== null;
 
     return {
       valid: isValid,
       normalized_address: isValid
         ? {
+            recipientName: dto.recipientName.trim(),
+            phone: dto.phone?.trim() ?? null,
             street: dto.street.trim(),
+            addressLine2: dto.addressLine2?.trim() ?? null,
             city: dto.city.trim(),
             state: dto.state?.trim() ?? null,
-            country: dto.country.trim(),
-            postalCode: dto.postalCode.trim(),
+            country: normalizedCountry,
+            postalCode: dto.postalCode?.trim() ?? null,
           }
         : null,
     };
@@ -71,10 +55,13 @@ export const addressService = {
   },
 
   create: async (userId: number, dto: CreateAddressDto) => {
-    assertValidCountry(dto.country);
+    const normalizedCountry = assertNormalizedCountry(dto.country);
 
     if (dto.isDefault) await addressRepository.unsetDefault(userId);
-    const address = await addressRepository.create(userId, dto);
+    const address = await addressRepository.create(userId, {
+      ...dto,
+      country: normalizedCountry,
+    });
 
     businessLogger.log("ADDRESS_CREATED", {
       service: "address",
@@ -82,7 +69,7 @@ export const addressService = {
       target: { addressId: address.id, userId },
       metadata: {
         city: dto.city,
-        country: dto.country,
+        country: normalizedCountry,
         isDefault: dto.isDefault,
       },
     });
@@ -95,11 +82,16 @@ export const addressService = {
     if (!address) throw new AppError("Address not found", 404);
     if (address.userId !== userId) throw new AppError("Forbidden", 403);
 
-    if (dto.country) assertValidCountry(dto.country);
+    const normalizedCountry = dto.country
+      ? assertNormalizedCountry(dto.country)
+      : undefined;
 
     if (dto.isDefault) await addressRepository.unsetDefault(userId);
 
-    const updated = await addressRepository.update(id, dto);
+    const updated = await addressRepository.update(id, {
+      ...dto,
+      ...(normalizedCountry && { country: normalizedCountry }),
+    });
 
     businessLogger.log("ADDRESS_UPDATED", {
       service: "address",
