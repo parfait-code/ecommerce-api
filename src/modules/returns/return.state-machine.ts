@@ -3,8 +3,9 @@ import { AppError } from "../../shared/utils/app-error";
 
 const TRANSITIONS: Record<ReturnStatus, ReturnStatus[]> = {
   PENDING: ["APPROVED", "REJECTED"],
-  APPROVED: ["COMPLETED"],
+  APPROVED: ["COMPLETED", "CANCELLED"],
   REJECTED: [],
+  CANCELLED: [],
   COMPLETED: [],
 };
 

@@ -8,7 +8,6 @@ import {
   trackingEventSchema,
   updateShipmentStatusSchema,
   shippingCostSchema,
-  createPickupRequestSchema,
 } from "./shipment.schema";
 
 const router = Router();
@@ -53,28 +52,7 @@ router.post(
   shipmentController.cancel,
 );
 router.get("/labels/:shipmentId", authGuard, shipmentController.getLabel);
-router.post(
-  "/pickup-requests",
-  authGuard,
-  validate(createPickupRequestSchema),
-  shipmentController.createPickupRequest,
-);
-router.get(
-  "/pickup-requests",
-  authGuard,
-  adminGuard,
-  shipmentController.getAllPickupRequests,
-);
-router.get(
-  "/pickup-requests/:requestId",
-  authGuard,
-  shipmentController.getPickupRequest,
-);
-router.post(
-  "/pickup-requests/:requestId/cancel",
-  authGuard,
-  shipmentController.cancelPickupRequest,
-);
+
 router.get(
   "/orders/:orderId/shipment",
   authGuard,

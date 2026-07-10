@@ -1,11 +1,10 @@
-import { shipmentRepository, pickupRepository } from "./shipment.repository";
+import { shipmentRepository } from "./shipment.repository";
 import { orderRepository } from "../orders/order.repository";
 import {
   CreateShipmentDto,
   TrackingEventDto,
   UpdateShipmentStatusDto,
   ShippingCostDto,
-  CreatePickupRequestDto,
 } from "./shipment.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
@@ -232,44 +231,5 @@ export const shipmentService = {
       );
     }
     return { label_id: label.id, label_url: label.labelUrl };
-  },
-
-  createPickupRequest: (userId: number, dto: CreatePickupRequestDto) =>
-    pickupRepository.create(userId, {
-      pickupDate: dto.pickup_date,
-      pickupAddress: dto.pickup_address,
-      orderId: dto.order_id,
-      shipmentId: dto.shipment_id,
-    }),
-
-  getAllPickupRequests: async (query: {
-    page?: string;
-    limit?: string;
-    status?: string;
-  }) => {
-    const [items, total] = await pickupRepository.findAll(query);
-    const page = Number(query.page ?? 1);
-    const limit = Number(query.limit ?? 20);
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
-  },
-
-  // Corrigé — même garde-fou de propriété que cancelPickupRequest juste à côté,
-  // qui l'appliquait déjà (`request.userId !== userId`) alors que cette
-  // méthode-ci ne vérifiait rien.
-  getPickupRequest: async (id: string, userId: number, isAdmin: boolean) => {
-    const request = await pickupRepository.findById(id);
-    if (!request) throw new AppError("Pickup request not found", 404);
-    if (!isAdmin && request.userId !== userId)
-      throw new AppError("Forbidden", 403);
-    return request;
-  },
-
-  cancelPickupRequest: async (id: string, userId: number) => {
-    const request = await pickupRepository.findById(id);
-    if (!request) throw new AppError("Pickup request not found", 404);
-    if (request.userId !== userId) throw new AppError("Forbidden", 403);
-    if (request.status === "CANCELLED")
-      throw new AppError("Pickup request already cancelled", 400);
-    return pickupRepository.cancel(id);
   },
 };

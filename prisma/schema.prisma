@@ -61,10 +61,18 @@ enum ShipmentStatus {
   CANCELLED
 }
 
+enum PickupCollectionMethod {
+  ORIGINAL_ADDRESS
+  WAREHOUSE_DROPOFF
+  CUSTOM_ADDRESS
+}
+
 enum PickupStatus {
   PENDING
   CONFIRMED
+  COMPLETED
   CANCELLED
+  EXPIRED
 }
 
 enum PromotionStatus {
@@ -83,6 +91,7 @@ enum ReturnStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED
   COMPLETED
 }
 
@@ -527,8 +536,10 @@ model Warehouse {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
-  inventory Inventory[]
-  reservations OrderItemReservation[]
+  inventory         Inventory[]
+  reservations      OrderItemReservation[]
+  pickupRequests    PickupRequest[]
+  returnCollections ReturnRequest[]
 }
 
 // ─── Inventory ────────────────────────────────────────────────────────────────
@@ -570,7 +581,6 @@ model Shipment {
 
   trackingEvents TrackingEvent[]
   label          ShippingLabel?
-  pickupRequests PickupRequest[]
 }
 
 model TrackingEvent {
@@ -595,22 +605,34 @@ model ShippingLabel {
 // ─── PickupRequest ────────────────────────────────────────────────────────────
 
 model PickupRequest {
-  id            String       @id @default(cuid())
-  userId        Int
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orderId       String?
-  order         Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  shipmentId    String?
-  shipment      Shipment?    @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
-  pickupDate    DateTime
-  pickupAddress String
-  status        PickupStatus @default(PENDING)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id              String                 @id @default(cuid())
+  userId          Int
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  returnRequestId String                 @unique
+  returnRequest   ReturnRequest          @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  orderId         String
+  order           Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Modifiable librement par l'admin ("contrôle total") — indépendant du
+  // choix initial du client conservé sur ReturnRequest.collectionMethod.
+  method      PickupCollectionMethod @default(ORIGINAL_ADDRESS)
+  addressId   String?
+  address     Address?               @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  warehouseId String?
+  warehouse   Warehouse?             @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+
+  pickupDate DateTime?
+  deadline   DateTime
+  status     PickupStatus @default(PENDING)
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([orderId])
-  @@index([shipmentId])
+  @@index([status])
+  @@index([deadline])
 }
 
 // ─── Address ──────────────────────────────────────────────────────────────────
@@ -631,8 +653,10 @@ model Address {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  shippingOrders Order[] @relation("shippingAddress")
-  billingOrders  Order[] @relation("billingAddress")
+  shippingOrders    Order[]         @relation("shippingAddress")
+  billingOrders     Order[]         @relation("billingAddress")
+  pickupRequests    PickupRequest[]
+  returnCollections ReturnRequest[]
 
   @@index([userId])
 }
@@ -675,10 +699,20 @@ model ReturnRequest {
   status    ReturnStatus @default(PENDING)
   reason    String
   notes     String?
+
+  // Préférence exprimée par le client à la création — snapshot figé même
+  // si l'admin modifie ensuite le lieu réel sur la PickupRequest.
+  collectionMethod      PickupCollectionMethod @default(ORIGINAL_ADDRESS)
+  collectionAddressId   String?
+  collectionAddress     Address?               @relation(fields: [collectionAddressId], references: [id], onDelete: SetNull)
+  collectionWarehouseId String?
+  collectionWarehouse   Warehouse?             @relation(fields: [collectionWarehouseId], references: [id], onDelete: SetNull)
+
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  items ReturnItem[]
+  items         ReturnItem[]
+  pickupRequest PickupRequest?
 
   @@index([orderId])
   @@index([userId])

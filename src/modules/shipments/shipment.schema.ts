@@ -46,15 +46,9 @@ export const shippingCostSchema = z.object({
     .optional(),
 });
 
-export const createPickupRequestSchema = z.object({
-  pickup_date: z.string().datetime(),
-  pickup_address: z.string(),
-  order_id: z.string().optional(),
-  shipment_id: z.string().optional(),
-});
-
 export type CreateShipmentDto = z.infer<typeof createShipmentSchema>;
 export type TrackingEventDto = z.infer<typeof trackingEventSchema>;
-export type UpdateShipmentStatusDto = z.infer<typeof updateShipmentStatusSchema>;
+export type UpdateShipmentStatusDto = z.infer<
+  typeof updateShipmentStatusSchema
+>;
 export type ShippingCostDto = z.infer<typeof shippingCostSchema>;
-export type CreatePickupRequestDto = z.infer<typeof createPickupRequestSchema>;

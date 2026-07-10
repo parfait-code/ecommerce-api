@@ -1,6 +1,9 @@
 import { returnRepository } from "./return.repository";
 import { orderRepository } from "../orders/order.repository";
 import { orderService } from "../orders/order.service";
+import { warehouseRepository } from "../warehouses/warehouse.repository";
+import { addressRepository } from "../address/address.repository";
+import { pickupRequestService } from "../pickup-requests/pickup-request.service";
 import { CreateReturnDto, UpdateReturnStatusDto } from "./return.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
@@ -43,7 +46,22 @@ export const returnService = {
         400,
       );
 
+    // Ajout — évite deux demandes chevauchantes sur la même commande, ce
+    // qui compliquerait la logistique de pickup une fois branchée.
+    const existing = await returnRepository.findByOrder(dto.order_id);
+    if (existing.some((r) => r.status === "PENDING" || r.status === "APPROVED"))
+      throw new AppError(
+        "This order already has an active return request",
+        409,
+      );
+
     const orderItemIds = new Set(order.items.map((i) => i.id));
+    const itemsWithQuantity: {
+      order_item_id: string;
+      quantity: number;
+      condition?: string;
+    }[] = [];
+
     for (const item of dto.items) {
       if (!orderItemIds.has(item.order_item_id))
         throw new AppError(
@@ -52,20 +70,44 @@ export const returnService = {
         );
 
       const orderItem = order.items.find((i) => i.id === item.order_item_id)!;
-      if (item.quantity > orderItem.quantity)
-        throw new AppError(
-          `Return quantity exceeds purchased quantity for item ${item.order_item_id}`,
-          400,
-        );
+
+      itemsWithQuantity.push({
+        order_item_id: item.order_item_id,
+        quantity: orderItem.quantity,
+        condition: item.condition,
+      });
     }
 
-    const returnRequest = await returnRepository.create(userId, dto);
+    if (dto.collection.method === "WAREHOUSE_DROPOFF") {
+      const warehouse = await warehouseRepository.findById(
+        dto.collection.warehouse_id!,
+      );
+      if (!warehouse) throw new AppError("Warehouse not found", 404);
+    }
+
+    if (dto.collection.method === "CUSTOM_ADDRESS") {
+      const address = await addressRepository.findById(
+        dto.collection.address_id!,
+      );
+      if (!address) throw new AppError("Address not found", 404);
+      if (address.userId !== userId) throw new AppError("Forbidden", 403);
+    }
+
+    const returnRequest = await returnRepository.create(
+      userId,
+      dto,
+      itemsWithQuantity,
+    );
 
     businessLogger.log("RETURN_REQUESTED", {
       service: "returns",
       actor: { userId, role: "CUSTOMER" },
       target: { orderId: dto.order_id, returnRequestId: returnRequest.id },
-      metadata: { reason: dto.reason, itemCount: dto.items.length },
+      metadata: {
+        reason: dto.reason,
+        itemCount: itemsWithQuantity.length,
+        collectionMethod: dto.collection.method,
+      },
     });
 
     return returnRequest;
@@ -92,7 +134,9 @@ export const returnService = {
         ? "RETURN_APPROVED"
         : dto.status === ReturnStatus.REJECTED
           ? "RETURN_REJECTED"
-          : "RETURN_COMPLETED";
+          : dto.status === ReturnStatus.CANCELLED
+            ? "RETURN_CANCELLED"
+            : "RETURN_COMPLETED";
 
     businessLogger.log(event, {
       service: "returns",
@@ -100,6 +144,25 @@ export const returnService = {
       target: { returnRequestId: id },
       metadata: { status: dto.status },
     });
+
+    // Matérialise la pickup request au moment de l'approbation — la
+    // deadline vient de la même requête que l'approbation elle-même.
+    if (dto.status === ReturnStatus.APPROVED) {
+      await pickupRequestService.createFromReturn({
+        userId: returnRequest.userId,
+        returnRequestId: id,
+        orderId: returnRequest.orderId,
+        method: returnRequest.collectionMethod,
+        addressId:
+          returnRequest.collectionMethod === "CUSTOM_ADDRESS"
+            ? returnRequest.collectionAddressId
+            : returnRequest.collectionMethod === "ORIGINAL_ADDRESS"
+              ? returnRequest.order.shippingAddressId
+              : null,
+        warehouseId: returnRequest.collectionWarehouseId,
+        deadline: new Date(dto.pickup_deadline!),
+      });
+    }
 
     if (dto.status === ReturnStatus.COMPLETED) {
       await orderService.updateStatus(
@@ -109,8 +172,6 @@ export const returnService = {
         "ADMIN",
       );
 
-      // Émission — déclenche R2 (remboursement paiement), R3 (réintégration
-      // stock) et R4 (reversal fidélité) de façon découplée.
       eventBus.emit("return.status.changed", {
         returnRequestId: id,
         orderId: returnRequest.orderId,

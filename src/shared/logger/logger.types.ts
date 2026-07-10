@@ -143,6 +143,7 @@ export type ReturnEvent =
   | "RETURN_REQUESTED"
   | "RETURN_APPROVED"
   | "RETURN_REJECTED"
+  | "RETURN_CANCELLED"
   | "RETURN_COMPLETED";
 
 export type CategoryEvent =
@@ -166,6 +167,11 @@ export type CouponEvent =
 
 export type WishlistEvent = "WISHLIST_ITEM_ADDED" | "WISHLIST_ITEM_REMOVED";
 
+export type PickupEvent =
+  | "PICKUP_REQUEST_CREATED"
+  | "PICKUP_LOCATION_UPDATED"
+  | "PICKUP_STATUS_CHANGED";
+
 export type BusinessEvent =
   | AuthEvent
   | ProductEvent
@@ -184,7 +190,8 @@ export type BusinessEvent =
   | PromotionEvent
   | DiscountEvent
   | CouponEvent
-  | WishlistEvent;
+  | WishlistEvent
+  | PickupEvent;
 
 // ─── Audit Events (section 14) ────────────────────────────────────────────────
 
@@ -247,7 +254,8 @@ export type SystemEvent =
   | "ORDER_SYNC_FAILED"
   | "EVENT_LISTENER_FAILED"
   | "COMBINATION_DEACTIVATED_WITH_STOCK"
-  | "PRODUCT_ACTIVATED_WITHOUT_COMBINATIONS";
+  | "PRODUCT_ACTIVATED_WITHOUT_COMBINATIONS"
+  | "PICKUP_REQUEST_EXPIRED";
 
 // ─── Error Events ────────────────────────────────────────────────────────────
 

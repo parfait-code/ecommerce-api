@@ -11,7 +11,12 @@ const returnInclude = {
       },
     },
   },
-  order: { select: { id: true, userId: true, status: true } },
+  order: {
+    select: { id: true, userId: true, status: true, shippingAddressId: true },
+  },
+  collectionAddress: true,
+  collectionWarehouse: { select: { id: true, name: true, location: true } },
+  pickupRequest: true,
 };
 
 export const returnRepository = {
@@ -42,15 +47,32 @@ export const returnRepository = {
       orderBy: { createdAt: "desc" },
     }),
 
-  create: (userId: number, dto: CreateReturnDto) =>
+  create: (
+    userId: number,
+    dto: CreateReturnDto,
+    itemsWithQuantity: {
+      order_item_id: string;
+      quantity: number;
+      condition?: string;
+    }[],
+  ) =>
     prisma.returnRequest.create({
       data: {
         orderId: dto.order_id,
         userId,
         reason: dto.reason,
         notes: dto.notes,
+        collectionMethod: dto.collection.method,
+        collectionAddressId:
+          dto.collection.method === "CUSTOM_ADDRESS"
+            ? dto.collection.address_id
+            : null,
+        collectionWarehouseId:
+          dto.collection.method === "WAREHOUSE_DROPOFF"
+            ? dto.collection.warehouse_id
+            : null,
         items: {
-          create: dto.items.map((i) => ({
+          create: itemsWithQuantity.map((i) => ({
             orderItemId: i.order_item_id,
             quantity: i.quantity,
             condition: i.condition,
