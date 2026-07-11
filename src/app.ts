@@ -8,7 +8,6 @@ import { requestId } from "./shared/middlewares/request-id";
 import { requestContext } from "./shared/middlewares/request-context";
 import { auditMiddleware } from "./shared/middlewares/audit";
 import { securityLogger } from "./shared/logger";
-import settingRouter from "./modules/settings/setting.router";
 import authRouter from "./modules/auth/auth.router";
 import userRouter from "./modules/users/user.router";
 import productRouter from "./modules/products/product.router";
@@ -31,6 +30,7 @@ import shippingMethodRouter from "./modules/shipping-methods/shipping-method.rou
 import loyaltyRouter from "./modules/loyalty/loyalty.router";
 import wishlistRouter from "./modules/wishlist/wishlist.router";
 import returnRouter from "./modules/returns/return.router";
+import settingRouter from "./modules/settings/setting.router";
 import { registerEventListeners } from "./shared/events";
 
 registerEventListeners();
@@ -74,7 +74,6 @@ app.use(morganMiddleware);
 app.use(requestContext);
 app.use(auditMiddleware);
 
-app.use(settingRouter);
 app.use(authRouter);
 app.use(userRouter);
 app.use(productRouter);
@@ -97,6 +96,7 @@ app.use(shippingMethodRouter);
 app.use(loyaltyRouter);
 app.use(wishlistRouter);
 app.use(returnRouter);
+app.use(settingRouter);
 
 app.use(errorHandler);
 
