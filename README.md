@@ -143,10 +143,19 @@ Chaque script :
 Pour un premier démarrage complet, exécute dans l'ordre :
 
 ```bash
+# Données existantes (rappel)
 npm run seed:admin
 npm run seed:settings
 npm run seed:categories
 npm run seed:products
+
+npm run seed:warehouses       # entrepôts
+npm run seed:attributes       # définitions d'attributs + options (couleur, matériau)
+npm run seed:combinations     # variantes de produits (couleurs) — dépend d'attributes + products
+npm run seed:inventory        # stock par produit/variante × entrepôt — dépend de warehouses + combinations
+npm run seed:shipping-methods # méthodes de livraison (indépendant)
+npm run seed:users            # clients de test + adresses (indépendant)
+
 npm run seed:tags
 npm run seed:promotions
 ```
