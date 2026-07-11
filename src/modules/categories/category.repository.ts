@@ -1,30 +1,40 @@
 import { prisma } from "../../shared/config/database";
 import { CreateCategoryDto, UpdateCategoryDto } from "./category.schema";
 
-const categoryInclude = {
+const categoryInclude = (includeInactive: boolean) => ({
   parent: { select: { id: true, name: true, slug: true } },
   children: { select: { id: true, name: true, slug: true } },
-  _count: { select: { products: { where: { deletedAt: null } } } },
-};
+  // En contexte public (includeInactive: false), le compteur ne doit
+  // refléter que les produits réellement visibles (ACTIVE) — sinon un
+  // badge "12 produits" côté client compterait aussi des DRAFT/ARCHIVED
+  // invisibles pour lui. En contexte admin, on compte tout.
+  _count: {
+    select: {
+      products: includeInactive
+        ? true
+        : { where: { status: "ACTIVE" as const } },
+    },
+  },
+});
 
 export const categoryRepository = {
   findAll: (includeInactive = false) =>
     prisma.category.findMany({
       where: includeInactive ? undefined : { isActive: true },
-      include: categoryInclude,
+      include: categoryInclude(includeInactive),
       orderBy: { name: "asc" },
     }),
 
-  findById: (id: string) =>
+  findById: (id: string, includeInactive = false) =>
     prisma.category.findUnique({
       where: { id },
-      include: categoryInclude,
+      include: categoryInclude(includeInactive),
     }),
 
-  findBySlug: (slug: string) =>
+  findBySlug: (slug: string, includeInactive = false) =>
     prisma.category.findUnique({
       where: { slug },
-      include: categoryInclude,
+      include: categoryInclude(includeInactive),
     }),
 
   findProducts: (
@@ -38,7 +48,6 @@ export const categoryRepository = {
 
     const where = {
       categoryId: { in: categoryIds },
-      deletedAt: null,
       ...(!includeInactive && { status: "ACTIVE" as const }),
     };
 
@@ -54,9 +63,6 @@ export const categoryRepository = {
     ]);
   },
 
-  // Résout tous les descendants (enfants, petits-enfants, ...) d'une catégorie.
-  // Jamais l'inverse : un ciblage sur une catégorie parente couvre ses enfants,
-  // une catégorie enfant ne remonte jamais vers son parent.
   findDescendantIds: async (categoryId: string): Promise<string[]> => {
     const result: string[] = [];
     let currentLevel = [categoryId];
@@ -78,14 +84,14 @@ export const categoryRepository = {
   create: (data: CreateCategoryDto) =>
     prisma.category.create({
       data,
-      include: categoryInclude,
+      include: categoryInclude(true),
     }),
 
   update: (id: string, data: UpdateCategoryDto) =>
     prisma.category.update({
       where: { id },
       data,
-      include: categoryInclude,
+      include: categoryInclude(true),
     }),
 
   delete: (id: string) => prisma.category.delete({ where: { id } }),

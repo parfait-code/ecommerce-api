@@ -39,7 +39,7 @@ export const categoryService = {
       if (cached) return cached;
     }
 
-    const category = await categoryRepository.findById(id);
+    const category = await categoryRepository.findById(id, includeInactive);
     if (!category) throw new AppError("Category not found", 404);
     if (!includeInactive && !category.isActive)
       throw new AppError("Category not found", 404);
@@ -56,7 +56,7 @@ export const categoryService = {
       if (cached) return cached;
     }
 
-    const category = await categoryRepository.findBySlug(slug);
+    const category = await categoryRepository.findBySlug(slug, includeInactive);
     if (!category || (!includeInactive && !category.isActive))
       throw new AppError("Category not found", 404);
 
@@ -79,7 +79,7 @@ export const categoryService = {
       if (cached) return cached;
     }
 
-    const category = await categoryRepository.findBySlug(slug);
+    const category = await categoryRepository.findBySlug(slug, includeInactive);
     if (!category || (!includeInactive && !category.isActive))
       throw new AppError("Category not found", 404);
 

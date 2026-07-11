@@ -25,7 +25,6 @@ export interface Target {
   paymentId?: string;
   shipmentId?: string;
   basketId?: string;
-  checkoutId?: string;
   inventoryId?: string;
   warehouseId?: string;
   reviewId?: string;
@@ -77,13 +76,6 @@ export type ProductEvent =
   | "PRODUCT_CREATED"
   | "PRODUCT_UPDATED"
   | "PRODUCT_DELETED";
-
-export type BasketEvent = "ITEM_ADDED" | "ITEM_REMOVED" | "BASKET_CLEARED";
-
-export type CheckoutEvent =
-  | "CHECKOUT_STARTED"
-  | "CHECKOUT_COMPLETED"
-  | "CHECKOUT_FAILED";
 
 export type OrderEvent =
   | "ORDER_CREATED"
@@ -175,8 +167,6 @@ export type PickupEvent =
 export type BusinessEvent =
   | AuthEvent
   | ProductEvent
-  | BasketEvent
-  | CheckoutEvent
   | OrderEvent
   | PaymentEvent
   | InventoryEvent

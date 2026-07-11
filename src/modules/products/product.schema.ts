@@ -15,10 +15,10 @@ export const updateProductSchema = createProductSchema
   .omit({ categoryId: true })
   .partial();
 
-export const uploadImagesSchema = z.object({
-  combinationId: z.string().optional(),
-});
+// export const uploadImagesSchema = z.object({
+//   combinationId: z.string().optional(),
+// });
 
 export type CreateProductDto = z.infer<typeof createProductSchema>;
 export type UpdateProductDto = z.infer<typeof updateProductSchema>;
-export type UploadImagesDto = z.infer<typeof uploadImagesSchema>;
+// export type UploadImagesDto = z.infer<typeof uploadImagesSchema>;

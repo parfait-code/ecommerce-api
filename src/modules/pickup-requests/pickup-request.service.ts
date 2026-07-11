@@ -18,7 +18,6 @@ export const pickupRequestService = {
     status?: string;
     order_id?: string;
   }) => {
-    await pickupRequestService.expireOverdue();
     const [items, total] = await pickupRequestRepository.findAll(query);
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);

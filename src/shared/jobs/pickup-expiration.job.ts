@@ -1,13 +1,11 @@
-import cron from "node-cron";
+import cron, { ScheduledTask } from "node-cron";
 import { pickupRequestService } from "../../modules/pickup-requests/pickup-request.service";
 import { systemLogger } from "../logger";
 
 /**
  * Vérifie toutes les 15 minutes les PickupRequest dont la deadline est
  * dépassée et les fait expirer automatiquement (voir
- * pickup-request.service.ts::expireOverdue — même logique que la vérification
- * paresseuse déclenchée par GET /pickup-requests, mais sans dépendre d'une
- * consultation admin pour se déclencher).
+ * pickup-request.service.ts::expireOverdue).
  *
  * Fréquence choisie par défaut : 15 min. Un retour raté de 15 min sur une
  * deadline de plusieurs jours est négligeable pour ce cas d'usage — pas
@@ -15,7 +13,7 @@ import { systemLogger } from "../logger";
  */
 const SCHEDULE = "*/15 * * * *";
 
-let task: cron.ScheduledTask | null = null;
+let task: ScheduledTask | null = null;
 
 export const startPickupExpirationJob = (): void => {
   if (task) return; // évite le double-enregistrement si appelé deux fois
