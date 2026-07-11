@@ -6,6 +6,8 @@ import {
   USER_ROLES,
 } from "./dashboard.repository";
 import { computeDisplayStatus } from "../promotions/promotion.pricing";
+import { settingService } from "../settings/setting.service";
+import { SETTING_KEYS } from "../settings/setting.constants";
 
 const calcTrend = (current: number, previous: number) =>
   previous === 0 ? 0 : Math.round(((current - previous) / previous) * 100);
@@ -24,8 +26,6 @@ const MONTH_LABELS = [
   "Nov",
   "Déc",
 ];
-
-const LOW_STOCK_THRESHOLD = 10; // cohérent avec inventory.service.ts / inventory.listeners.ts
 
 export const dashboardService = {
   getStats: async () => {
@@ -125,10 +125,14 @@ export const dashboardService = {
     // stock qui reflète le stock réel disponible d'un produit.
     let lowStockCount = 0;
     let outOfStockCount = 0;
+    const lowStockThreshold = await settingService.getNumber(
+      SETTING_KEYS.INVENTORY_LOW_STOCK_THRESHOLD,
+      10,
+    );
     for (const row of stockByProduct) {
       const total = row._sum.quantity ?? 0;
       if (total === 0) outOfStockCount++;
-      else if (total <= LOW_STOCK_THRESHOLD) lowStockCount++;
+      else if (total <= lowStockThreshold) lowStockCount++;
     }
 
     // Corrigé — un produit ACTIVE jamais stocké (aucune ligne Inventory)

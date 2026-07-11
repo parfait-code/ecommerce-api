@@ -2,8 +2,8 @@ import { loyaltyRepository } from "./loyalty.repository";
 import { userRepository } from "../users/user.repository";
 import { AdjustLoyaltyDto } from "./loyalty.schema";
 import { AppError } from "../../shared/utils/app-error";
-
-const POINTS_PER_XAF = 0.01; // 1 point par 100 XAF dépensés
+import { settingService } from "../settings/setting.service";
+import { SETTING_KEYS } from "../settings/setting.constants";
 
 const assertOwnerOrAdmin = (
   targetUserId: number,
@@ -39,7 +39,11 @@ export const loyaltyService = {
     orderId: string,
     totalAmount: number,
   ) => {
-    const points = Math.floor(totalAmount * POINTS_PER_XAF);
+    const pointsPerUnit = await settingService.getNumber(
+      SETTING_KEYS.LOYALTY_POINTS_PER_CURRENCY_UNIT,
+      0.01,
+    );
+    const points = Math.floor(totalAmount * pointsPerUnit);
     if (points <= 0) return null;
     return loyaltyRepository.create({
       userId,

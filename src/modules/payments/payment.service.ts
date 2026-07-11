@@ -13,10 +13,29 @@ import {
   ActorRole,
   systemLogger,
 } from "../../shared/logger";
+import { settingService } from "../settings/setting.service";
+import { SETTING_KEYS } from "../settings/setting.constants";
 
-const UNAVAILABLE_METHODS: PaymentMethod[] = ["PAYPAL", "STRIPE", "CINETPAY"];
+const ALL_METHODS: { id: PaymentMethod; name: string; description: string }[] =
+  [
+    {
+      id: "CASH_ON_DELIVERY",
+      name: "Cash on Delivery",
+      description: "Pay in cash upon delivery of your order.",
+    },
+    { id: "PAYPAL", name: "PayPal", description: "Pay with PayPal." },
+    {
+      id: "STRIPE",
+      name: "Stripe",
+      description: "Pay with credit or debit card via Stripe.",
+    },
+    {
+      id: "CINETPAY",
+      name: "CinetPay",
+      description: "Pay with CinetPay (Mobile Money, Orange Money, etc.).",
+    },
+  ];
 
-// ── Mapping statut → événement de log (aucune entrée = pas de log pour ce statut) ──
 const BUSINESS_EVENT_MAP: Partial<Record<PaymentStatus, BusinessEvent>> = {
   COMPLETED: "PAYMENT_SUCCESS",
   FAILED: "PAYMENT_FAILED",
@@ -30,42 +49,37 @@ const AUDIT_EVENT_MAP: Partial<Record<PaymentStatus, AuditEvent>> = {
 };
 
 export const paymentService = {
-  getAvailableMethods: () => [
-    {
-      id: "CASH_ON_DELIVERY",
-      name: "Cash on Delivery",
-      description: "Pay in cash upon delivery of your order.",
-      available: true,
-    },
-    {
-      id: "PAYPAL",
-      name: "PayPal",
-      description: "Pay with PayPal.",
-      available: false,
-      message: "PayPal payment is not available yet. Coming soon.",
-    },
-    {
-      id: "STRIPE",
-      name: "Stripe",
-      description: "Pay with credit or debit card via Stripe.",
-      available: false,
-      message: "Stripe payment is not available yet. Coming soon.",
-    },
-    {
-      id: "CINETPAY",
-      name: "CinetPay",
-      description: "Pay with CinetPay (Mobile Money, Orange Money, etc.).",
-      available: false,
-      message: "CinetPay payment is not available yet. Coming soon.",
-    },
-  ],
+  // Méthodes actives pilotées par le module Settings (payments.enabled_methods)
+  // — activer Stripe/PayPal/CinetPay ne nécessite plus de redéploiement.
+  getAvailableMethods: async () => {
+    const [enabled, messages] = await Promise.all([
+      settingService.getJSON<string[]>(SETTING_KEYS.PAYMENTS_ENABLED_METHODS, [
+        "CASH_ON_DELIVERY",
+      ]),
+      settingService.getJSON<Record<string, string>>(
+        SETTING_KEYS.PAYMENTS_UNAVAILABLE_MESSAGES,
+        {},
+      ),
+    ]);
+
+    return ALL_METHODS.map((method) => {
+      const available = enabled.includes(method.id);
+      return {
+        ...method,
+        available,
+        ...(!available && {
+          message:
+            messages[method.id] ?? "This payment method is not available yet.",
+        }),
+      };
+    });
+  },
 
   create: async (userId: number, dto: CreatePaymentDto) => {
-    if (UNAVAILABLE_METHODS.includes(dto.method as PaymentMethod)) {
-      const method = paymentService
-        .getAvailableMethods()
-        .find((m) => m.id === dto.method);
+    const methods = await paymentService.getAvailableMethods();
+    const method = methods.find((m) => m.id === dto.method);
 
+    if (!method?.available) {
       businessLogger.log("PAYMENT_FAILED", {
         service: "payment",
         actor: { userId, role: "CUSTOMER" },
@@ -106,11 +120,6 @@ export const paymentService = {
       notes: dto.notes,
     });
 
-    // resolve.md #5.3 — PENDING → CONFIRMED n'est plus systématique : seule
-    // une méthode COD (prise en charge sans encaissement réel, par nature)
-    // confirme automatiquement à la création. Un paiement PENDING sur une
-    // méthode "réellement encaissée" confirmera la commande via updateStatus
-    // → COMPLETED (voir plus haut), pas à la simple création du paiement.
     if (dto.method === "CASH_ON_DELIVERY" && order.status === "PENDING") {
       await orderService.updateStatus(
         dto.order_id,
@@ -125,11 +134,7 @@ export const paymentService = {
 
     return payment;
   },
-  /**
-   * Change le statut d'un paiement existant (ex: confirmer un encaissement COD
-   * réel à la livraison, marquer un échec, ou rembourser).
-   * Réservé à l'admin. Transitions validées via payment.state-machine.
-   */
+
   updateStatus: async (
     paymentId: string,
     dto: UpdatePaymentStatusDto,
@@ -139,9 +144,6 @@ export const paymentService = {
     const payment = await paymentRepository.findById(paymentId);
     if (!payment) throw new AppError("Payment not found", 404);
 
-    // resolve.md #5.2 — les transitions manuelles admin ne peuvent viser que
-    // REFUNDED ; PENDING → COMPLETED/FAILED/CANCELLED restent exclusivement
-    // automatiques (event bus : complétion COD à la livraison, etc.).
     if (actorRole === "ADMIN" && dto.status !== "REFUNDED") {
       throw new AppError(
         "Manual payment status changes are restricted to REFUNDED — other transitions happen automatically as part of the order/return lifecycle.",
@@ -201,11 +203,6 @@ export const paymentService = {
       }
     }
 
-    // resolve.md #5.2 — cascade Payment → Order sur remboursement, cohérent
-    // avec la transition DELIVERED → REFUNDED déjà utilisée pour les retours.
-    // Best-effort : si la commande n'est pas dans un état compatible (rare,
-    // ex. remboursement d'un paiement d'une commande jamais livrée), on ne
-    // bloque pas le remboursement du paiement lui-même — on trace l'échec.
     if (dto.status === "REFUNDED") {
       const order = await orderRepository.findById(payment.orderId);
       if (order && order.status !== "REFUNDED") {
@@ -233,7 +230,6 @@ export const paymentService = {
     return updated;
   },
 
-  // Conservé pour compatibilité ascendante — alias de updateStatus(COMPLETED)
   complete: (paymentId: string, adminUserId: number) =>
     paymentService.updateStatus(
       paymentId,

@@ -8,11 +8,8 @@ import { AppError } from "../../shared/utils/app-error";
 import { env } from "../../shared/config/env";
 import { businessLogger, securityLogger } from "../../shared/logger";
 import { redis } from "../../shared/config/redis";
-
-// U3 — seuil et fenêtre de verrouillage, réinitialisés après un login réussi
-// (suppression explicite de la clé) ou après expiration naturelle du TTL.
-const LOGIN_ATTEMPT_LIMIT = 5;
-const LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60;
+import { settingService } from "../settings/setting.service";
+import { SETTING_KEYS } from "../settings/setting.constants";
 
 const loginAttemptsKey = (username: string) => `login_attempts:${username}`;
 
@@ -87,14 +84,23 @@ export const authService = {
         metadata: { username: dto.username, reason: "Wrong password" },
       });
 
-      // U3 — comptage des échecs consécutifs sur une fenêtre glissante
+      // U3 — comptage des échecs consécutifs sur une fenêtre glissante.
+      // Seuil et fenêtre désormais pilotés par le module Settings.
+      const [attemptLimit, windowSeconds] = await Promise.all([
+        settingService.getNumber(SETTING_KEYS.SECURITY_LOGIN_ATTEMPT_LIMIT, 5),
+        settingService.getNumber(
+          SETTING_KEYS.SECURITY_LOGIN_ATTEMPT_WINDOW_SECONDS,
+          900,
+        ),
+      ]);
+
       const key = loginAttemptsKey(dto.username);
       const attempts = await redis.incr(key);
       if (attempts === 1) {
-        await redis.expire(key, LOGIN_ATTEMPT_WINDOW_SECONDS);
+        await redis.expire(key, windowSeconds);
       }
 
-      if (attempts > 1 && attempts < LOGIN_ATTEMPT_LIMIT) {
+      if (attempts > 1 && attempts < attemptLimit) {
         securityLogger.log("MULTIPLE_FAILED_LOGINS", {
           service: "auth",
           actor: { userId: user.id, role: "CUSTOMER" },
@@ -102,7 +108,7 @@ export const authService = {
         });
       }
 
-      if (attempts >= LOGIN_ATTEMPT_LIMIT) {
+      if (attempts >= attemptLimit) {
         await userRepository.setActive(user.id, false);
         await redis.del(key);
 
@@ -112,7 +118,7 @@ export const authService = {
           metadata: {
             username: dto.username,
             attempts,
-            windowSeconds: LOGIN_ATTEMPT_WINDOW_SECONDS,
+            windowSeconds,
           },
         });
 

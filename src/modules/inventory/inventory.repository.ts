@@ -1,9 +1,9 @@
 import { prisma } from "../../shared/config/database";
 import { CreateInventoryDto, UpdateInventoryDto } from "./inventory.schema";
+import { settingService } from "../settings/setting.service";
+import { SETTING_KEYS } from "../settings/setting.constants";
 import { paginate } from "../../shared/utils/pagination";
 import { eventBus } from "../../shared/events/event-bus";
-
-const LOW_STOCK_THRESHOLD = 10;
 
 const inventoryInclude = {
   product: true,
@@ -210,6 +210,11 @@ export const inventoryRepository = {
   }) => {
     const { skip, take } = paginate(query);
 
+    const threshold = await settingService.getNumber(
+      SETTING_KEYS.INVENTORY_LOW_STOCK_THRESHOLD,
+      10,
+    );
+
     const scopeWhere = {
       ...(query.category && {
         product: {
@@ -229,7 +234,7 @@ export const inventoryRepository = {
       query.out_of_stock === "true"
         ? { ...scopeWhere, quantity: 0 }
         : query.low_stock === "true"
-          ? { ...scopeWhere, quantity: { lte: LOW_STOCK_THRESHOLD, gt: 0 } }
+          ? { ...scopeWhere, quantity: { lte: threshold, gt: 0 } }
           : scopeWhere;
 
     const distinctProducts = await prisma.inventory.findMany({
@@ -278,7 +283,7 @@ export const inventoryRepository = {
           ? new Set(productLines.map((l) => l.combinationId)).size
           : 0,
         lowStockLineCount: productLines.filter(
-          (l) => l.quantity > 0 && l.quantity <= LOW_STOCK_THRESHOLD,
+          (l) => l.quantity > 0 && l.quantity <= threshold,
         ).length,
         outOfStockLineCount: productLines.filter((l) => l.quantity === 0)
           .length,

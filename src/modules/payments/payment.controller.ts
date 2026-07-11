@@ -3,9 +3,9 @@ import { paymentService } from "./payment.service";
 import { respond } from "../../shared/utils/response";
 
 export const paymentController = {
-  getMethods: (_req: Request, res: Response, next: NextFunction) => {
+  getMethods: async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = paymentService.getAvailableMethods();
+      const result = await paymentService.getAvailableMethods();
       respond(res, result);
     } catch (err) {
       next(err);

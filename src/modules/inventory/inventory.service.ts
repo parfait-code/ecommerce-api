@@ -7,10 +7,10 @@ import {
   UpdateInventoryDto,
   TransferInventoryDto,
 } from "./inventory.schema";
+import { settingService } from "../settings/setting.service";
+import { SETTING_KEYS } from "../settings/setting.constants";
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger, auditLogger } from "../../shared/logger";
-
-const LOW_STOCK_THRESHOLD = 10;
 
 export const inventoryService = {
   getAll: async (query: {
@@ -173,18 +173,22 @@ export const inventoryService = {
     });
 
     if (dto.quantity !== undefined) {
+      const threshold = await settingService.getNumber(
+        SETTING_KEYS.INVENTORY_LOW_STOCK_THRESHOLD,
+        10,
+      );
       if (dto.quantity === 0) {
         businessLogger.log("OUT_OF_STOCK", {
           service: "inventory",
           actor: { userId: null, role: "SYSTEM" },
           target: { inventoryId: id, productId: item.productId },
         });
-      } else if (dto.quantity <= LOW_STOCK_THRESHOLD) {
+      } else if (dto.quantity <= threshold) {
         businessLogger.log("LOW_STOCK", {
           service: "inventory",
           actor: { userId: null, role: "SYSTEM" },
           target: { inventoryId: id, productId: item.productId },
-          metadata: { quantity: dto.quantity, threshold: LOW_STOCK_THRESHOLD },
+          metadata: { quantity: dto.quantity, threshold },
         });
       }
     }

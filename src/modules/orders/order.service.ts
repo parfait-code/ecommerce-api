@@ -10,6 +10,8 @@ import { loyaltyService } from "../loyalty/loyalty.service";
 import { promotionRepository } from "../promotions/promotion.repository";
 import { shippingMethodRepository } from "../shipping-methods/shipping-method.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
+import { settingService } from "../settings/setting.service";
+import { SETTING_KEYS } from "../settings/setting.constants";
 import { assertValidTransition } from "./order.state-machine";
 import { normalizeCountry } from "../../shared/constants/countries";
 import {
@@ -96,8 +98,6 @@ const releaseReservedStock = async (orderId: string) => {
 
   await orderReservationRepository.deleteByOrder(orderId);
 };
-
-const STALE_PENDING_ORDER_HOURS = 24;
 
 export const orderService = {
   getAll: async (
@@ -495,10 +495,14 @@ export const orderService = {
   // PENDING jamais payée bloque du stock réservé indéfiniment. Réutilise
   // updateStatus() telle quelle : state machine, libération de stock via
   // releaseReservedStock, logs, event bus — rien de dupliqué.
-  expireStalePending: async (
-    hoursThreshold: number = STALE_PENDING_ORDER_HOURS,
-  ): Promise<number> => {
-    const threshold = new Date(Date.now() - hoursThreshold * 60 * 60 * 1000);
+  expireStalePending: async (hoursThreshold?: number): Promise<number> => {
+    const effectiveHours =
+      hoursThreshold ??
+      (await settingService.getNumber(
+        SETTING_KEYS.ORDERS_STALE_PENDING_HOURS,
+        24,
+      ));
+    const threshold = new Date(Date.now() - effectiveHours * 60 * 60 * 1000);
     const stale = await orderRepository.findStalePending(threshold);
 
     for (const order of stale) {
