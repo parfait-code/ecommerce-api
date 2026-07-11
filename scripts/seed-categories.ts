@@ -1,16 +1,6 @@
-// scripts/create-categories.ts
+// scripts/seed-categories.ts
 import "dotenv/config";
 import { prisma } from "../src/shared/config/database";
-
-interface CategoryPayload {
-  name: string;
-  slug: string;
-  description?: string;
-  metaTitle?: string;
-  metaDescription?: string;
-  isActive: boolean;
-  parentId?: string;
-}
 
 interface CategoryData {
   name: string;
@@ -19,11 +9,13 @@ interface CategoryData {
   metaTitle?: string;
   metaDescription?: string;
   isActive: boolean;
-  parentId?: string;
   children?: CategoryData[];
 }
 
-// Définition des catégories directement dans le script
+// ============================================================
+// ARBRE DES CATÉGORIES — un seul niveau de parent/enfant (pas de
+// petits-enfants), conforme au modèle Category.parentId de Prisma.
+// ============================================================
 const categoriesData: CategoryData[] = [
   {
     name: "Salon",
@@ -32,7 +24,7 @@ const categoriesData: CategoryData[] = [
       "Canapés, fauteuils, tables basses et meubles TV pour aménager votre salon",
     metaTitle: "Meubles de salon | Canapés, fauteuils, tables basses",
     metaDescription:
-      "Découvrez notre sélection de meubles de salon : canapés, fauteuils, tables basses et meubles TV pour un intérieur chaleureux.",
+      "Découvrez notre sélection de meubles de salon pour un intérieur chaleureux et fonctionnel.",
     isActive: true,
     children: [
       {
@@ -50,7 +42,13 @@ const categoriesData: CategoryData[] = [
       {
         name: "Tables basses",
         slug: "tables-basses",
-        description: "Tables basses en bois, verre et métal",
+        description: "Tables basses en bois, verre, marbre et métal",
+        isActive: true,
+      },
+      {
+        name: "Meubles TV",
+        slug: "meubles-tv",
+        description: "Meubles TV et bancs multimédia",
         isActive: true,
       },
     ],
@@ -60,15 +58,21 @@ const categoriesData: CategoryData[] = [
     slug: "chambre",
     description:
       "Lits, matelas, armoires et tables de chevet pour votre chambre",
-    metaTitle: "Meubles de chambre | Lits, armoires, chevets",
+    metaTitle: "Meubles de chambre | Lits, matelas, armoires, chevets",
     metaDescription:
-      "Toute la literie et le mobilier de chambre : lits, matelas, armoires, commodes et tables de chevet.",
+      "Toute la literie et le mobilier de chambre pour un sommeil réparateur.",
     isActive: true,
     children: [
       {
         name: "Lits",
         slug: "lits",
         description: "Lits simples, doubles et têtes de lit",
+        isActive: true,
+      },
+      {
+        name: "Matelas",
+        slug: "matelas",
+        description: "Matelas mousse, mémoire de forme et ressorts",
         isActive: true,
       },
       {
@@ -92,7 +96,7 @@ const categoriesData: CategoryData[] = [
       "Tables, chaises et rangements pour la cuisine et la salle à manger",
     metaTitle: "Meubles de cuisine et salle à manger",
     metaDescription:
-      "Tables à manger, chaises, buffets et rangements de cuisine pour tous les styles.",
+      "Tables à manger, chaises, buffets et rangements pour tous les styles.",
     isActive: true,
     children: [
       {
@@ -122,7 +126,7 @@ const categoriesData: CategoryData[] = [
       "Bureaux, chaises ergonomiques et rangements pour l'espace de travail",
     metaTitle: "Mobilier de bureau | Bureaux et chaises ergonomiques",
     metaDescription:
-      "Aménagez votre espace de travail avec nos bureaux, chaises ergonomiques et solutions de rangement.",
+      "Aménagez votre espace de travail avec nos bureaux et solutions de rangement.",
     isActive: true,
     children: [
       {
@@ -137,6 +141,12 @@ const categoriesData: CategoryData[] = [
         description: "Chaises ergonomiques et fauteuils de bureau",
         isActive: true,
       },
+      {
+        name: "Rangements de bureau",
+        slug: "rangements-bureau",
+        description: "Caissons, étagères et meubles de classement",
+        isActive: true,
+      },
     ],
   },
   {
@@ -146,7 +156,7 @@ const categoriesData: CategoryData[] = [
       "Mobilier de jardin, terrasse et balcon résistant aux intempéries",
     metaTitle: "Mobilier extérieur | Jardin, terrasse, balcon",
     metaDescription:
-      "Salons de jardin, chaises longues et tables d'extérieur conçus pour résister aux intempéries.",
+      "Salons de jardin, transats et parasols conçus pour résister aux intempéries.",
     isActive: true,
     children: [
       {
@@ -176,7 +186,7 @@ const categoriesData: CategoryData[] = [
       "Étagères, dressings et meubles de rangement pour toute la maison",
     metaTitle: "Meubles de rangement | Étagères et dressings",
     metaDescription:
-      "Optimisez l'espace de votre maison avec nos étagères, bibliothèques et dressings.",
+      "Optimisez l'espace de votre maison avec nos étagères et dressings.",
     isActive: true,
     children: [
       {
@@ -193,10 +203,59 @@ const categoriesData: CategoryData[] = [
       },
     ],
   },
+  {
+    name: "Décoration",
+    slug: "decoration",
+    description:
+      "Miroirs, luminaires et accessoires pour sublimer votre intérieur",
+    metaTitle: "Décoration intérieure | Miroirs et luminaires",
+    metaDescription:
+      "Miroirs, luminaires et objets déco pour personnaliser chaque pièce.",
+    isActive: true,
+    children: [
+      {
+        name: "Miroirs",
+        slug: "miroirs",
+        description: "Miroirs muraux, ronds et sur pied",
+        isActive: true,
+      },
+      {
+        name: "Luminaires",
+        slug: "luminaires",
+        description: "Suspensions, lampadaires et lampes à poser",
+        isActive: true,
+      },
+    ],
+  },
+  {
+    name: "Bébé & Enfant",
+    slug: "bebe-enfant",
+    description: "Lits, rangements et mobilier adapté à la chambre d'enfant",
+    metaTitle: "Meubles bébé et enfant",
+    metaDescription:
+      "Lits enfant et rangements pensés pour la sécurité et le confort des petits.",
+    isActive: true,
+    children: [
+      {
+        name: "Lits enfant",
+        slug: "lits-enfant",
+        description: "Lits évolutifs, lits cabane et lits superposés",
+        isActive: true,
+      },
+      {
+        name: "Rangement enfant",
+        slug: "rangement-enfant",
+        description: "Coffres à jouets et étagères basses",
+        isActive: true,
+      },
+    ],
+  },
 ];
 
-async function createCategory(data: CategoryPayload): Promise<any> {
-  // Vérifier si la catégorie existe déjà
+async function createCategory(
+  data: Omit<CategoryData, "children">,
+  parentId?: string,
+): Promise<any> {
   const existing = await prisma.category.findUnique({
     where: { slug: data.slug },
   });
@@ -216,7 +275,7 @@ async function createCategory(data: CategoryPayload): Promise<any> {
       metaTitle: data.metaTitle,
       metaDescription: data.metaDescription,
       isActive: data.isActive,
-      ...(data.parentId && { parentId: data.parentId }),
+      ...(parentId && { parentId }),
     },
   });
 
@@ -225,76 +284,34 @@ async function createCategory(data: CategoryPayload): Promise<any> {
 }
 
 async function main() {
-  console.log("🚀 Début de la création des catégories...\n");
+  console.log(
+    "🚀 Début de la création des catégories (furniture e-store)...\n",
+  );
 
-  // Étape 1: Créer toutes les catégories parentes
-  console.log("📦 Étape 1: Création des catégories parentes");
-  console.log("─".repeat(50));
-
-  const parentCategories: Record<string, any> = {};
-
-  for (const parent of categoriesData) {
-    const category = await createCategory({
-      name: parent.name,
-      slug: parent.slug,
-      description: parent.description || "",
-      metaTitle: parent.metaTitle,
-      metaDescription: parent.metaDescription,
-      isActive: parent.isActive,
-    });
-
-    // Stocker l'ID du parent pour les enfants
-    parentCategories[parent.slug] = category;
-  }
-
-  console.log("\n✅ Catégories parentes créées avec succès!");
-  console.log("─".repeat(50));
-
-  // Afficher les IDs des parents pour référence
-  console.log("\n📋 IDs des catégories parentes:");
-  for (const [slug, category] of Object.entries(parentCategories)) {
-    console.log(`  ${slug} → ${category.id}`);
-  }
-
-  // Étape 2: Créer les sous-catégories
-  console.log("\n📦 Étape 2: Création des sous-catégories");
-  console.log("─".repeat(50));
-
-  let childrenCount = 0;
+  let parentCount = 0;
+  let childCount = 0;
 
   for (const parent of categoriesData) {
-    if (!parent.children || parent.children.length === 0) continue;
+    const { children, ...parentFields } = parent;
+    const parentCategory = await createCategory(parentFields);
+    parentCount++;
 
-    const parentCategory = parentCategories[parent.slug];
-    if (!parentCategory) {
-      console.error(
-        `❌ Parent "${parent.slug}" non trouvé, impossible de créer les enfants.`,
-      );
-      continue;
-    }
+    if (!children || children.length === 0) continue;
 
     console.log(
-      `\n  ➜ Sous-catégories de "${parent.name}" (${parentCategory.id}):`,
+      `  ➜ Sous-catégories de "${parentCategory.name}" (${parentCategory.id}):`,
     );
 
-    for (const child of parent.children) {
-      await createCategory({
-        name: child.name,
-        slug: child.slug,
-        description: child.description || "",
-        metaTitle: child.metaTitle,
-        metaDescription: child.metaDescription,
-        isActive: child.isActive,
-        parentId: parentCategory.id,
-      });
-      childrenCount++;
+    for (const child of children) {
+      await createCategory(child, parentCategory.id);
+      childCount++;
     }
   }
 
   console.log("\n" + "=".repeat(50));
-  console.log(`🎉 Création terminée avec succès!`);
+  console.log("🎉 Création des catégories terminée!");
   console.log(
-    `📊 Total: ${categoriesData.length} catégories parentes + ${childrenCount} sous-catégories = ${categoriesData.length + childrenCount} catégories`,
+    `📊 Total: ${parentCount} catégories parentes + ${childCount} sous-catégories = ${parentCount + childCount} catégories`,
   );
   console.log("=".repeat(50));
 }
