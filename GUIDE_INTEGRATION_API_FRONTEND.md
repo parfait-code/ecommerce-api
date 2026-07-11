@@ -57,7 +57,7 @@ Authorization: Bearer <token>
 
 ### 2.4 Verrouillage de compte
 
-Après 5 échecs de connexion consécutifs sur 15 minutes, le compte est automatiquement désactivé (`isActive: false`). Le message d'erreur reste générique (`Provided username and password did not match.`) — le frontend ne peut pas distinguer un mauvais mot de passe d'un compte verrouillé avant la tentative suivante, qui renverra alors `This account has been deactivated.` (403).
+Après un nombre configurable d'échecs de connexion consécutifs (5 par défaut, sur une fenêtre de 15 minutes — voir §6.21 pour les rendre configurables), le compte est automatiquement désactivé (`isActive: false`). Le message d'erreur reste générique (`Provided username and password did not match.`) — le frontend ne peut pas distinguer un mauvais mot de passe d'un compte verrouillé avant la tentative suivante, qui renverra alors `This account has been deactivated.` (403).
 
 La suspension (`isActive`) est désormais **indépendante** de la suppression de compte (`deletedAt`) : un admin peut suspendre/réactiver un utilisateur via `PATCH /user/:userId/status` sans que cela affecte son statut de suppression, et inversement.
 
@@ -97,7 +97,7 @@ Code HTTP 200 (ou 201 pour une création).
 
 ## 4. Pagination
 
-Les endpoints de listing acceptent `?page=1&limit=20` (défauts : page 1, limit 20) et renvoient :
+Les endpoints de listing acceptent `?page=1&limit=20` (page par défaut : 1 ; `limit` par défaut piloté par le setting `pagination.default_page_size`, 20 sauf modification admin — voir §6.21) et renvoient :
 
 ```json
 {
@@ -116,7 +116,7 @@ Les endpoints de listing acceptent `?page=1&limit=20` (défauts : page 1, limit 
 
 ## 5. Conventions générales
 
-- **Devise** : XAF partout (montants en nombres, pas de sous-unités).
+- **Devise** : XAF partout (montants en nombres, pas de sous-unités) — également exposé via le setting public `store.currency` (§6.21).
 - **Dates** : ISO 8601 (`z.string().datetime()` côté validation des inputs).
 - **IDs** : `Product` utilise un ID numérique auto-incrémenté (`Int`). Toutes les autres entités utilisent des `cuid()` (string).
 - **Soft delete** : uniquement sur `User` (`deletedAt`, indépendant de `isActive` — voir §2.4). Les produits sont supprimés définitivement (hard delete) — un produit supprimé disparaît des commandes historiques (le nom/SKU restent en snapshot sur `OrderItem.productName` / `productSku`).
@@ -127,62 +127,64 @@ Les endpoints de listing acceptent `?page=1&limit=20` (défauts : page 1, limit 
 
 ### 6.1 Utilisateurs (`/user`)
 
-| Méthode | Route                       | Auth  | Body                                                                             |
-| ------- | --------------------------- | ----- | -------------------------------------------------------------------------------- |
-| GET     | `/user`                     | User  | — (profil courant)                                                               |
-| PATCH   | `/user`                     | User  | `{ email?, firstName?, lastName?, dateOfBirth?, phone? }`                        |
-| GET     | `/user/all`                 | Admin | —                                                                                |
-| GET     | `/user/:userId`             | Admin | —                                                                                |
-| PATCH   | `/user/change-role/:userId` | Admin | `{ role }`                                                                       |
-| POST    | `/user`                     | Admin | `{ username, email, password, firstName, lastName, role, ... }` (création admin) |
-| PATCH   | `/user/:userId/status`      | Admin | `{ isActive }` — suspension / réactivation, **indépendante** de la suppression   |
-| DELETE  | `/user/:userId`             | Admin | — (soft delete, un admin ne peut pas se supprimer lui-même)                      |
+| Méthode | Route                       | Auth  | Body                                                                                                                         |
+| ------- | --------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/user`                     | User  | — (profil courant)                                                                                                           |
+| PATCH   | `/user`                     | User  | `{ email?, firstName?, lastName?, dateOfBirth?, phone? }`                                                                    |
+| GET     | `/user/all`                 | Admin | —                                                                                                                            |
+| GET     | `/user/:userId`             | Admin | —                                                                                                                            |
+| PATCH   | `/user/change-role/:userId` | Admin | `{ role }`                                                                                                                   |
+| POST    | `/user`                     | Admin | `{ username, email, password, firstName, lastName, dateOfBirth?, phone?, role? }` — création admin, `role` par défaut `USER` |
+| PATCH   | `/user/:userId/status`      | Admin | `{ isActive }` — suspension / réactivation, **indépendante** de la suppression                                               |
+| DELETE  | `/user/:userId`             | Admin | — (soft delete, un admin ne peut pas se supprimer lui-même)                                                                  |
 
 ### 6.2 Produits (`/product`)
 
-| Méthode | Route                        | Auth                      | Description                                                                                         |
-| ------- | ---------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------- |
-| GET     | `/product`                   | Public (auth optionnelle) | `?page&limit&categoryId&search`. En admin, ajouter `?includeInactive=true` pour voir DRAFT/ARCHIVED |
-| GET     | `/product/:productId`        | Public                    | Détail produit (avec `pricing` calculé, voir §7.3)                                                  |
-| POST    | `/product`                   | Admin                     | `{ sku, name, description?, price, categoryId, weight, status? }` — naît toujours en `DRAFT`        |
-| PATCH   | `/product/:productId`        | Admin                     | Champs partiels                                                                                     |
-| DELETE  | `/product/:productId`        | Admin                     | Hard delete                                                                                         |
-| POST    | `/product/:productId/images` | Admin                     | multipart, champ `images` (jusqu'à 5), body `combinationId?`                                        |
-| DELETE  | `/product/:productId/images` | Admin                     | body `{ imageId }`                                                                                  |
+| Méthode | Route                        | Auth                      | Description                                                                                                                |
+| ------- | ---------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/product`                   | Public (auth optionnelle) | `?page&limit&categoryId&search`. En admin, ajouter `?includeInactive=true` pour voir DRAFT/ARCHIVED                        |
+| GET     | `/product/:productId`        | Public                    | Détail produit (avec `pricing` calculé, voir §7.3)                                                                         |
+| POST    | `/product`                   | Admin                     | `{ sku, name, description?, price, categoryId, weight, status? }` — naît toujours en `DRAFT` quel que soit `status` envoyé |
+| PATCH   | `/product/:productId`        | Admin                     | Champs partiels (sans `categoryId`, voir §6.2 note ci-dessous)                                                             |
+| DELETE  | `/product/:productId`        | Admin                     | Hard delete                                                                                                                |
+| POST    | `/product/:productId/images` | Admin                     | multipart, champ `images` (jusqu'à 5), body `combinationId?`                                                               |
+| DELETE  | `/product/:productId/images` | Admin                     | body `{ imageId }`                                                                                                         |
 
 ⚠️ Passer un produit en `ACTIVE` échoue (400) si des attributs `isRequired: true` de sa catégorie ne sont pas renseignés.
 
 ⚠️ Si la catégorie d'un produit change, ses `ProductAttributeValue` sont purgées, ses combinaisons sont désactivées (l'historique de commande est préservé) et le produit repasse automatiquement en `DRAFT`.
 
+⚠️ `PATCH /product/:productId` ne permet pas de changer `categoryId` — la modification de catégorie n'est pas exposée via cet endpoint.
+
 ### 6.3 Combinaisons / variantes (`/product/:productId/combinations`)
 
 Un produit peut avoir des **attributs de variante** (ex : couleur, taille) qui génèrent des **combinaisons** achetables individuellement (chacune avec son propre stock, prix optionnel, images).
 
-| Méthode | Route                                | Auth  | Description                                                                                         |
-| ------- | ------------------------------------ | ----- | --------------------------------------------------------------------------------------------------- |
-| GET     | `/`                                  | User  | Liste des combinaisons du produit                                                                   |
-| GET     | `/selections`                        | User  | Sélections d'options faites pour chaque attribut de variante                                        |
-| PUT     | `/selections/:attributeDefinitionId` | Admin | `{ optionIds: string[] }` — définit les options disponibles pour cet attribut                       |
-| POST    | `/generate`                          | Admin | Génère le produit cartésien des sélections en combinaisons (idempotent, désactive celles obsolètes) |
-| GET     | `/:combinationId`                    | User  | Détail                                                                                              |
-| PATCH   | `/:combinationId`                    | Admin | `{ sku?, price?, isActive? }`                                                                       |
-| DELETE  | `/:combinationId`                    | Admin | Refusée si stock > 0                                                                                |
+| Méthode | Route                                | Auth   | Description                                                                                         |
+| ------- | ------------------------------------ | ------ | --------------------------------------------------------------------------------------------------- |
+| GET     | `/`                                  | Public | Liste des combinaisons du produit                                                                   |
+| GET     | `/selections`                        | Public | Sélections d'options faites pour chaque attribut de variante                                        |
+| PUT     | `/selections/:attributeDefinitionId` | Admin  | `{ optionIds: string[] }` — définit les options disponibles pour cet attribut                       |
+| POST    | `/generate`                          | Admin  | Génère le produit cartésien des sélections en combinaisons (idempotent, désactive celles obsolètes) |
+| GET     | `/:combinationId`                    | Public | Détail                                                                                              |
+| PATCH   | `/:combinationId`                    | Admin  | `{ sku?, price?, isActive? }`                                                                       |
+| DELETE  | `/:combinationId`                    | Admin  | Refusée si stock > 0                                                                                |
 
 ⚠️ **Si `product.combinations.length > 0`**, le frontend **doit** faire sélectionner une combinaison au client avant tout ajout au panier ou commande (`combination_id` requis) — sinon 400.
 
 ### 6.4 Attributs (`/categories/:categoryId/attributes`, `/attributes`, `/product/:productId/attributes`)
 
-| Méthode | Route                                | Auth  | Description                                                                                                          |
-| ------- | ------------------------------------ | ----- | -------------------------------------------------------------------------------------------------------------------- |
-| GET     | `/categories/:categoryId/attributes` | User  | Définitions d'attributs de la catégorie                                                                              |
-| POST    | `/categories/:categoryId/attributes` | Admin | `{ name, slug, type, unit?, isVariant, isFilterable, isRequired, position }`                                         |
-| GET     | `/attributes/:definitionId`          | User  | —                                                                                                                    |
-| PATCH   | `/attributes/:definitionId`          | Admin | —                                                                                                                    |
-| DELETE  | `/attributes/:definitionId`          | Admin | —                                                                                                                    |
-| POST    | `/attributes/:definitionId/options`  | Admin | `{ value, colorHex?, position }`                                                                                     |
-| PATCH   | `/attributes/options/:optionId`      | Admin | —                                                                                                                    |
-| DELETE  | `/attributes/options/:optionId`      | Admin | Refusée si l'option est utilisée par une combinaison ayant encore du stock                                           |
-| PUT     | `/product/:productId/attributes`     | Admin | `{ attributes: [{attributeDefinitionId, value}] }` — **uniquement pour attributs non-variante** (`isVariant: false`) |
+| Méthode | Route                                | Auth  | Description                                                                                                                                                                                             |
+| ------- | ------------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/categories/:categoryId/attributes` | User  | Définitions d'attributs de la catégorie                                                                                                                                                                 |
+| POST    | `/categories/:categoryId/attributes` | Admin | `{ name, slug, type, unit?, isVariant?, isFilterable?, isRequired?, position? }` — `isVariant` (défaut `false`), `isFilterable` (défaut `true`), `isRequired` (défaut `false`), `position` (défaut `0`) |
+| GET     | `/attributes/:definitionId`          | User  | —                                                                                                                                                                                                       |
+| PATCH   | `/attributes/:definitionId`          | Admin | —                                                                                                                                                                                                       |
+| DELETE  | `/attributes/:definitionId`          | Admin | —                                                                                                                                                                                                       |
+| POST    | `/attributes/:definitionId/options`  | Admin | `{ value, colorHex?, position? }`                                                                                                                                                                       |
+| PATCH   | `/attributes/options/:optionId`      | Admin | —                                                                                                                                                                                                       |
+| DELETE  | `/attributes/options/:optionId`      | Admin | Refusée si l'option est utilisée par une combinaison ayant encore du stock                                                                                                                              |
+| PUT     | `/product/:productId/attributes`     | Admin | `{ attributes: [{attributeDefinitionId, value}] }` — **uniquement pour attributs non-variante** (`isVariant: false`)                                                                                    |
 
 `type` : `TEXT | NUMBER | COLOR | BOOLEAN | SELECT`.
 
@@ -211,7 +213,7 @@ Un produit peut avoir des **attributs de variante** (ex : couleur, taille) qui g
 | PATCH   | `/tags/:tagId`             | Admin  | —                                                   |
 | DELETE  | `/tags/:tagId`             | Admin  | —                                                   |
 | PUT     | `/product/:productId/tags` | Admin  | `{ tagIds: string[] }` (remplace la liste complète) |
-| GET     | `/product/:productId/tags` | User   | —                                                   |
+| GET     | `/product/:productId/tags` | Public | —                                                   |
 
 ### 6.7 Panier (`/basket`, `/user/basket`)
 
@@ -249,15 +251,16 @@ Le stock n'est **jamais réservé au niveau du panier** — seulement vérifié 
 
 ### 6.10 Commandes (`/orders`)
 
-| Méthode | Route                     | Auth  | Description                                                                      |
-| ------- | ------------------------- | ----- | -------------------------------------------------------------------------------- |
-| GET     | `/orders`                 | User  | Ses propres commandes (admin voit tout via `?customer=email`)                    |
-| POST    | `/orders`                 | User  | Voir §7.1                                                                        |
-| GET     | `/orders/:orderId`        | User  | Doit être propriétaire (sauf admin)                                              |
-| PUT     | `/orders/:orderId`        | User  | Modifie adresse/notes/méthode de livraison **avant expédition**                  |
-| DELETE  | `/orders/:orderId`        | User  | Annule la commande (transition `CANCELLED`, libère le stock)                     |
-| PUT     | `/orders/:orderId/status` | Admin | `{ status, reason?, shippingCarrier?, trackingNumber?, estimatedDeliveryDate? }` |
-| GET     | `/user/:userId/orders`    | Admin | Commandes d'un utilisateur donné                                                 |
+| Méthode | Route                     | Auth  | Description                                                                                                                                                  |
+| ------- | ------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET     | `/orders`                 | User  | Ses propres commandes (admin voit tout via `?customer=email`)                                                                                                |
+| POST    | `/orders`                 | User  | Voir §7.1                                                                                                                                                    |
+| GET     | `/orders/:orderId`        | User  | Doit être propriétaire (sauf admin)                                                                                                                          |
+| PUT     | `/orders/:orderId`        | User  | Modifie adresse/notes/méthode de livraison **avant expédition**                                                                                              |
+| DELETE  | `/orders/:orderId`        | User  | Annule la commande (transition `CANCELLED`, libère le stock)                                                                                                 |
+| PUT     | `/orders/:orderId/status` | Admin | `{ status, reason?, shippingCarrier?, trackingNumber?, estimatedDeliveryDate? }`                                                                             |
+| GET     | `/user/:userId/orders`    | Admin | Commandes d'un utilisateur donné                                                                                                                             |
+| POST    | `/orders/expire-stale`    | Admin | Force l'annulation des commandes `PENDING` non payées dépassant le délai configuré (voir §7.1 et §6.21) — cible pour un cron externe / vérification manuelle |
 
 **Body `POST /orders`** :
 
@@ -289,15 +292,15 @@ Le stock n'est **jamais réservé au niveau du panier** — seulement vérifié 
 
 ### 6.11 Paiements (`/payments`, `/payment-methods`)
 
-| Méthode | Route                            | Auth   | Description                                                                                          |
-| ------- | -------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
-| GET     | `/payment-methods`               | Public | Liste des méthodes et leur disponibilité                                                             |
-| POST    | `/payments`                      | User   | `{ order_id, method, currency?, notes? }`                                                            |
-| GET     | `/payments/:payment_id`          | User   | —                                                                                                    |
-| PUT     | `/payments/:payment_id/status`   | Admin  | `{ status, notes? }` — **restreint à `REFUNDED`** manuellement, le reste est automatique (voir §7.2) |
-| PUT     | `/payments/:payment_id/complete` | Admin  | Déprécié, alias de `status: COMPLETED`                                                               |
-| GET     | `/orders/:orderId/payments`      | User   | —                                                                                                    |
-| GET     | `/payments`                      | Admin  | `?page&limit&status&method&order_id`                                                                 |
+| Méthode | Route                            | Auth   | Description                                                                                             |
+| ------- | -------------------------------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| GET     | `/payment-methods`               | Public | Liste des méthodes et leur disponibilité (piloté par le setting `payments.enabled_methods`, voir §6.21) |
+| POST    | `/payments`                      | User   | `{ order_id, method, currency?, notes? }`                                                               |
+| GET     | `/payments/:payment_id`          | User   | —                                                                                                       |
+| PUT     | `/payments/:payment_id/status`   | Admin  | `{ status, notes? }` — **restreint à `REFUNDED`** manuellement, le reste est automatique (voir §7.2)    |
+| PUT     | `/payments/:payment_id/complete` | Admin  | Déprécié, alias de `status: COMPLETED`                                                                  |
+| GET     | `/orders/:orderId/payments`      | User   | —                                                                                                       |
+| GET     | `/payments`                      | Admin  | `?page&limit&status&method&order_id`                                                                    |
 
 Seule `CASH_ON_DELIVERY` est actuellement disponible (`PAYPAL`, `STRIPE`, `CINETPAY` renvoient 503 « Coming soon »).
 
@@ -324,19 +327,19 @@ Seule `CASH_ON_DELIVERY` est actuellement disponible (`PAYPAL`, `STRIPE`, `CINET
 
 ### 6.14 Inventaire / Stock (`/inventory`)
 
-| Méthode | Route                           | Auth  | Description                                                        |
-| ------- | ------------------------------- | ----- | ------------------------------------------------------------------ |
-| GET     | `/inventory`                    | Admin | `?category&location&warehouse_id&page&limit`                       |
-| GET     | `/inventory/search`             | Admin | `?keyword=` (requis)                                               |
-| GET     | `/inventory/grouped`            | Admin | Vue groupée par produit — `?low_stock=true` / `?out_of_stock=true` |
-| GET     | `/inventory/grouped/:productId` | Admin | Détail par combinaison × entrepôt, paginé                          |
-| GET     | `/inventory/:item_id`           | Admin | —                                                                  |
-| POST    | `/inventory`                    | Admin | `{ product_id, warehouse_id, combination_id?, quantity }`          |
-| PUT     | `/inventory/:item_id`           | Admin | `{ quantity?, warehouse_id? }`                                     |
-| DELETE  | `/inventory/:item_id`           | Admin | —                                                                  |
-| POST    | `/inventory/transfer`           | Admin | `{ item_id, from_warehouse, to_warehouse, quantity }`              |
+| Méthode | Route                           | Auth  | Description                                                                            |
+| ------- | ------------------------------- | ----- | -------------------------------------------------------------------------------------- |
+| GET     | `/inventory`                    | Admin | `?category&location&warehouse_id&page&limit`                                           |
+| GET     | `/inventory/search`             | Admin | `?keyword=` (requis)                                                                   |
+| GET     | `/inventory/grouped`            | Admin | Vue groupée par produit — `?low_stock=true` / `?out_of_stock=true`                     |
+| GET     | `/inventory/grouped/:productId` | Admin | Détail par combinaison × entrepôt, paginé                                              |
+| GET     | `/inventory/:item_id`           | Admin | —                                                                                      |
+| POST    | `/inventory`                    | Admin | `{ product_id, warehouse_id, combination_id?, quantity? }` — `quantity` par défaut `0` |
+| PUT     | `/inventory/:item_id`           | Admin | `{ quantity?, warehouse_id? }`                                                         |
+| DELETE  | `/inventory/:item_id`           | Admin | —                                                                                      |
+| POST    | `/inventory/transfer`           | Admin | `{ item_id, from_warehouse, to_warehouse, quantity }`                                  |
 
-Seuil stock faible : 10 unités.
+Seuil stock faible : configurable via le setting `inventory.low_stock_threshold` (10 unités par défaut — voir §6.21). Ne pas coder ce seuil en dur côté frontend s'il doit refléter une valeur affichée ailleurs (badges "stock faible").
 
 ### 6.15 Expéditions & retraits (`/shipments`, `/pickup-requests`, `/labels`)
 
@@ -357,63 +360,86 @@ Passer `shipment.status` (ou `shipment_status` via `/track`) à `IN_TRANSIT` ou 
 
 #### Demandes de retrait (pickup requests)
 
-| Méthode | Route                                  | Auth  | Description                                                                                                                                    |
-| ------- | -------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET     | `/pickup-requests`                     | Admin | `?page&limit&status&order_id`                                                                                                                  |
-| GET     | `/pickup-requests/:requestId`          | User  | Doit être le demandeur (sauf admin)                                                                                                            |
-| PATCH   | `/pickup-requests/:requestId/location` | Admin | `{ method, address_id?, warehouse_id?, pickup_date?, deadline? }` — `method` ∈ `ORIGINAL_ADDRESS \| WAREHOUSE_DROPOFF \| CUSTOM_ADDRESS`       |
-| PATCH   | `/pickup-requests/:requestId/status`   | Admin | `{ status, notes? }`                                                                                                                           |
-| POST    | `/pickup-requests/expire-overdue`      | Admin | Force la détection/expiration des demandes dont le délai est dépassé (cible pour un cron externe — aucun scheduler n'est actuellement branché) |
+| Méthode | Route                                  | Auth  | Description                                                                                                                                                                            |
+| ------- | -------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/pickup-requests`                     | Admin | `?page&limit&status&order_id`                                                                                                                                                          |
+| GET     | `/pickup-requests/:requestId`          | User  | Doit être le demandeur (sauf admin)                                                                                                                                                    |
+| PATCH   | `/pickup-requests/:requestId/location` | Admin | `{ method, address_id?, warehouse_id?, pickup_date?, deadline? }` — `method` ∈ `ORIGINAL_ADDRESS \| WAREHOUSE_DROPOFF \| CUSTOM_ADDRESS`                                               |
+| PATCH   | `/pickup-requests/:requestId/status`   | Admin | `{ status, notes? }`                                                                                                                                                                   |
+| POST    | `/pickup-requests/expire-overdue`      | Admin | Force la détection/expiration des demandes dont le délai est dépassé — un cron interne tourne déjà toutes les 15 min (voir §7.6), cet endpoint sert surtout à la vérification manuelle |
 
 ⚠️ **Aucune route de création manuelle** : une pickup request naît automatiquement quand un retour passe à `APPROVED` (voir §6.19). **Aucune route d'annulation côté client** non plus — seul un admin peut faire évoluer son statut ; annuler la pickup annule en cascade le retour lié.
 
+⚠️ **Visibilité pickup request** — chaque `ReturnRequest` renvoyé par `GET /returns/:returnId`
+et `GET /orders/:orderId/returns` inclut désormais un champ `pickupRequest` (nullable, `null`
+tant que le retour n'est pas passé à `APPROVED`) :
+
+```json
+{
+  "id": "ret_1",
+  "orderId": "order_abc",
+  "status": "APPROVED",
+  "pickupRequest": {
+    "id": "pr_1",
+    "method": "ORIGINAL_ADDRESS",
+    "status": "PENDING",
+    "pickupDate": null,
+    "deadline": "2026-07-25T00:00:00.000Z",
+    "warehouse": null,
+    "address": { "id": "addr_1", "street": "...", "city": "...", "...": "..." }
+  }
+}
+```
+
+C'est le point d'entrée recommandé pour la page "mes demandes d'enlèvement" — pas besoin de connaître l'ID de la pickup request à l'avance, ni de route dédiée supplémentaire.
+
 ### 6.16 Méthodes de livraison (`/shipping-methods`)
 
-| Méthode | Route                         | Auth   | Body                                                                                                                                                                            |
-| ------- | ----------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET     | `/shipping-methods`           | Public | `?includeInactive=true` réservé admin — par défaut seules les méthodes `isActive: true` sont renvoyées                                                                          |
-| GET     | `/shipping-methods/:methodId` | Public | idem                                                                                                                                                                            |
-| POST    | `/shipping-methods`           | Admin  | `{ name, description?, estimatedDays, basePrice, pricePerKg, isActive, zones: string[2] }` — `zones` : codes ISO 3166-1 alpha-2 (ou libellés reconnus, normalisés côté serveur) |
-| PATCH   | `/shipping-methods/:methodId` | Admin  | —                                                                                                                                                                               |
-| DELETE  | `/shipping-methods/:methodId` | Admin  | —                                                                                                                                                                               |
-| POST    | `/shipping-methods/calculate` | Public | `{ shippingMethodId, weight, country }` — 400 si le pays n'est pas couvert par les `zones` de la méthode                                                                        |
+| Méthode | Route                         | Auth   | Body                                                                                                                                                                                     |
+| ------- | ----------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/shipping-methods`           | Public | `?includeInactive=true` réservé admin — par défaut seules les méthodes `isActive: true` sont renvoyées                                                                                   |
+| GET     | `/shipping-methods/:methodId` | Public | idem                                                                                                                                                                                     |
+| POST    | `/shipping-methods`           | Admin  | `{ name, description?, estimatedDays, basePrice, pricePerKg?, isActive?, zones: string[] }` — `zones` : au moins un code ISO 3166-1 alpha-2 (ou libellé reconnu, normalisé côté serveur) |
+| PATCH   | `/shipping-methods/:methodId` | Admin  | —                                                                                                                                                                                        |
+| DELETE  | `/shipping-methods/:methodId` | Admin  | —                                                                                                                                                                                        |
+| POST    | `/shipping-methods/calculate` | Public | `{ shippingMethodId, weight, country }` — 400 si le pays n'est pas couvert par les `zones` de la méthode                                                                                 |
 
 ### 6.17 Promotions, remises & coupons (`/promotions`, `/coupons`)
 
-| Méthode | Route                                            | Auth   | Description                                                                        |
-| ------- | ------------------------------------------------ | ------ | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| GET     | `/promotions`                                    | Admin  | `?status&isActive&page&limit`                                                      |
-| GET     | `/promotions/active`                             | Public | Promotions actuellement actives, triées par date de fin                            |
-| GET     | `/promotions/slug/:slug`                         | Public | —                                                                                  |
-| GET     | `/promotions/slug/:slug/products`                | Public | Produits affectés + `pricing` calculé                                              |
-| GET     | `/promotions/:promotionId`                       | Admin  | —                                                                                  |
-| GET     | `/promotions/:promotionId/products`              | Admin  | —                                                                                  |
-| POST    | `/promotions`                                    | Admin  | `{ name, slug, description?, startDate, endDate, isActive }`                       |
-| PUT     | `/promotions/:promotionId`                       | Admin  | —                                                                                  |
-| PATCH   | `/promotions/:promotionId/toggle`                | Admin  | Bascule `isActive`                                                                 |
-| DELETE  | `/promotions/:promotionId`                       | Admin  | —                                                                                  |
-| POST    | `/promotions/:promotionId/images`                | Admin  | multipart `images` (5 max)                                                         |
-| DELETE  | `/promotions/:promotionId/images`                | Admin  | body `{ imageUrl }`                                                                |
-| POST    | `/promotions/:promotionId/discounts`             | Admin  | `{ type: PERCENTAGE                                                                | FIXED_AMOUNT, value, categoryId?, productIds? }` (au moins un ciblage requis) |
-| DELETE  | `/promotions/:promotionId/discounts/:discountId` | Admin  | —                                                                                  |
-| GET     | `/promotions/:promotionId/coupons`               | Admin  | Chaque coupon inclut `effectiveIsActive` (calculé — voir §7.3)                     |
-| POST    | `/promotions/:promotionId/coupons`               | Admin  | `{ code, maxUses?, perUserLimit, startDate?, endDate?, isActive }`                 |
-| DELETE  | `/promotions/:promotionId/coupons/:couponId`     | Admin  | —                                                                                  |
-| POST    | `/coupons/validate`                              | User   | `{ code, basketId?, items? }` — retourne un `preview` du montant si `items` fourni |
+| Méthode | Route                                            | Auth   | Description                                                                                        |
+| ------- | ------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------- |
+| GET     | `/promotions`                                    | Admin  | `?status&isActive&page&limit`                                                                      |
+| GET     | `/promotions/active`                             | Public | Promotions actuellement actives, triées par date de fin                                            |
+| GET     | `/promotions/slug/:slug`                         | Public | —                                                                                                  |
+| GET     | `/promotions/slug/:slug/products`                | Public | Produits affectés + `pricing` calculé                                                              |
+| GET     | `/promotions/:promotionId`                       | Admin  | —                                                                                                  |
+| GET     | `/promotions/:promotionId/products`              | Admin  | —                                                                                                  |
+| POST    | `/promotions`                                    | Admin  | `{ name, slug, description?, startDate, endDate, isActive? }`                                      |
+| PUT     | `/promotions/:promotionId`                       | Admin  | —                                                                                                  |
+| PATCH   | `/promotions/:promotionId/toggle`                | Admin  | Bascule `isActive`                                                                                 |
+| DELETE  | `/promotions/:promotionId`                       | Admin  | —                                                                                                  |
+| POST    | `/promotions/:promotionId/images`                | Admin  | multipart `images` (5 max)                                                                         |
+| DELETE  | `/promotions/:promotionId/images`                | Admin  | body `{ imageUrl }`                                                                                |
+| POST    | `/promotions/:promotionId/discounts`             | Admin  | `{ type: PERCENTAGE\|FIXED_AMOUNT, value, categoryId?, productIds? }` (au moins un ciblage requis) |
+| DELETE  | `/promotions/:promotionId/discounts/:discountId` | Admin  | —                                                                                                  |
+| GET     | `/promotions/:promotionId/coupons`               | Admin  | Chaque coupon inclut `effectiveIsActive` (calculé — voir §7.3)                                     |
+| POST    | `/promotions/:promotionId/coupons`               | Admin  | `{ code, maxUses?, perUserLimit?, startDate?, endDate?, isActive? }`                               |
+| DELETE  | `/promotions/:promotionId/coupons/:couponId`     | Admin  | —                                                                                                  |
+| POST    | `/coupons/validate`                              | User   | `{ code, basketId?, items? }` — retourne un `preview` du montant si `items` fourni                 |
 
 Le `status` d'une promotion (`SCHEDULED / ACTIVE / EXPIRED / CANCELLED`) est **recalculé dynamiquement** à chaque lecture à partir des dates — ne pas se fier à un statut mis en cache côté frontend au-delà de quelques minutes. De même, `effectiveIsActive` sur un coupon reflète l'état opérationnel réel (dates, plafond d'utilisation) indépendamment du champ `isActive` stocké.
 
-⚠️ **Point d'attention connu** : après expiration d'une promotion (`endDate` dépassée), le prix remisé peut rester visible sur `/product` jusqu'à 5 minutes (TTL du cache Redis des produits). `/promotions/active` reflète en revanche l'état réel immédiatement. Ne pas construire de logique de countdown critique sur le prix produit.
+⚠️ **Point d'attention connu** : après expiration d'une promotion (`endDate` dépassée), le prix remisé peut rester visible sur `/product` jusqu'à expiration du cache Redis des produits (TTL piloté par `cache.default_ttl_seconds`, 5 minutes par défaut — voir §6.21). `/promotions/active` reflète en revanche l'état réel immédiatement. Ne pas construire de logique de countdown critique sur le prix produit.
 
 ### 6.18 Fidélité (`/loyalty`)
 
-| Méthode | Route                      | Auth  | Body                            |
-| ------- | -------------------------- | ----- | ------------------------------- | -------- | ------- | --------------------- |
-| GET     | `/loyalty/:userId/balance` | User  | Propriétaire ou admin           |
-| GET     | `/loyalty/:userId/history` | User  | Propriétaire ou admin           |
-| POST    | `/loyalty/adjust`          | Admin | `{ userId, points, type: EARNED | REDEEMED | EXPIRED | ADJUSTED, orderId? }` |
+| Méthode | Route                      | Auth  | Body                                                                      |
+| ------- | -------------------------- | ----- | ------------------------------------------------------------------------- |
+| GET     | `/loyalty/:userId/balance` | User  | Propriétaire ou admin                                                     |
+| GET     | `/loyalty/:userId/history` | User  | Propriétaire ou admin                                                     |
+| POST    | `/loyalty/adjust`          | Admin | `{ userId, points, type: EARNED\|REDEEMED\|EXPIRED\|ADJUSTED, orderId? }` |
 
-Barème : 1 point par 100 XAF dépensés, crédité automatiquement à `Order.status → DELIVERED`. Reversal automatique si un retour lié à la commande est complété.
+Barème : configurable via le setting `loyalty.points_per_currency_unit` (0.01 par défaut, soit 1 point par 100 XAF dépensés), crédité automatiquement à `Order.status → DELIVERED`. Reversal automatique si un retour lié à la commande est complété.
 
 ### 6.19 Retours (`/returns`)
 
@@ -457,35 +483,62 @@ Barème : 1 point par 100 XAF dépensés, crédité automatiquement à `Order.st
 
 Quand un retour passe à `COMPLETED` : `Order.status → REFUNDED`, remboursement automatique des paiements complétés, réintégration du stock, reversal des points de fidélité gagnés sur cette commande.
 
-⚠️ **Visibilité pickup request** — chaque `ReturnRequest` renvoyé par `GET /returns/:returnId`
-et `GET /orders/:orderId/returns` inclut désormais un champ `pickupRequest` (nullable, `null`
-tant que le retour n'est pas passé à `APPROVED`) :
-
-```json
-{
-  "id": "ret_1",
-  "orderId": "order_abc",
-  "status": "APPROVED",
-  "pickupRequest": {
-    "id": "pr_1",
-    "method": "ORIGINAL_ADDRESS",
-    "status": "PENDING",
-    "pickupDate": null,
-    "deadline": "2026-07-25T00:00:00.000Z",
-    "warehouse": null,
-    "address": { "id": "addr_1", "street": "...", "city": "...", "...": "..." }
-  }
-}
-```
-
-C'est le point d'entrée recommandé pour la page "mes demandes d'enlèvement" — pas besoin de connaître l'ID de la pickup request à l'avance, ni de route dédiée supplémentaire.
-
 ### 6.20 Tableau de bord (`/dashboard`)
 
 | Méthode | Route                    | Auth  | Description                                                                                         |
 | ------- | ------------------------ | ----- | --------------------------------------------------------------------------------------------------- |
 | GET     | `/dashboard/stats`       | Admin | KPIs globaux (produits, commandes, paiements, stock faible, expéditions, promotions, retours, avis) |
 | GET     | `/dashboard/sales-chart` | Admin | `?year&period` — série mensuelle de CA/commandes                                                    |
+
+### 6.21 Paramètres (`/settings`)
+
+Module de configuration à chaud — les administrateurs peuvent modifier certains comportements de l'API (seuils, listes, méthodes de paiement actives, etc.) sans redéploiement.
+
+| Méthode | Route              | Auth   | Description                                                                                                                                                                               |
+| ------- | ------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/settings/public` | Public | Retourne uniquement les settings marqués `isPublic: true` — c'est le point d'entrée recommandé pour la home page (devise, pays supportés, méthodes de paiement actives, limites d'upload) |
+| GET     | `/settings`        | Admin  | `?category=` — tous les settings, publics et privés                                                                                                                                       |
+| PATCH   | `/settings`        | Admin  | `{ settings: [{ key, value }] }` — mise à jour groupée (au moins 1 entrée)                                                                                                                |
+| PATCH   | `/settings/:key`   | Admin  | `{ value }` — mise à jour d'un seul setting                                                                                                                                               |
+
+**Forme d'un objet Setting** :
+
+```json
+{
+  "id": "...",
+  "key": "inventory.low_stock_threshold",
+  "value": "10",
+  "type": "NUMBER",
+  "category": "inventory",
+  "description": "Seuil déclenchant l'alerte LOW_STOCK",
+  "isPublic": false,
+  "updatedBy": 1,
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+```
+
+⚠️ **`value` est toujours une string en base**, y compris pour les settings de type `JSON` — dans ce cas, `value` contient une chaîne JSON qu'il faut parser côté frontend (`JSON.parse(setting.value)`). Pour un `PATCH`, envoyer directement la valeur native (objet, tableau, nombre, booléen) dans le body `{ value }` : le serveur se charge de la (re)sérialisation selon le `type` déclaré du setting — ne pas stringifier manuellement côté client.
+
+**Clés disponibles** (`key` / `type` / `category` / `isPublic`) :
+
+| Clé                                     | Type   | Catégorie  | Public | Description                                                                                    |
+| --------------------------------------- | ------ | ---------- | ------ | ---------------------------------------------------------------------------------------------- |
+| `store.currency`                        | STRING | store      | ✅     | Devise utilisée dans toute l'application                                                       |
+| `store.supported_countries`             | JSON   | store      | ✅     | Pays supportés pour les adresses et zones de livraison — voir §9                               |
+| `payments.enabled_methods`              | JSON   | payments   | ✅     | Méthodes de paiement actuellement disponibles                                                  |
+| `payments.unavailable_messages`         | JSON   | payments   | ✅     | Messages affichés pour les méthodes de paiement indisponibles                                  |
+| `inventory.low_stock_threshold`         | NUMBER | inventory  | ❌     | Seuil déclenchant l'alerte LOW_STOCK (défaut 10)                                               |
+| `loyalty.points_per_currency_unit`      | NUMBER | loyalty    | ❌     | Points de fidélité gagnés par unité de devise dépensée (défaut 0.01)                           |
+| `security.login_attempt_limit`          | NUMBER | security   | ❌     | Échecs de connexion avant verrouillage automatique (défaut 5)                                  |
+| `security.login_attempt_window_seconds` | NUMBER | security   | ❌     | Fenêtre glissante du comptage d'échecs (défaut 900s)                                           |
+| `orders.stale_pending_hours`            | NUMBER | orders     | ❌     | Délai avant annulation automatique d'une commande `PENDING` non payée (défaut 24h) — voir §7.1 |
+| `uploads.max_file_size_mb`              | NUMBER | uploads    | ✅     | Taille maximale par fichier uploadé (défaut 5 Mo)                                              |
+| `uploads.allowed_mime_types`            | JSON   | uploads    | ✅     | Types MIME autorisés pour les uploads d'images                                                 |
+| `pagination.default_page_size`          | NUMBER | pagination | ❌     | Taille de page par défaut pour les listings (défaut 20)                                        |
+| `cache.default_ttl_seconds`             | NUMBER | cache      | ❌     | Durée de vie par défaut du cache Redis produits/promotions (défaut 300s)                       |
+
+Une modification via `PATCH` prend effet **immédiatement** pour les accesseurs asynchrones du serveur ; certains chemins synchrones internes (pagination par défaut, liste de pays, limites d'upload) peuvent mettre jusqu'à quelques minutes à se rafraîchir en interne — sans impact perceptible côté frontend au-delà de ce délai.
 
 ---
 
@@ -503,6 +556,7 @@ CANCELLED  CANCELLED   CANCELLED
 - `PENDING → CONFIRMED` se déclenche automatiquement à l'enregistrement d'un paiement COD.
 - `DELIVERED → REFUNDED` uniquement via un retour complété.
 - Une commande `CANCELLED` ou `REFUNDED` est un état terminal.
+- ⚠️ **Annulation automatique** : une commande restée `PENDING` (jamais payée) au-delà du délai configuré (`orders.stale_pending_hours`, 24h par défaut — §6.21) est automatiquement annulée par un job interne (toutes les heures) et son stock réservé libéré. Le frontend ne doit pas supposer qu'une commande `PENDING` reste disponible indéfiniment pour paiement — prévoir un message adapté si `GET /orders/:orderId` renvoie `CANCELLED` de manière inattendue.
 
 ### 7.2 Cycle de vie d'un paiement
 
@@ -553,11 +607,13 @@ ReturnRequest: PENDING → APPROVED → COMPLETED
 
 L'approbation (`APPROVED`) matérialise automatiquement une `PickupRequest` (voir §6.15) avec la méthode de collecte choisie par le client à la création. L'admin garde un contrôle total sur cette pickup (lieu, statut) indépendamment du retour — faire passer la pickup à `COMPLETED` ne marque **pas** automatiquement le retour comme `COMPLETED` : c'est une décision distincte de l'admin via `PUT /returns/:id/status`, qui seule déclenche remboursement + réintégration stock + reversal fidélité.
 
+⚠️ Un job interne vérifie toutes les 15 minutes les pickup requests dont la `deadline` est dépassée : elles passent automatiquement à `EXPIRED` et le retour associé est automatiquement annulé (`CANCELLED`). Prévoir un rafraîchissement périodique côté client sur la page de suivi plutôt qu'un état figé.
+
 ---
 
 ## 8. Uploads de fichiers
 
-Champs multipart acceptés : `image/jpeg`, `image/png`, `image/webp`, `image/gif`, 5 Mo max par fichier.
+Champs multipart acceptés : types MIME définis par `uploads.allowed_mime_types` (défaut `image/jpeg`, `image/png`, `image/webp`, `image/gif`), taille max par fichier définie par `uploads.max_file_size_mb` (défaut 5 Mo) — les deux sont configurables à chaud (§6.21) et récupérables via `GET /settings/public`.
 
 | Endpoint                               | Champ(s)                   |
 | -------------------------------------- | -------------------------- |
@@ -572,11 +628,12 @@ Le frontend n'a jamais besoin de connaître l'endpoint de stockage (R2/MinIO) : 
 ## 9. Limites & comportements à anticiper côté frontend
 
 - **Rate limiting** : 100 requêtes / 15 min / IP, tous endpoints confondus. Gérer le `429` avec un message utilisateur générique.
-- **Cache produits/promotions** : TTL 5 minutes par défaut — un changement de prix ou de stock peut mettre jusqu'à 5 min à apparaître sur les listings (`/product`), même si l'état réel a changé immédiatement en base.
+- **Cache produits/promotions** : TTL configurable (`cache.default_ttl_seconds`, 5 minutes par défaut) — un changement de prix ou de stock peut mettre jusqu'à ce délai à apparaître sur les listings (`/product`), même si l'état réel a changé immédiatement en base.
 - **Suppression de produit** : les commandes passées conservent `productName`/`productSku` même après suppression du produit — prévoir un affichage de repli (`item.product ?? { name: item.productName, sku: item.productSku }`).
 - **Rôles `MANAGER`/`SUPPORT`** : non fonctionnels sur les routes admin actuelles (voir §2.3).
 - **Pas de refresh token** : prévoir une redirection propre vers `/login` sur tout 401.
-- **Pays supportés** : toute normalisation d'adresse ou de zone de livraison (`country` sur une adresse, `zones` d'une méthode de livraison, `country` dans le calcul de frais) n'accepte qu'un ensemble restreint de pays — codes ISO 3166-1 alpha-2 ou libellés courants reconnus : Cameroun (`CM`), France (`FR`), États-Unis (`US`), Royaume-Uni (`GB`), Sénégal (`SN`), Côte d'Ivoire (`CI`), Nigeria (`NG`), Ghana (`GH`). Toute autre valeur renvoie 400. Utiliser `POST /address/validate` pour vérifier avant soumission.
+- **Pays supportés** : toute normalisation d'adresse ou de zone de livraison (`country` sur une adresse, `zones` d'une méthode de livraison, `country` dans le calcul de frais) n'accepte qu'un ensemble restreint de pays, désormais piloté par le setting `store.supported_countries` (§6.21) — récupérable via `GET /settings/public` plutôt qu'à coder en dur. Valeurs actuelles : Cameroun (`CM`), France (`FR`), États-Unis (`US`), Royaume-Uni (`GB`), Sénégal (`SN`), Côte d'Ivoire (`CI`), Nigeria (`NG`), Ghana (`GH`). Toute autre valeur renvoie 400. Utiliser `POST /address/validate` pour vérifier avant soumission.
+- **Processus automatiques en arrière-plan** : deux jobs internes peuvent faire évoluer un état sans action de l'utilisateur — annulation des commandes `PENDING` abandonnées (§7.1) et expiration des pickup requests en retard (§7.6). Éviter de mettre en cache un statut de commande/retrait côté client au-delà de quelques minutes sans revalidation.
 
 ---
 
@@ -597,6 +654,7 @@ Le frontend n'a jamais besoin de connaître l'endpoint de stockage (R2/MinIO) : 
 | `DiscountType`           | `PERCENTAGE, FIXED_AMOUNT`                                                |
 | `ReturnStatus`           | `PENDING, APPROVED, REJECTED, CANCELLED, COMPLETED`                       |
 | `LoyaltyEventType`       | `EARNED, REDEEMED, EXPIRED, ADJUSTED`                                     |
+| `SettingType`            | `STRING, NUMBER, BOOLEAN, JSON`                                           |
 
 ---
 

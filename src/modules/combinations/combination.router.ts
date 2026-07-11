@@ -20,7 +20,7 @@ router.put(
   combinationController.setOptionsForAttribute,
 );
 router.post("/generate", authGuard, adminGuard, combinationController.generate);
-router.get("/:combinationId", authGuard, combinationController.getById);
+router.get("/:combinationId", combinationController.getById);
 router.patch(
   "/:combinationId",
   authGuard,
