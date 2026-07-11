@@ -8,6 +8,7 @@ import { requestId } from "./shared/middlewares/request-id";
 import { requestContext } from "./shared/middlewares/request-context";
 import { auditMiddleware } from "./shared/middlewares/audit";
 import { securityLogger } from "./shared/logger";
+import settingRouter from "./modules/settings/setting.router";
 import authRouter from "./modules/auth/auth.router";
 import userRouter from "./modules/users/user.router";
 import productRouter from "./modules/products/product.router";
@@ -73,6 +74,7 @@ app.use(morganMiddleware);
 app.use(requestContext);
 app.use(auditMiddleware);
 
+app.use(settingRouter);
 app.use(authRouter);
 app.use(userRouter);
 app.use(productRouter);

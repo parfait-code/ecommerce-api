@@ -7,6 +7,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "seed:settings": "tsx scripts/seed-settings.ts",
     "seed:admin": "tsx scripts/create-admin.ts",
     "seed:category": "tsx scripts/create-categories.ts",
     "seed:products": "tsx scripts/create-products.ts",

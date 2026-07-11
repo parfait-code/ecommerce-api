@@ -213,7 +213,8 @@ export type AuditEvent =
   | "DISCOUNT_CREATED"
   | "CATEGORY_CREATED"
   | "CATEGORY_UPDATED"
-  | "CATEGORY_DELETED";
+  | "CATEGORY_DELETED"
+  | "SETTINGS_UPDATED";
 
 // ─── Security Events (section 16) ────────────────────────────────────────────
 
@@ -251,7 +252,9 @@ export type SystemEvent =
   | "PICKUP_EXPIRATION_JOB_FAILED"
   | "ORDER_EXPIRATION_JOB_STARTED"
   | "ORDER_EXPIRATION_JOB_RAN"
-  | "ORDER_EXPIRATION_JOB_FAILED";
+  | "ORDER_EXPIRATION_JOB_FAILED"
+  | "SETTINGS_REFRESH_JOB_STARTED"
+  | "SETTINGS_REFRESH_JOB_FAILED";
 
 // ─── Error Events ────────────────────────────────────────────────────────────
 

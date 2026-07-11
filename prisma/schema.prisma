@@ -6,6 +6,13 @@ datasource db {
   provider = "postgresql"
 }
 
+enum SettingType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
+
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum UserRole {
@@ -100,6 +107,21 @@ enum LoyaltyEventType {
   REDEEMED
   EXPIRED
   ADJUSTED
+}
+
+model Setting {
+  id          String      @id @default(cuid())
+  key         String      @unique
+  value       String
+  type        SettingType @default(STRING)
+  category    String
+  description String?
+  isPublic    Boolean     @default(false)
+  updatedBy   Int?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([category])
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────
