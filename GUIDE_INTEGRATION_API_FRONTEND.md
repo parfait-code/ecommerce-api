@@ -1,4 +1,4 @@
-```markdown
+````markdown
 # Guide d'intégration API — ecommerce-api
 
 > Destiné à l'équipe frontend. Décrit l'authentification, le format des réponses, tous les endpoints disponibles et les flux métier à connaître avant intégration.
@@ -7,10 +7,10 @@
 
 ## 1. Environnements
 
-| Environnement | Base URL (exemple) | Notes |
-|---|---|---|
-| Développement | `http://localhost:3000` | Port configurable via `PORT` |
-| Production | `https://<votre-domaine>` | Derrière Nginx |
+| Environnement | Base URL (exemple)        | Notes                        |
+| ------------- | ------------------------- | ---------------------------- |
+| Développement | `http://localhost:3000`   | Port configurable via `PORT` |
+| Production    | `https://<votre-domaine>` | Derrière Nginx               |
 
 Toutes les routes ci-dessous sont **relatives à la base URL** (pas de préfixe `/api` — les routes sont montées à la racine).
 
@@ -20,12 +20,13 @@ Toutes les routes ci-dessous sont **relatives à la base URL** (pas de préfixe 
 
 ### 2.1 Inscription / Connexion
 
-| Méthode | Route | Body |
-|---|---|---|
-| POST | `/signup` | `{ username, email, password, firstName, lastName, dateOfBirth?, phone? }` |
-| POST | `/login` | `{ username, password }` |
+| Méthode | Route     | Body                                                                       |
+| ------- | --------- | -------------------------------------------------------------------------- |
+| POST    | `/signup` | `{ username, email, password, firstName, lastName, dateOfBirth?, phone? }` |
+| POST    | `/login`  | `{ username, password }`                                                   |
 
 Les deux retournent :
+
 ```json
 {
   "status": true,
@@ -35,10 +36,12 @@ Les deux retournent :
   }
 }
 ```
+````
 
 ### 2.2 Utilisation du token
 
 Toutes les routes protégées attendent :
+
 ```
 Authorization: Bearer <token>
 ```
@@ -63,18 +66,23 @@ La suspension (`isActive`) est désormais **indépendante** de la suppression de
 ## 3. Format des réponses
 
 ### Succès
+
 ```json
 { "status": true, "data": { ... } }
 ```
+
 Code HTTP 200 (ou 201 pour une création).
 
 ### Erreur
+
 ```json
 { "status": false, "error": { "message": "...", "details"?: { ... } } }
 ```
+
 `details` n'est présent que pour les erreurs de validation (400, via Zod) et contient la sortie `flatten()` de Zod (`fieldErrors`, `formErrors`).
 
 ### Codes HTTP utilisés
+
 - `200` / `201` : succès
 - `400` : validation ou règle métier invalide
 - `401` : non authentifié / token invalide ou expiré
@@ -90,6 +98,7 @@ Code HTTP 200 (ou 201 pour une création).
 ## 4. Pagination
 
 Les endpoints de listing acceptent `?page=1&limit=20` (défauts : page 1, limit 20) et renvoient :
+
 ```json
 {
   "status": true,
@@ -118,28 +127,28 @@ Les endpoints de listing acceptent `?page=1&limit=20` (défauts : page 1, limit 
 
 ### 6.1 Utilisateurs (`/user`)
 
-| Méthode | Route | Auth | Body |
-|---|---|---|---|
-| GET | `/user` | User | — (profil courant) |
-| PATCH | `/user` | User | `{ email?, firstName?, lastName?, dateOfBirth?, phone? }` |
-| GET | `/user/all` | Admin | — |
-| GET | `/user/:userId` | Admin | — |
-| PATCH | `/user/change-role/:userId` | Admin | `{ role }` |
-| POST | `/user` | Admin | `{ username, email, password, firstName, lastName, role, ... }` (création admin) |
-| PATCH | `/user/:userId/status` | Admin | `{ isActive }` — suspension / réactivation, **indépendante** de la suppression |
-| DELETE | `/user/:userId` | Admin | — (soft delete, un admin ne peut pas se supprimer lui-même) |
+| Méthode | Route                       | Auth  | Body                                                                             |
+| ------- | --------------------------- | ----- | -------------------------------------------------------------------------------- |
+| GET     | `/user`                     | User  | — (profil courant)                                                               |
+| PATCH   | `/user`                     | User  | `{ email?, firstName?, lastName?, dateOfBirth?, phone? }`                        |
+| GET     | `/user/all`                 | Admin | —                                                                                |
+| GET     | `/user/:userId`             | Admin | —                                                                                |
+| PATCH   | `/user/change-role/:userId` | Admin | `{ role }`                                                                       |
+| POST    | `/user`                     | Admin | `{ username, email, password, firstName, lastName, role, ... }` (création admin) |
+| PATCH   | `/user/:userId/status`      | Admin | `{ isActive }` — suspension / réactivation, **indépendante** de la suppression   |
+| DELETE  | `/user/:userId`             | Admin | — (soft delete, un admin ne peut pas se supprimer lui-même)                      |
 
 ### 6.2 Produits (`/product`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/product` | Public (auth optionnelle) | `?page&limit&categoryId&search`. En admin, ajouter `?includeInactive=true` pour voir DRAFT/ARCHIVED |
-| GET | `/product/:productId` | Public | Détail produit (avec `pricing` calculé, voir §7.3) |
-| POST | `/product` | Admin | `{ sku, name, description?, price, categoryId, weight, status? }` — naît toujours en `DRAFT` |
-| PATCH | `/product/:productId` | Admin | Champs partiels |
-| DELETE | `/product/:productId` | Admin | Hard delete |
-| POST | `/product/:productId/images` | Admin | multipart, champ `images` (jusqu'à 5), body `combinationId?` |
-| DELETE | `/product/:productId/images` | Admin | body `{ imageId }` |
+| Méthode | Route                        | Auth                      | Description                                                                                         |
+| ------- | ---------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------- |
+| GET     | `/product`                   | Public (auth optionnelle) | `?page&limit&categoryId&search`. En admin, ajouter `?includeInactive=true` pour voir DRAFT/ARCHIVED |
+| GET     | `/product/:productId`        | Public                    | Détail produit (avec `pricing` calculé, voir §7.3)                                                  |
+| POST    | `/product`                   | Admin                     | `{ sku, name, description?, price, categoryId, weight, status? }` — naît toujours en `DRAFT`        |
+| PATCH   | `/product/:productId`        | Admin                     | Champs partiels                                                                                     |
+| DELETE  | `/product/:productId`        | Admin                     | Hard delete                                                                                         |
+| POST    | `/product/:productId/images` | Admin                     | multipart, champ `images` (jusqu'à 5), body `combinationId?`                                        |
+| DELETE  | `/product/:productId/images` | Admin                     | body `{ imageId }`                                                                                  |
 
 ⚠️ Passer un produit en `ACTIVE` échoue (400) si des attributs `isRequired: true` de sa catégorie ne sont pas renseignés.
 
@@ -149,108 +158,109 @@ Les endpoints de listing acceptent `?page=1&limit=20` (défauts : page 1, limit 
 
 Un produit peut avoir des **attributs de variante** (ex : couleur, taille) qui génèrent des **combinaisons** achetables individuellement (chacune avec son propre stock, prix optionnel, images).
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/` | User | Liste des combinaisons du produit |
-| GET | `/selections` | User | Sélections d'options faites pour chaque attribut de variante |
-| PUT | `/selections/:attributeDefinitionId` | Admin | `{ optionIds: string[] }` — définit les options disponibles pour cet attribut |
-| POST | `/generate` | Admin | Génère le produit cartésien des sélections en combinaisons (idempotent, désactive celles obsolètes) |
-| GET | `/:combinationId` | User | Détail |
-| PATCH | `/:combinationId` | Admin | `{ sku?, price?, isActive? }` |
-| DELETE | `/:combinationId` | Admin | Refusée si stock > 0 |
+| Méthode | Route                                | Auth  | Description                                                                                         |
+| ------- | ------------------------------------ | ----- | --------------------------------------------------------------------------------------------------- |
+| GET     | `/`                                  | User  | Liste des combinaisons du produit                                                                   |
+| GET     | `/selections`                        | User  | Sélections d'options faites pour chaque attribut de variante                                        |
+| PUT     | `/selections/:attributeDefinitionId` | Admin | `{ optionIds: string[] }` — définit les options disponibles pour cet attribut                       |
+| POST    | `/generate`                          | Admin | Génère le produit cartésien des sélections en combinaisons (idempotent, désactive celles obsolètes) |
+| GET     | `/:combinationId`                    | User  | Détail                                                                                              |
+| PATCH   | `/:combinationId`                    | Admin | `{ sku?, price?, isActive? }`                                                                       |
+| DELETE  | `/:combinationId`                    | Admin | Refusée si stock > 0                                                                                |
 
 ⚠️ **Si `product.combinations.length > 0`**, le frontend **doit** faire sélectionner une combinaison au client avant tout ajout au panier ou commande (`combination_id` requis) — sinon 400.
 
 ### 6.4 Attributs (`/categories/:categoryId/attributes`, `/attributes`, `/product/:productId/attributes`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/categories/:categoryId/attributes` | User | Définitions d'attributs de la catégorie |
-| POST | `/categories/:categoryId/attributes` | Admin | `{ name, slug, type, unit?, isVariant, isFilterable, isRequired, position }` |
-| GET | `/attributes/:definitionId` | User | — |
-| PATCH | `/attributes/:definitionId` | Admin | — |
-| DELETE | `/attributes/:definitionId` | Admin | — |
-| POST | `/attributes/:definitionId/options` | Admin | `{ value, colorHex?, position }` |
-| PATCH | `/attributes/options/:optionId` | Admin | — |
-| DELETE | `/attributes/options/:optionId` | Admin | Refusée si l'option est utilisée par une combinaison ayant encore du stock |
-| PUT | `/product/:productId/attributes` | Admin | `{ attributes: [{attributeDefinitionId, value}] }` — **uniquement pour attributs non-variante** (`isVariant: false`) |
+| Méthode | Route                                | Auth  | Description                                                                                                          |
+| ------- | ------------------------------------ | ----- | -------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/categories/:categoryId/attributes` | User  | Définitions d'attributs de la catégorie                                                                              |
+| POST    | `/categories/:categoryId/attributes` | Admin | `{ name, slug, type, unit?, isVariant, isFilterable, isRequired, position }`                                         |
+| GET     | `/attributes/:definitionId`          | User  | —                                                                                                                    |
+| PATCH   | `/attributes/:definitionId`          | Admin | —                                                                                                                    |
+| DELETE  | `/attributes/:definitionId`          | Admin | —                                                                                                                    |
+| POST    | `/attributes/:definitionId/options`  | Admin | `{ value, colorHex?, position }`                                                                                     |
+| PATCH   | `/attributes/options/:optionId`      | Admin | —                                                                                                                    |
+| DELETE  | `/attributes/options/:optionId`      | Admin | Refusée si l'option est utilisée par une combinaison ayant encore du stock                                           |
+| PUT     | `/product/:productId/attributes`     | Admin | `{ attributes: [{attributeDefinitionId, value}] }` — **uniquement pour attributs non-variante** (`isVariant: false`) |
 
 `type` : `TEXT | NUMBER | COLOR | BOOLEAN | SELECT`.
 
 ### 6.5 Catégories (`/categories`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/categories` | Public | `?includeInactive=true` réservé admin — par défaut seules les catégories `isActive: true` sont renvoyées |
-| GET | `/categories/:categoryId` | Public | idem |
-| GET | `/categories/slug/:slug` | Public | idem |
-| GET | `/categories/slug/:slug/products` | Public | Produits de la catégorie + descendantes, paginé (idem filtrage `isActive`) |
-| POST | `/categories` | Admin | `{ name, slug, description?, imageUrl?, iconUrl?, metaTitle?, metaDescription?, isActive?, parentId? }` |
-| PUT | `/categories/:categoryId` | Admin | — |
-| DELETE | `/categories/:categoryId` | Admin | Refusée si produits ou discounts encore rattachés |
-| POST | `/categories/:categoryId/assets` | Admin | multipart, champs `image`, `icon` (upload direct, l'API gère R2) |
-| DELETE | `/categories/:categoryId/image` | Admin | — |
-| DELETE | `/categories/:categoryId/icon` | Admin | — |
+| Méthode | Route                             | Auth   | Description                                                                                              |
+| ------- | --------------------------------- | ------ | -------------------------------------------------------------------------------------------------------- |
+| GET     | `/categories`                     | Public | `?includeInactive=true` réservé admin — par défaut seules les catégories `isActive: true` sont renvoyées |
+| GET     | `/categories/:categoryId`         | Public | idem                                                                                                     |
+| GET     | `/categories/slug/:slug`          | Public | idem                                                                                                     |
+| GET     | `/categories/slug/:slug/products` | Public | Produits de la catégorie + descendantes, paginé (idem filtrage `isActive`)                               |
+| POST    | `/categories`                     | Admin  | `{ name, slug, description?, imageUrl?, iconUrl?, metaTitle?, metaDescription?, isActive?, parentId? }`  |
+| PUT     | `/categories/:categoryId`         | Admin  | —                                                                                                        |
+| DELETE  | `/categories/:categoryId`         | Admin  | Refusée si produits ou discounts encore rattachés                                                        |
+| POST    | `/categories/:categoryId/assets`  | Admin  | multipart, champs `image`, `icon` (upload direct, l'API gère R2)                                         |
+| DELETE  | `/categories/:categoryId/image`   | Admin  | —                                                                                                        |
+| DELETE  | `/categories/:categoryId/icon`    | Admin  | —                                                                                                        |
 
 ### 6.6 Tags (`/tags`, `/product/:productId/tags`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/tags` | Public | — |
-| GET | `/tags/:tagId` | Public | — |
-| POST | `/tags` | Admin | `{ name, slug }` |
-| PATCH | `/tags/:tagId` | Admin | — |
-| DELETE | `/tags/:tagId` | Admin | — |
-| PUT | `/product/:productId/tags` | Admin | `{ tagIds: string[] }` (remplace la liste complète) |
-| GET | `/product/:productId/tags` | User | — |
+| Méthode | Route                      | Auth   | Description                                         |
+| ------- | -------------------------- | ------ | --------------------------------------------------- |
+| GET     | `/tags`                    | Public | —                                                   |
+| GET     | `/tags/:tagId`             | Public | —                                                   |
+| POST    | `/tags`                    | Admin  | `{ name, slug }`                                    |
+| PATCH   | `/tags/:tagId`             | Admin  | —                                                   |
+| DELETE  | `/tags/:tagId`             | Admin  | —                                                   |
+| PUT     | `/product/:productId/tags` | Admin  | `{ tagIds: string[] }` (remplace la liste complète) |
+| GET     | `/product/:productId/tags` | User   | —                                                   |
 
 ### 6.7 Panier (`/basket`, `/user/basket`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/user/basket` | User | Récupère (ou crée) le panier unique de l'utilisateur — **route recommandée** |
-| POST | `/basket` | User | Équivalent get-or-create, conservée pour compat |
-| GET | `/basket/:basket_id` | User | — |
-| POST | `/basket/:basket_id/product` | User | `{ product_id, combination_id?, quantity }` |
-| PUT | `/basket/:basket_id/product/quantity` | User | `{ product_id, combination_id?, quantity }` |
-| DELETE | `/basket/:basket_id/product` | User | `{ product_id, combination_id? }` |
+| Méthode | Route                                 | Auth | Description                                                                  |
+| ------- | ------------------------------------- | ---- | ---------------------------------------------------------------------------- |
+| GET     | `/user/basket`                        | User | Récupère (ou crée) le panier unique de l'utilisateur — **route recommandée** |
+| POST    | `/basket`                             | User | Équivalent get-or-create, conservée pour compat                              |
+| GET     | `/basket/:basket_id`                  | User | —                                                                            |
+| POST    | `/basket/:basket_id/product`          | User | `{ product_id, combination_id?, quantity }`                                  |
+| PUT     | `/basket/:basket_id/product/quantity` | User | `{ product_id, combination_id?, quantity }`                                  |
+| DELETE  | `/basket/:basket_id/product`          | User | `{ product_id, combination_id? }`                                            |
 
 Le stock n'est **jamais réservé au niveau du panier** — seulement vérifié (disponibilité). La réservation réelle se fait à la création de la commande.
 
 ### 6.8 Liste de souhaits (`/wishlist`)
 
-| Méthode | Route | Auth | Body |
-|---|---|---|---|
-| GET | `/wishlist` | User | — |
-| POST | `/wishlist/items` | User | `{ product_id, combination_id? }` |
-| DELETE | `/wishlist/items` | User | `{ product_id, combination_id? }` |
+| Méthode | Route             | Auth | Body                              |
+| ------- | ----------------- | ---- | --------------------------------- |
+| GET     | `/wishlist`       | User | —                                 |
+| POST    | `/wishlist/items` | User | `{ product_id, combination_id? }` |
+| DELETE  | `/wishlist/items` | User | `{ product_id, combination_id? }` |
 
 ### 6.9 Adresses (`/addresses`, `/address/validate`)
 
-| Méthode | Route | Auth | Body |
-|---|---|---|---|
-| POST | `/address/validate` | Public | `{ recipientName, phone?, street, addressLine2?, city, state?, country, postalCode? }` — validation formelle uniquement, ne persiste rien |
-| GET | `/addresses` | User | — |
-| GET | `/addresses/:addressId` | User | — |
-| POST | `/addresses` | User | `{ recipientName, phone?, street, addressLine2?, city, state?, country, postalCode?, isDefault? }` |
-| PATCH | `/addresses/:addressId` | User | Champs partiels |
-| DELETE | `/addresses/:addressId` | User | — |
+| Méthode | Route                   | Auth   | Body                                                                                                                                      |
+| ------- | ----------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| POST    | `/address/validate`     | Public | `{ recipientName, phone?, street, addressLine2?, city, state?, country, postalCode? }` — validation formelle uniquement, ne persiste rien |
+| GET     | `/addresses`            | User   | —                                                                                                                                         |
+| GET     | `/addresses/:addressId` | User   | —                                                                                                                                         |
+| POST    | `/addresses`            | User   | `{ recipientName, phone?, street, addressLine2?, city, state?, country, postalCode?, isDefault? }`                                        |
+| PATCH   | `/addresses/:addressId` | User   | Champs partiels                                                                                                                           |
+| DELETE  | `/addresses/:addressId` | User   | —                                                                                                                                         |
 
 ⚠️ `recipientName` (min 2 caractères) est **requis**. `postalCode` est **optionnel** (certains pays, dont le Cameroun, n'ont pas de code postal résidentiel généralisé). `country` est normalisé côté serveur — voir §9 pour la liste des pays supportés ; toute valeur non reconnue renvoie 400.
 
 ### 6.10 Commandes (`/orders`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/orders` | User | Ses propres commandes (admin voit tout via `?customer=email`) |
-| POST | `/orders` | User | Voir §7.1 |
-| GET | `/orders/:orderId` | User | Doit être propriétaire (sauf admin) |
-| PUT | `/orders/:orderId` | User | Modifie adresse/notes/méthode de livraison **avant expédition** |
-| DELETE | `/orders/:orderId` | User | Annule la commande (transition `CANCELLED`, libère le stock) |
-| PUT | `/orders/:orderId/status` | Admin | `{ status, reason?, shippingCarrier?, trackingNumber?, estimatedDeliveryDate? }` |
-| GET | `/user/:userId/orders` | Admin | Commandes d'un utilisateur donné |
+| Méthode | Route                     | Auth  | Description                                                                      |
+| ------- | ------------------------- | ----- | -------------------------------------------------------------------------------- |
+| GET     | `/orders`                 | User  | Ses propres commandes (admin voit tout via `?customer=email`)                    |
+| POST    | `/orders`                 | User  | Voir §7.1                                                                        |
+| GET     | `/orders/:orderId`        | User  | Doit être propriétaire (sauf admin)                                              |
+| PUT     | `/orders/:orderId`        | User  | Modifie adresse/notes/méthode de livraison **avant expédition**                  |
+| DELETE  | `/orders/:orderId`        | User  | Annule la commande (transition `CANCELLED`, libère le stock)                     |
+| PUT     | `/orders/:orderId/status` | Admin | `{ status, reason?, shippingCarrier?, trackingNumber?, estimatedDeliveryDate? }` |
+| GET     | `/user/:userId/orders`    | Admin | Commandes d'un utilisateur donné                                                 |
 
 **Body `POST /orders`** :
+
 ```json
 {
   "items": [{ "id": "productId", "combinationId": "...", "quantity": 2 }],
@@ -274,121 +284,122 @@ Le stock n'est **jamais réservé au niveau du panier** — seulement vérifié 
   "couponCode": "PROMO10"
 }
 ```
+
 `items` OU `basketId` requis (pas les deux nécessairement, mais au moins un). `shippingAddress` est toujours requis (snapshot conservé même si `shippingAddressId` fourni). Si `shippingMethodId` est fourni, le pays de livraison doit être couvert par les `zones` de cette méthode (sinon 400).
 
 ### 6.11 Paiements (`/payments`, `/payment-methods`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/payment-methods` | Public | Liste des méthodes et leur disponibilité |
-| POST | `/payments` | User | `{ order_id, method, currency?, notes? }` |
-| GET | `/payments/:payment_id` | User | — |
-| PUT | `/payments/:payment_id/status` | Admin | `{ status, notes? }` — **restreint à `REFUNDED`** manuellement, le reste est automatique (voir §7.2) |
-| PUT | `/payments/:payment_id/complete` | Admin | Déprécié, alias de `status: COMPLETED` |
-| GET | `/orders/:orderId/payments` | User | — |
-| GET | `/payments` | Admin | `?page&limit&status&method&order_id` |
+| Méthode | Route                            | Auth   | Description                                                                                          |
+| ------- | -------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| GET     | `/payment-methods`               | Public | Liste des méthodes et leur disponibilité                                                             |
+| POST    | `/payments`                      | User   | `{ order_id, method, currency?, notes? }`                                                            |
+| GET     | `/payments/:payment_id`          | User   | —                                                                                                    |
+| PUT     | `/payments/:payment_id/status`   | Admin  | `{ status, notes? }` — **restreint à `REFUNDED`** manuellement, le reste est automatique (voir §7.2) |
+| PUT     | `/payments/:payment_id/complete` | Admin  | Déprécié, alias de `status: COMPLETED`                                                               |
+| GET     | `/orders/:orderId/payments`      | User   | —                                                                                                    |
+| GET     | `/payments`                      | Admin  | `?page&limit&status&method&order_id`                                                                 |
 
 Seule `CASH_ON_DELIVERY` est actuellement disponible (`PAYPAL`, `STRIPE`, `CINETPAY` renvoient 503 « Coming soon »).
 
 ### 6.12 Avis (`/reviews`, `/products/:pid/reviews`)
 
-| Méthode | Route | Auth | Body |
-|---|---|---|---|
-| GET | `/products/:pid/reviews` | Public | Retourne aussi `average_rating`, `total_reviews` |
-| GET | `/reviews/:rid` | Public | — |
-| POST | `/reviews` | User | `{ order_item_id, product_id, rating (1-5), comment? }` — un seul avis par (orderItem, user), commande doit être `DELIVERED` |
-| PUT | `/reviews/:rid` | User | Doit être l'auteur (ou admin) |
-| DELETE | `/reviews/:rid` | User | Doit être l'auteur (ou admin) |
+| Méthode | Route                    | Auth   | Body                                                                                                                         |
+| ------- | ------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/products/:pid/reviews` | Public | Retourne aussi `average_rating`, `total_reviews`                                                                             |
+| GET     | `/reviews/:rid`          | Public | —                                                                                                                            |
+| POST    | `/reviews`               | User   | `{ order_item_id, product_id, rating (1-5), comment? }` — un seul avis par (orderItem, user), commande doit être `DELIVERED` |
+| PUT     | `/reviews/:rid`          | User   | Doit être l'auteur (ou admin)                                                                                                |
+| DELETE  | `/reviews/:rid`          | User   | Doit être l'auteur (ou admin)                                                                                                |
 
 ### 6.13 Entrepôts (`/warehouses`)
 
-| Méthode | Route | Auth | Body |
-|---|---|---|---|
-| GET | `/warehouses` | Admin | — |
-| GET | `/warehouses/:warehouse_id` | Admin | — |
-| GET | `/warehouses/:warehouse_id/inventory` | Admin | — |
-| POST | `/warehouses` | Admin | `{ name, location, capacity? }` |
-| PUT | `/warehouses/:warehouse_id` | Admin | — |
-| DELETE | `/warehouses/:warehouse_id` | Admin | Refusée si stock encore présent (`quantity > 0` sur au moins une ligne) |
+| Méthode | Route                                 | Auth  | Body                                                                    |
+| ------- | ------------------------------------- | ----- | ----------------------------------------------------------------------- |
+| GET     | `/warehouses`                         | Admin | —                                                                       |
+| GET     | `/warehouses/:warehouse_id`           | Admin | —                                                                       |
+| GET     | `/warehouses/:warehouse_id/inventory` | Admin | —                                                                       |
+| POST    | `/warehouses`                         | Admin | `{ name, location, capacity? }`                                         |
+| PUT     | `/warehouses/:warehouse_id`           | Admin | —                                                                       |
+| DELETE  | `/warehouses/:warehouse_id`           | Admin | Refusée si stock encore présent (`quantity > 0` sur au moins une ligne) |
 
 ### 6.14 Inventaire / Stock (`/inventory`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/inventory` | Admin | `?category&location&warehouse_id&page&limit` |
-| GET | `/inventory/search` | Admin | `?keyword=` (requis) |
-| GET | `/inventory/grouped` | Admin | Vue groupée par produit — `?low_stock=true` / `?out_of_stock=true` |
-| GET | `/inventory/grouped/:productId` | Admin | Détail par combinaison × entrepôt, paginé |
-| GET | `/inventory/:item_id` | Admin | — |
-| POST | `/inventory` | Admin | `{ product_id, warehouse_id, combination_id?, quantity }` |
-| PUT | `/inventory/:item_id` | Admin | `{ quantity?, warehouse_id? }` |
-| DELETE | `/inventory/:item_id` | Admin | — |
-| POST | `/inventory/transfer` | Admin | `{ item_id, from_warehouse, to_warehouse, quantity }` |
+| Méthode | Route                           | Auth  | Description                                                        |
+| ------- | ------------------------------- | ----- | ------------------------------------------------------------------ |
+| GET     | `/inventory`                    | Admin | `?category&location&warehouse_id&page&limit`                       |
+| GET     | `/inventory/search`             | Admin | `?keyword=` (requis)                                               |
+| GET     | `/inventory/grouped`            | Admin | Vue groupée par produit — `?low_stock=true` / `?out_of_stock=true` |
+| GET     | `/inventory/grouped/:productId` | Admin | Détail par combinaison × entrepôt, paginé                          |
+| GET     | `/inventory/:item_id`           | Admin | —                                                                  |
+| POST    | `/inventory`                    | Admin | `{ product_id, warehouse_id, combination_id?, quantity }`          |
+| PUT     | `/inventory/:item_id`           | Admin | `{ quantity?, warehouse_id? }`                                     |
+| DELETE  | `/inventory/:item_id`           | Admin | —                                                                  |
+| POST    | `/inventory/transfer`           | Admin | `{ item_id, from_warehouse, to_warehouse, quantity }`              |
 
 Seuil stock faible : 10 unités.
 
 ### 6.15 Expéditions & retraits (`/shipments`, `/pickup-requests`, `/labels`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| POST | `/shipments/cost` | Public | `{ origin, destination, weight, dimensions? }` |
-| POST | `/shipments` | Admin | `{ sender_name, sender_address, recipient_name, recipient_address, weight, dimensions?, order_id?, estimated_delivery_at? }` — si `order_id` fourni, la commande doit être `PROCESSING` |
-| GET | `/shipments/:shipmentId` | User | — |
-| GET | `/shipments` | Admin | `?page&limit&status&order_id` |
-| POST | `/shipments/:shipmentId/track` | Admin | `{ status, location?, shipment_status? }` — `status` est un texte libre, `shipment_status` (optionnel) met à jour le statut officiel |
-| GET | `/shipments/:shipmentId/track` | User | Historique de suivi |
-| PUT | `/shipments/:shipmentId/status` | Admin | `{ status, reason? }` — refusée sur une expédition `CANCELLED`, ou `DELIVERED` sauf pour rester `DELIVERED` |
-| POST | `/shipments/:shipmentId/cancel` | User | Propriétaire de la commande liée (ou admin) |
-| GET | `/labels/:shipmentId` | User | Génère/récupère l'étiquette |
-| GET | `/orders/:orderId/shipment` | User | — |
+| Méthode | Route                           | Auth   | Description                                                                                                                                                                             |
+| ------- | ------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST    | `/shipments/cost`               | Public | `{ origin, destination, weight, dimensions? }`                                                                                                                                          |
+| POST    | `/shipments`                    | Admin  | `{ sender_name, sender_address, recipient_name, recipient_address, weight, dimensions?, order_id?, estimated_delivery_at? }` — si `order_id` fourni, la commande doit être `PROCESSING` |
+| GET     | `/shipments/:shipmentId`        | User   | —                                                                                                                                                                                       |
+| GET     | `/shipments`                    | Admin  | `?page&limit&status&order_id`                                                                                                                                                           |
+| POST    | `/shipments/:shipmentId/track`  | Admin  | `{ status, location?, shipment_status? }` — `status` est un texte libre, `shipment_status` (optionnel) met à jour le statut officiel                                                    |
+| GET     | `/shipments/:shipmentId/track`  | User   | Historique de suivi                                                                                                                                                                     |
+| PUT     | `/shipments/:shipmentId/status` | Admin  | `{ status, reason? }` — refusée sur une expédition `CANCELLED`, ou `DELIVERED` sauf pour rester `DELIVERED`                                                                             |
+| POST    | `/shipments/:shipmentId/cancel` | User   | Propriétaire de la commande liée (ou admin)                                                                                                                                             |
+| GET     | `/labels/:shipmentId`           | User   | Génère/récupère l'étiquette                                                                                                                                                             |
+| GET     | `/orders/:orderId/shipment`     | User   | —                                                                                                                                                                                       |
 
 Passer `shipment.status` (ou `shipment_status` via `/track`) à `IN_TRANSIT` ou `DELIVERED` synchronise automatiquement `Order.status` (`SHIPPED` / `DELIVERED`).
 
 #### Demandes de retrait (pickup requests)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/pickup-requests` | Admin | `?page&limit&status&order_id` |
-| GET | `/pickup-requests/:requestId` | User | Doit être le demandeur (sauf admin) |
-| PATCH | `/pickup-requests/:requestId/location` | Admin | `{ method, address_id?, warehouse_id?, pickup_date?, deadline? }` — `method` ∈ `ORIGINAL_ADDRESS \| WAREHOUSE_DROPOFF \| CUSTOM_ADDRESS` |
-| PATCH | `/pickup-requests/:requestId/status` | Admin | `{ status, notes? }` |
-| POST | `/pickup-requests/expire-overdue` | Admin | Force la détection/expiration des demandes dont le délai est dépassé (cible pour un cron externe — aucun scheduler n'est actuellement branché) |
+| Méthode | Route                                  | Auth  | Description                                                                                                                                    |
+| ------- | -------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/pickup-requests`                     | Admin | `?page&limit&status&order_id`                                                                                                                  |
+| GET     | `/pickup-requests/:requestId`          | User  | Doit être le demandeur (sauf admin)                                                                                                            |
+| PATCH   | `/pickup-requests/:requestId/location` | Admin | `{ method, address_id?, warehouse_id?, pickup_date?, deadline? }` — `method` ∈ `ORIGINAL_ADDRESS \| WAREHOUSE_DROPOFF \| CUSTOM_ADDRESS`       |
+| PATCH   | `/pickup-requests/:requestId/status`   | Admin | `{ status, notes? }`                                                                                                                           |
+| POST    | `/pickup-requests/expire-overdue`      | Admin | Force la détection/expiration des demandes dont le délai est dépassé (cible pour un cron externe — aucun scheduler n'est actuellement branché) |
 
 ⚠️ **Aucune route de création manuelle** : une pickup request naît automatiquement quand un retour passe à `APPROVED` (voir §6.19). **Aucune route d'annulation côté client** non plus — seul un admin peut faire évoluer son statut ; annuler la pickup annule en cascade le retour lié.
 
 ### 6.16 Méthodes de livraison (`/shipping-methods`)
 
-| Méthode | Route | Auth | Body |
-|---|---|---|---|
-| GET | `/shipping-methods` | Public | `?includeInactive=true` réservé admin — par défaut seules les méthodes `isActive: true` sont renvoyées |
-| GET | `/shipping-methods/:methodId` | Public | idem |
-| POST | `/shipping-methods` | Admin | `{ name, description?, estimatedDays, basePrice, pricePerKg, isActive, zones: string[2] }` — `zones` : codes ISO 3166-1 alpha-2 (ou libellés reconnus, normalisés côté serveur) |
-| PATCH | `/shipping-methods/:methodId` | Admin | — |
-| DELETE | `/shipping-methods/:methodId` | Admin | — |
-| POST | `/shipping-methods/calculate` | Public | `{ shippingMethodId, weight, country }` — 400 si le pays n'est pas couvert par les `zones` de la méthode |
+| Méthode | Route                         | Auth   | Body                                                                                                                                                                            |
+| ------- | ----------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/shipping-methods`           | Public | `?includeInactive=true` réservé admin — par défaut seules les méthodes `isActive: true` sont renvoyées                                                                          |
+| GET     | `/shipping-methods/:methodId` | Public | idem                                                                                                                                                                            |
+| POST    | `/shipping-methods`           | Admin  | `{ name, description?, estimatedDays, basePrice, pricePerKg, isActive, zones: string[2] }` — `zones` : codes ISO 3166-1 alpha-2 (ou libellés reconnus, normalisés côté serveur) |
+| PATCH   | `/shipping-methods/:methodId` | Admin  | —                                                                                                                                                                               |
+| DELETE  | `/shipping-methods/:methodId` | Admin  | —                                                                                                                                                                               |
+| POST    | `/shipping-methods/calculate` | Public | `{ shippingMethodId, weight, country }` — 400 si le pays n'est pas couvert par les `zones` de la méthode                                                                        |
 
 ### 6.17 Promotions, remises & coupons (`/promotions`, `/coupons`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/promotions` | Admin | `?status&isActive&page&limit` |
-| GET | `/promotions/active` | Public | Promotions actuellement actives, triées par date de fin |
-| GET | `/promotions/slug/:slug` | Public | — |
-| GET | `/promotions/slug/:slug/products` | Public | Produits affectés + `pricing` calculé |
-| GET | `/promotions/:promotionId` | Admin | — |
-| GET | `/promotions/:promotionId/products` | Admin | — |
-| POST | `/promotions` | Admin | `{ name, slug, description?, startDate, endDate, isActive }` |
-| PUT | `/promotions/:promotionId` | Admin | — |
-| PATCH | `/promotions/:promotionId/toggle` | Admin | Bascule `isActive` |
-| DELETE | `/promotions/:promotionId` | Admin | — |
-| POST | `/promotions/:promotionId/images` | Admin | multipart `images` (5 max) |
-| DELETE | `/promotions/:promotionId/images` | Admin | body `{ imageUrl }` |
-| POST | `/promotions/:promotionId/discounts` | Admin | `{ type: PERCENTAGE|FIXED_AMOUNT, value, categoryId?, productIds? }` (au moins un ciblage requis) |
-| DELETE | `/promotions/:promotionId/discounts/:discountId` | Admin | — |
-| GET | `/promotions/:promotionId/coupons` | Admin | Chaque coupon inclut `effectiveIsActive` (calculé — voir §7.3) |
-| POST | `/promotions/:promotionId/coupons` | Admin | `{ code, maxUses?, perUserLimit, startDate?, endDate?, isActive }` |
-| DELETE | `/promotions/:promotionId/coupons/:couponId` | Admin | — |
-| POST | `/coupons/validate` | User | `{ code, basketId?, items? }` — retourne un `preview` du montant si `items` fourni |
+| Méthode | Route                                            | Auth   | Description                                                                        |
+| ------- | ------------------------------------------------ | ------ | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| GET     | `/promotions`                                    | Admin  | `?status&isActive&page&limit`                                                      |
+| GET     | `/promotions/active`                             | Public | Promotions actuellement actives, triées par date de fin                            |
+| GET     | `/promotions/slug/:slug`                         | Public | —                                                                                  |
+| GET     | `/promotions/slug/:slug/products`                | Public | Produits affectés + `pricing` calculé                                              |
+| GET     | `/promotions/:promotionId`                       | Admin  | —                                                                                  |
+| GET     | `/promotions/:promotionId/products`              | Admin  | —                                                                                  |
+| POST    | `/promotions`                                    | Admin  | `{ name, slug, description?, startDate, endDate, isActive }`                       |
+| PUT     | `/promotions/:promotionId`                       | Admin  | —                                                                                  |
+| PATCH   | `/promotions/:promotionId/toggle`                | Admin  | Bascule `isActive`                                                                 |
+| DELETE  | `/promotions/:promotionId`                       | Admin  | —                                                                                  |
+| POST    | `/promotions/:promotionId/images`                | Admin  | multipart `images` (5 max)                                                         |
+| DELETE  | `/promotions/:promotionId/images`                | Admin  | body `{ imageUrl }`                                                                |
+| POST    | `/promotions/:promotionId/discounts`             | Admin  | `{ type: PERCENTAGE                                                                | FIXED_AMOUNT, value, categoryId?, productIds? }` (au moins un ciblage requis) |
+| DELETE  | `/promotions/:promotionId/discounts/:discountId` | Admin  | —                                                                                  |
+| GET     | `/promotions/:promotionId/coupons`               | Admin  | Chaque coupon inclut `effectiveIsActive` (calculé — voir §7.3)                     |
+| POST    | `/promotions/:promotionId/coupons`               | Admin  | `{ code, maxUses?, perUserLimit, startDate?, endDate?, isActive }`                 |
+| DELETE  | `/promotions/:promotionId/coupons/:couponId`     | Admin  | —                                                                                  |
+| POST    | `/coupons/validate`                              | User   | `{ code, basketId?, items? }` — retourne un `preview` du montant si `items` fourni |
 
 Le `status` d'une promotion (`SCHEDULED / ACTIVE / EXPIRED / CANCELLED`) est **recalculé dynamiquement** à chaque lecture à partir des dates — ne pas se fier à un statut mis en cache côté frontend au-delà de quelques minutes. De même, `effectiveIsActive` sur un coupon reflète l'état opérationnel réel (dates, plafond d'utilisation) indépendamment du champ `isActive` stocké.
 
@@ -396,25 +407,26 @@ Le `status` d'une promotion (`SCHEDULED / ACTIVE / EXPIRED / CANCELLED`) est **r
 
 ### 6.18 Fidélité (`/loyalty`)
 
-| Méthode | Route | Auth | Body |
-|---|---|---|---|
-| GET | `/loyalty/:userId/balance` | User | Propriétaire ou admin |
-| GET | `/loyalty/:userId/history` | User | Propriétaire ou admin |
-| POST | `/loyalty/adjust` | Admin | `{ userId, points, type: EARNED|REDEEMED|EXPIRED|ADJUSTED, orderId? }` |
+| Méthode | Route                      | Auth  | Body                            |
+| ------- | -------------------------- | ----- | ------------------------------- | -------- | ------- | --------------------- |
+| GET     | `/loyalty/:userId/balance` | User  | Propriétaire ou admin           |
+| GET     | `/loyalty/:userId/history` | User  | Propriétaire ou admin           |
+| POST    | `/loyalty/adjust`          | Admin | `{ userId, points, type: EARNED | REDEEMED | EXPIRED | ADJUSTED, orderId? }` |
 
 Barème : 1 point par 100 XAF dépensés, crédité automatiquement à `Order.status → DELIVERED`. Reversal automatique si un retour lié à la commande est complété.
 
 ### 6.19 Retours (`/returns`)
 
-| Méthode | Route | Auth | Body |
-|---|---|---|---|
-| GET | `/returns` | Admin | `?status&page&limit` |
-| GET | `/returns/:returnId` | User | Doit être propriétaire (sauf admin) |
-| POST | `/returns` | User | Voir ci-dessous — commande doit être `DELIVERED` |
-| PUT | `/returns/:returnId/status` | Admin | Voir ci-dessous |
-| GET | `/orders/:orderId/returns` | User | — |
+| Méthode | Route                       | Auth  | Body                                             |
+| ------- | --------------------------- | ----- | ------------------------------------------------ |
+| GET     | `/returns`                  | Admin | `?status&page&limit`                             |
+| GET     | `/returns/:returnId`        | User  | Doit être propriétaire (sauf admin)              |
+| POST    | `/returns`                  | User  | Voir ci-dessous — commande doit être `DELIVERED` |
+| PUT     | `/returns/:returnId/status` | Admin | Voir ci-dessous                                  |
+| GET     | `/orders/:orderId/returns`  | User  | —                                                |
 
 **Body `POST /returns`** :
+
 ```json
 {
   "order_id": "...",
@@ -428,22 +440,52 @@ Barème : 1 point par 100 XAF dépensés, crédité automatiquement à `Order.st
   }
 }
 ```
+
 ⚠️ **Pas de retour partiel** : chaque `orderItemId` listé retourne systématiquement sa quantité complète (pas de champ `quantity` dans l'input). Pour retourner toute la commande, inclure tous les `order_item_id` de la commande. `collection.method` ∈ `ORIGINAL_ADDRESS | WAREHOUSE_DROPOFF | CUSTOM_ADDRESS` (défaut `ORIGINAL_ADDRESS`) ; `address_id` requis si `CUSTOM_ADDRESS`, `warehouse_id` requis si `WAREHOUSE_DROPOFF`. Une commande ne peut avoir qu'une seule demande de retour active (`PENDING`/`APPROVED`) à la fois.
 
 **Body `PUT /returns/:returnId/status`** :
+
 ```json
-{ "status": "APPROVED", "notes": "...", "pickup_deadline": "2026-08-01T00:00:00.000Z" }
+{
+  "status": "APPROVED",
+  "notes": "...",
+  "pickup_deadline": "2026-08-01T00:00:00.000Z"
+}
 ```
+
 `status` ∈ `APPROVED | REJECTED | CANCELLED | COMPLETED`. `pickup_deadline` est **requis uniquement** pour la transition vers `APPROVED` — c'est à ce moment qu'une `PickupRequest` est automatiquement créée (voir §6.15).
 
 Quand un retour passe à `COMPLETED` : `Order.status → REFUNDED`, remboursement automatique des paiements complétés, réintégration du stock, reversal des points de fidélité gagnés sur cette commande.
 
+⚠️ **Visibilité pickup request** — chaque `ReturnRequest` renvoyé par `GET /returns/:returnId`
+et `GET /orders/:orderId/returns` inclut désormais un champ `pickupRequest` (nullable, `null`
+tant que le retour n'est pas passé à `APPROVED`) :
+
+```json
+{
+  "id": "ret_1",
+  "orderId": "order_abc",
+  "status": "APPROVED",
+  "pickupRequest": {
+    "id": "pr_1",
+    "method": "ORIGINAL_ADDRESS",
+    "status": "PENDING",
+    "pickupDate": null,
+    "deadline": "2026-07-25T00:00:00.000Z",
+    "warehouse": null,
+    "address": { "id": "addr_1", "street": "...", "city": "...", "...": "..." }
+  }
+}
+```
+
+C'est le point d'entrée recommandé pour la page "mes demandes d'enlèvement" — pas besoin de connaître l'ID de la pickup request à l'avance, ni de route dédiée supplémentaire.
+
 ### 6.20 Tableau de bord (`/dashboard`)
 
-| Méthode | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/dashboard/stats` | Admin | KPIs globaux (produits, commandes, paiements, stock faible, expéditions, promotions, retours, avis) |
-| GET | `/dashboard/sales-chart` | Admin | `?year&period` — série mensuelle de CA/commandes |
+| Méthode | Route                    | Auth  | Description                                                                                         |
+| ------- | ------------------------ | ----- | --------------------------------------------------------------------------------------------------- |
+| GET     | `/dashboard/stats`       | Admin | KPIs globaux (produits, commandes, paiements, stock faible, expéditions, promotions, retours, avis) |
+| GET     | `/dashboard/sales-chart` | Admin | `?year&period` — série mensuelle de CA/commandes                                                    |
 
 ---
 
@@ -456,6 +498,7 @@ PENDING → CONFIRMED → PROCESSING → SHIPPED → DELIVERED → REFUNDED
    ↓           ↓            ↓
 CANCELLED  CANCELLED   CANCELLED
 ```
+
 - Transitions strictement contrôlées côté serveur (400 si invalide).
 - `PENDING → CONFIRMED` se déclenche automatiquement à l'enregistrement d'un paiement COD.
 - `DELIVERED → REFUNDED` uniquement via un retour complété.
@@ -468,11 +511,13 @@ PENDING → COMPLETED → REFUNDED
    ↓
 FAILED / CANCELLED
 ```
+
 Les transitions manuelles côté admin sont **restreintes à `REFUNDED`** — les autres (`COMPLETED`, `FAILED`, `CANCELLED`) sont exclusivement déclenchées automatiquement par le cycle de vie de la commande (ex : COD complété à la livraison).
 
 ### 7.3 Calcul du prix (`pricing`)
 
 Chaque produit renvoyé par `/product`, `/product/:id` et `/promotions/*/products` inclut un objet `pricing` :
+
 ```json
 {
   "pricing": {
@@ -486,6 +531,7 @@ Chaque produit renvoyé par `/product`, `/product/:id` et `/promotions/*/product
   }
 }
 ```
+
 Si plusieurs promotions s'appliquent à un même produit, **la meilleure remise (prix le plus bas) est retenue** — les remises ne se cumulent jamais.
 
 ### 7.4 Attributs vs combinaisons — bien distinguer
@@ -504,6 +550,7 @@ ReturnRequest: PENDING → APPROVED → COMPLETED
                   ↓          ↓
               REJECTED   CANCELLED
 ```
+
 L'approbation (`APPROVED`) matérialise automatiquement une `PickupRequest` (voir §6.15) avec la méthode de collecte choisie par le client à la création. L'admin garde un contrôle total sur cette pickup (lieu, statut) indépendamment du retour — faire passer la pickup à `COMPLETED` ne marque **pas** automatiquement le retour comme `COMPLETED` : c'est une décision distincte de l'admin via `PUT /returns/:id/status`, qui seule déclenche remboursement + réintégration stock + reversal fidélité.
 
 ---
@@ -512,11 +559,11 @@ L'approbation (`APPROVED`) matérialise automatiquement une `PickupRequest` (voi
 
 Champs multipart acceptés : `image/jpeg`, `image/png`, `image/webp`, `image/gif`, 5 Mo max par fichier.
 
-| Endpoint | Champ(s) |
-|---|---|
-| `POST /product/:productId/images` | `images` (jusqu'à 5) |
-| `POST /categories/:categoryId/assets` | `image`, `icon` (1 chacun) |
-| `POST /promotions/:promotionId/images` | `images` (jusqu'à 5) |
+| Endpoint                               | Champ(s)                   |
+| -------------------------------------- | -------------------------- |
+| `POST /product/:productId/images`      | `images` (jusqu'à 5)       |
+| `POST /categories/:categoryId/assets`  | `image`, `icon` (1 chacun) |
+| `POST /promotions/:promotionId/images` | `images` (jusqu'à 5)       |
 
 Le frontend n'a jamais besoin de connaître l'endpoint de stockage (R2/MinIO) : l'API upload elle-même et renvoie l'URL publique finale dans la réponse.
 
@@ -535,23 +582,26 @@ Le frontend n'a jamais besoin de connaître l'endpoint de stockage (R2/MinIO) : 
 
 ## 10. Enums utiles côté frontend
 
-| Enum | Valeurs |
-|---|---|
-| `UserRole` | `USER, ADMIN, MANAGER, SUPPORT` |
-| `ProductStatus` | `DRAFT, ACTIVE, ARCHIVED` |
-| `AttributeType` | `TEXT, NUMBER, COLOR, BOOLEAN, SELECT` |
-| `OrderStatus` | `PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED, REFUNDED` |
-| `PaymentMethod` | `CASH_ON_DELIVERY, PAYPAL, STRIPE, CINETPAY` |
-| `PaymentStatus` | `PENDING, COMPLETED, FAILED, REFUNDED, CANCELLED` |
-| `ShipmentStatus` | `PENDING, IN_TRANSIT, DELIVERED, CANCELLED` |
-| `PickupCollectionMethod` | `ORIGINAL_ADDRESS, WAREHOUSE_DROPOFF, CUSTOM_ADDRESS` |
-| `PickupStatus` | `PENDING, CONFIRMED, COMPLETED, CANCELLED, EXPIRED` |
-| `PromotionStatus` | `SCHEDULED, ACTIVE, EXPIRED, CANCELLED` |
-| `DiscountType` | `PERCENTAGE, FIXED_AMOUNT` |
-| `ReturnStatus` | `PENDING, APPROVED, REJECTED, CANCELLED, COMPLETED` |
-| `LoyaltyEventType` | `EARNED, REDEEMED, EXPIRED, ADJUSTED` |
+| Enum                     | Valeurs                                                                   |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `UserRole`               | `USER, ADMIN, MANAGER, SUPPORT`                                           |
+| `ProductStatus`          | `DRAFT, ACTIVE, ARCHIVED`                                                 |
+| `AttributeType`          | `TEXT, NUMBER, COLOR, BOOLEAN, SELECT`                                    |
+| `OrderStatus`            | `PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED, REFUNDED` |
+| `PaymentMethod`          | `CASH_ON_DELIVERY, PAYPAL, STRIPE, CINETPAY`                              |
+| `PaymentStatus`          | `PENDING, COMPLETED, FAILED, REFUNDED, CANCELLED`                         |
+| `ShipmentStatus`         | `PENDING, IN_TRANSIT, DELIVERED, CANCELLED`                               |
+| `PickupCollectionMethod` | `ORIGINAL_ADDRESS, WAREHOUSE_DROPOFF, CUSTOM_ADDRESS`                     |
+| `PickupStatus`           | `PENDING, CONFIRMED, COMPLETED, CANCELLED, EXPIRED`                       |
+| `PromotionStatus`        | `SCHEDULED, ACTIVE, EXPIRED, CANCELLED`                                   |
+| `DiscountType`           | `PERCENTAGE, FIXED_AMOUNT`                                                |
+| `ReturnStatus`           | `PENDING, APPROVED, REJECTED, CANCELLED, COMPLETED`                       |
+| `LoyaltyEventType`       | `EARNED, REDEEMED, EXPIRED, ADJUSTED`                                     |
 
 ---
 
-*Document généré à partir de l'état actuel du code source. À maintenir à jour à chaque évolution des routers/schémas.*
+_Document généré à partir de l'état actuel du code source. À maintenir à jour à chaque évolution des routers/schémas._
+
+```
+
 ```

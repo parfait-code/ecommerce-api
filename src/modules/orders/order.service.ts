@@ -20,7 +20,12 @@ import {
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
 import { eventBus } from "../../shared/events/event-bus";
-import { businessLogger, auditLogger, ActorRole } from "../../shared/logger";
+import {
+  businessLogger,
+  auditLogger,
+  ActorRole,
+  systemLogger,
+} from "../../shared/logger";
 import { OrderStatus } from "@prisma/client";
 
 const CACHE_KEYS = {
@@ -91,6 +96,8 @@ const releaseReservedStock = async (orderId: string) => {
 
   await orderReservationRepository.deleteByOrder(orderId);
 };
+
+const STALE_PENDING_ORDER_HOURS = 24;
 
 export const orderService = {
   getAll: async (
@@ -482,6 +489,42 @@ export const orderService = {
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 10);
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  },
+
+  // Nouveau — miroir de pickupRequestService.expireOverdue(). Une commande
+  // PENDING jamais payée bloque du stock réservé indéfiniment. Réutilise
+  // updateStatus() telle quelle : state machine, libération de stock via
+  // releaseReservedStock, logs, event bus — rien de dupliqué.
+  expireStalePending: async (
+    hoursThreshold: number = STALE_PENDING_ORDER_HOURS,
+  ): Promise<number> => {
+    const threshold = new Date(Date.now() - hoursThreshold * 60 * 60 * 1000);
+    const stale = await orderRepository.findStalePending(threshold);
+
+    for (const order of stale) {
+      try {
+        await orderService.updateStatus(
+          order.id,
+          {
+            status: OrderStatus.CANCELLED,
+            reason: `Automatically cancelled: no payment confirmation within ${hoursThreshold}h`,
+          },
+          null,
+          "SYSTEM",
+        );
+      } catch (err) {
+        systemLogger.error("ORDER_SYNC_FAILED", {
+          service: "order-service",
+          metadata: {
+            orderId: order.id,
+            reason: "Failed to auto-cancel stale pending order",
+            error: (err as Error).message,
+          },
+        });
+      }
+    }
+
+    return stale.length;
   },
 
   updateStatus: async (

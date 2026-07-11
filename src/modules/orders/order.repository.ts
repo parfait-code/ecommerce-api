@@ -154,6 +154,15 @@ export const orderRepository = {
     ]);
   },
 
+  // Utilisé par la tâche cron d'expiration des commandes abandonnées —
+  // sélection minimale (juste l'id), le traitement complet passe par
+  // orderService.updateStatus() qui gère déjà transition + libération stock.
+  findStalePending: (olderThan: Date) =>
+    prisma.order.findMany({
+      where: { status: OrderStatus.PENDING, createdAt: { lt: olderThan } },
+      select: { id: true },
+    }),
+
   update: (id: string, data: UpdateOrderDto) =>
     prisma.order.update({
       where: { id },

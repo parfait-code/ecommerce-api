@@ -16,7 +16,17 @@ const returnInclude = {
   },
   collectionAddress: true,
   collectionWarehouse: { select: { id: true, name: true, location: true } },
-  pickupRequest: true,
+  // Corrigé — `pickupRequest: true` ne renvoyait que les IDs bruts
+  // (addressId, warehouseId), pas les objets peuplés attendus par le
+  // frontend (cf. audit "Visibilité des pickup requests côté client").
+  // Aucun changement de shape ailleurs : ReturnRequest.pickupRequest reste
+  // nullable (une demande PENDING/REJECTED n'en a pas encore).
+  pickupRequest: {
+    include: {
+      address: true,
+      warehouse: { select: { id: true, name: true, location: true } },
+    },
+  },
 };
 
 export const returnRepository = {

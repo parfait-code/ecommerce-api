@@ -6,17 +6,19 @@ import {
   startPickupExpirationJob,
   stopPickupExpirationJob,
 } from "./shared/jobs/pickup-expiration.job";
+import {
+  startOrderExpirationJob,
+  stopOrderExpirationJob,
+} from "./shared/jobs/order-expiration.job";
 
 const server = app.listen(env.PORT, () => {
   systemLogger.log("SERVER_STARTED", {
     service: "server",
-    metadata: {
-      port: env.PORT,
-      env: env.NODE_ENV,
-    },
+    metadata: { port: env.PORT, env: env.NODE_ENV },
   });
 
   startPickupExpirationJob();
+  startOrderExpirationJob();
 });
 
 /**
@@ -29,6 +31,7 @@ const shutdown = (signal: string) => {
     metadata: { signal },
   });
   stopPickupExpirationJob();
+  stopOrderExpirationJob();
   server.close(() => process.exit(0));
 };
 

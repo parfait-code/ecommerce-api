@@ -39,5 +39,13 @@ router.get(
   adminGuard,
   orderController.getByUser,
 );
+// Cible pour un cron externe / vérification manuelle — même pattern que
+// POST /pickup-requests/expire-overdue.
+router.post(
+  "/orders/expire-stale",
+  authGuard,
+  adminGuard,
+  orderController.expireStale,
+);
 
 export default router;

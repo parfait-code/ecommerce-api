@@ -248,7 +248,10 @@ export type SystemEvent =
   | "PICKUP_REQUEST_EXPIRED"
   | "PICKUP_EXPIRATION_JOB_STARTED"
   | "PICKUP_EXPIRATION_JOB_RAN"
-  | "PICKUP_EXPIRATION_JOB_FAILED";
+  | "PICKUP_EXPIRATION_JOB_FAILED"
+  | "ORDER_EXPIRATION_JOB_STARTED"
+  | "ORDER_EXPIRATION_JOB_RAN"
+  | "ORDER_EXPIRATION_JOB_FAILED";
 
 // ─── Error Events ────────────────────────────────────────────────────────────
 

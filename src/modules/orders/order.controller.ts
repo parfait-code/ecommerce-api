@@ -43,6 +43,15 @@ export const orderController = {
     }
   },
 
+  expireStale: async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const expiredCount = await orderService.expireStalePending();
+      respond(res, { expiredCount });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   create: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await orderService.create(req.user!.userId, req.body);
