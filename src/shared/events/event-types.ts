@@ -10,7 +10,7 @@ import {
 
 export interface OrderStatusChangedEvent {
   orderId: string;
-  userId: number;
+  userId: string;
   fromStatus: OrderStatus;
   toStatus: OrderStatus;
   totalAmount: number;
@@ -61,7 +61,7 @@ export interface InventoryQuantityChangedEvent {
  * actif dessus. Répond à S3.
  */
 export interface CombinationDeactivatedEvent {
-  productId: number;
+  productId: string;
   combinationId: string;
   optionsKey: string;
   hadStock: boolean;
@@ -74,7 +74,7 @@ export interface CombinationDeactivatedEvent {
  * de variante, et avertit (non bloquant) sinon.
  */
 export interface ProductActivatedEvent {
-  productId: number;
+  productId: string;
   categoryId: string;
 }
 
