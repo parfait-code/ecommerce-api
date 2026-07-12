@@ -153,7 +153,8 @@ export const productService = {
   },
 
   update: async (id: string, dto: UpdateProductDto) => {
-    const product = await productRepository.findById(id);
+    // ✅ Récupérer le produit même s'il est inactif
+    const product = await productRepository.findById(id, true);
     if (!product) throw new AppError("Product not found", 404);
 
     if (dto.status === ProductStatus.ACTIVE) {
@@ -189,9 +190,6 @@ export const productService = {
       metadata: { fields: Object.keys(dto) },
     });
 
-    // S4 — émis uniquement lors d'une VÉRITABLE transition vers ACTIVE
-    // (pas si le produit était déjà ACTIVE), pour éviter un bruit de log
-    // à chaque simple mise à jour d'un produit déjà actif.
     if (
       dto.status === ProductStatus.ACTIVE &&
       product.status !== ProductStatus.ACTIVE
@@ -205,46 +203,13 @@ export const productService = {
     return updated;
   },
 
-  delete: async (id: string) => {
-    const product = await productRepository.findById(id, true);
-    if (!product) throw new AppError("Product not found", 404);
-
-    // Les lignes DB liées (images, combinaisons, avis, stock, panier, wishlist,
-    // tags, discounts) sont supprimées automatiquement en cascade par le schéma
-    // dès que la ligne Product disparaît réellement. Les OrderItem historiques
-    // ne sont PAS supprimés : leur productId passe à NULL (onDelete: SetNull),
-    // et productName/productSku conservent la trace pour l'historique de commande.
-    for (const image of product.images) {
-      await deleteImage(image.url);
-    }
-
-    await productRepository.delete(id);
-    await cache.del(CACHE_KEYS.single(id));
-    await cache.delByPattern("products:all:*");
-
-    businessLogger.log("PRODUCT_DELETED", {
-      service: "products",
-      actor: { userId: null, role: "ADMIN" },
-      target: { productId: id },
-      metadata: { name: product.name, sku: product.sku },
-    });
-
-    auditLogger.log("PRODUCT_DELETED", {
-      service: "products",
-      actor: { userId: null, role: "ADMIN" },
-      target: { productId: id },
-      metadata: { name: product.name },
-    });
-
-    return { numberOfProductsDeleted: 1 };
-  },
-
   uploadImages: async (
     id: string,
     files: Express.Multer.File[],
     combinationId?: string,
   ) => {
-    const product = await productRepository.findById(id);
+    // ✅ Récupérer le produit même s'il est inactif
+    const product = await productRepository.findById(id, true);
     if (!product) throw new AppError("Product not found", 404);
 
     if (combinationId) {
@@ -263,7 +228,8 @@ export const productService = {
   },
 
   deleteImage: async (id: string, imageId: string) => {
-    const product = await productRepository.findById(id);
+    // ✅ Récupérer le produit même s'il est inactif
+    const product = await productRepository.findById(id, true);
     if (!product) throw new AppError("Product not found", 404);
 
     const image = await productRepository.findImageById(imageId);
