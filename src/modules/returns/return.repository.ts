@@ -58,7 +58,7 @@ export const returnRepository = {
     }),
 
   create: (
-    userId: number,
+    userId: string,
     dto: CreateReturnDto,
     itemsWithQuantity: {
       order_item_id: string;

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { LoyaltyEventType } from "@prisma/client";
 
 export const adjustLoyaltySchema = z.object({
-  userId: z.number().int().positive(),
+  userId: z.string(),
   points: z
     .number()
     .int()

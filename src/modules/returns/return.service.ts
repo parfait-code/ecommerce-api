@@ -19,7 +19,7 @@ export const returnService = {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
-  getById: async (id: string, userId: number, isAdmin: boolean) => {
+  getById: async (id: string, userId: string, isAdmin: boolean) => {
     const returnRequest = await returnRepository.findById(id);
     if (!returnRequest) throw new AppError("Return request not found", 404);
     if (!isAdmin && returnRequest.userId !== userId)
@@ -27,7 +27,7 @@ export const returnService = {
     return returnRequest;
   },
 
-  getByOrder: async (orderId: string, userId: number, isAdmin: boolean) => {
+  getByOrder: async (orderId: string, userId: string, isAdmin: boolean) => {
     const order = await orderRepository.findById(orderId);
     if (!order) throw new AppError("Order not found", 404);
     if (!isAdmin && order.userId !== userId)
@@ -35,7 +35,7 @@ export const returnService = {
     return returnRepository.findByOrder(orderId);
   },
 
-  create: async (userId: number, dto: CreateReturnDto) => {
+  create: async (userId: string, dto: CreateReturnDto) => {
     const order = await orderRepository.findById(dto.order_id);
     if (!order) throw new AppError("Order not found", 404);
     if (order.userId !== userId) throw new AppError("Forbidden", 403);
@@ -116,7 +116,7 @@ export const returnService = {
   updateStatus: async (
     id: string,
     dto: UpdateReturnStatusDto,
-    adminUserId: number,
+    adminUserId: string,
   ) => {
     const returnRequest = await returnRepository.findById(id);
     if (!returnRequest) throw new AppError("Return request not found", 404);

@@ -75,7 +75,7 @@ export const paymentService = {
     });
   },
 
-  create: async (userId: number, dto: CreatePaymentDto) => {
+  create: async (userId: string, dto: CreatePaymentDto) => {
     const methods = await paymentService.getAvailableMethods();
     const method = methods.find((m) => m.id === dto.method);
 
@@ -138,7 +138,7 @@ export const paymentService = {
   updateStatus: async (
     paymentId: string,
     dto: UpdatePaymentStatusDto,
-    adminUserId: number | null,
+    adminUserId: string | null,
     actorRole: ActorRole = "ADMIN",
   ) => {
     const payment = await paymentRepository.findById(paymentId);
@@ -230,7 +230,7 @@ export const paymentService = {
     return updated;
   },
 
-  complete: (paymentId: string, adminUserId: number) =>
+  complete: (paymentId: string, adminUserId: string) =>
     paymentService.updateStatus(
       paymentId,
       { status: "COMPLETED" },
@@ -250,7 +250,7 @@ export const paymentService = {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
-  getById: async (id: string, userId: number, isAdmin: boolean) => {
+  getById: async (id: string, userId: string, isAdmin: boolean) => {
     const payment = await paymentRepository.findById(id);
     if (!payment) throw new AppError("Payment not found", 404);
     if (!isAdmin && payment.userId !== userId)
@@ -258,7 +258,7 @@ export const paymentService = {
     return payment;
   },
 
-  getByOrderId: async (orderId: string, userId: number, isAdmin: boolean) => {
+  getByOrderId: async (orderId: string, userId: string, isAdmin: boolean) => {
     const order = await orderRepository.findById(orderId);
     if (!order) throw new AppError("Order not found", 404);
     if (!isAdmin && order.userId !== userId)

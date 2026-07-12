@@ -10,7 +10,7 @@ const pickupInclude = {
 
 export const pickupRequestRepository = {
   create: (data: {
-    userId: number;
+    userId: string;
     returnRequestId: string;
     orderId: string;
     method: PickupCollectionMethod;

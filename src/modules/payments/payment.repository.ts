@@ -18,7 +18,7 @@ const paymentInclude = {
 export const paymentRepository = {
   create: (data: {
     orderId: string;
-    userId: number;
+    userId: string;
     method: PaymentMethod;
     amount: number;
     currency: string;
@@ -56,11 +56,7 @@ export const paymentRepository = {
   findByOrderId: (orderId: string) =>
     prisma.payment.findMany({ where: { orderId }, include: paymentInclude }),
 
-  updateStatus: (
-    id: string,
-    status: PaymentStatus,
-    notes?: string,
-  ) =>
+  updateStatus: (id: string, status: PaymentStatus, notes?: string) =>
     prisma.payment.update({
       where: { id },
       data: { status, ...(notes !== undefined && { notes }) },

@@ -29,7 +29,7 @@ const generateEstimatedDelivery = () => {
  */
 const assertShipmentAccess = async (
   shipment: { orderId: string | null },
-  userId: number,
+  userId: string,
   isAdmin: boolean,
 ): Promise<void> => {
   if (isAdmin) return;
@@ -93,14 +93,14 @@ export const shipmentService = {
     return shipment;
   },
 
-  getById: async (id: string, userId: number, isAdmin: boolean) => {
+  getById: async (id: string, userId: string, isAdmin: boolean) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
     await assertShipmentAccess(shipment, userId, isAdmin);
     return shipment;
   },
 
-  getByOrder: async (orderId: string, userId: number, isAdmin: boolean) => {
+  getByOrder: async (orderId: string, userId: string, isAdmin: boolean) => {
     const order = await orderRepository.findById(orderId);
     if (!order) throw new AppError("Order not found", 404);
     if (!isAdmin && order.userId !== userId)
@@ -179,7 +179,7 @@ export const shipmentService = {
     return updated;
   },
 
-  getTracking: async (id: string, userId: number, isAdmin: boolean) => {
+  getTracking: async (id: string, userId: string, isAdmin: boolean) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
     await assertShipmentAccess(shipment, userId, isAdmin);
@@ -191,7 +191,7 @@ export const shipmentService = {
     };
   },
 
-  cancel: async (id: string, userId: number, isAdmin: boolean) => {
+  cancel: async (id: string, userId: string, isAdmin: boolean) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
     await assertShipmentAccess(shipment, userId, isAdmin);
@@ -218,7 +218,7 @@ export const shipmentService = {
     return cancelled;
   },
 
-  getLabel: async (shipmentId: string, userId: number, isAdmin: boolean) => {
+  getLabel: async (shipmentId: string, userId: string, isAdmin: boolean) => {
     const shipment = await shipmentRepository.findById(shipmentId);
     if (!shipment) throw new AppError("Shipment not found", 404);
     await assertShipmentAccess(shipment, userId, isAdmin);

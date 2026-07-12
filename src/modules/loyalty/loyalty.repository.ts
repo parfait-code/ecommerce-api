@@ -2,7 +2,7 @@ import { prisma } from "../../shared/config/database";
 import { LoyaltyEventType } from "@prisma/client";
 
 export const loyaltyRepository = {
-  findByUser: (userId: number) =>
+  findByUser: (userId: string) =>
     prisma.loyaltyTransaction.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -14,7 +14,7 @@ export const loyaltyRepository = {
       where: { orderId },
     }),
 
-  getBalance: async (userId: number): Promise<number> => {
+  getBalance: async (userId: string): Promise<number> => {
     const result = await prisma.loyaltyTransaction.aggregate({
       where: { userId },
       _sum: { points: true },
@@ -23,7 +23,7 @@ export const loyaltyRepository = {
   },
 
   create: (data: {
-    userId: number;
+    userId: string;
     points: number;
     type: LoyaltyEventType;
     orderId?: string;

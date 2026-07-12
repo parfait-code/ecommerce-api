@@ -6,8 +6,8 @@ import { settingService } from "../settings/setting.service";
 import { SETTING_KEYS } from "../settings/setting.constants";
 
 const assertOwnerOrAdmin = (
-  targetUserId: number,
-  callerId: number,
+  targetUserId: string,
+  callerId: string,
   isAdmin: boolean,
 ): void => {
   if (!isAdmin && callerId !== targetUserId) {
@@ -16,7 +16,7 @@ const assertOwnerOrAdmin = (
 };
 
 export const loyaltyService = {
-  getBalance: async (userId: number, callerId: number, isAdmin: boolean) => {
+  getBalance: async (userId: string, callerId: string, isAdmin: boolean) => {
     assertOwnerOrAdmin(userId, callerId, isAdmin);
 
     const user = await userRepository.findById(userId);
@@ -25,7 +25,7 @@ export const loyaltyService = {
     return { userId, balance };
   },
 
-  getHistory: async (userId: number, callerId: number, isAdmin: boolean) => {
+  getHistory: async (userId: string, callerId: string, isAdmin: boolean) => {
     assertOwnerOrAdmin(userId, callerId, isAdmin);
 
     const user = await userRepository.findById(userId);
@@ -53,7 +53,7 @@ export const loyaltyService = {
     });
   },
 
-  reverseForOrder: async (userId: number, orderId: string) => {
+  reverseForOrder: async (userId: string, orderId: string) => {
     const transactions = await loyaltyRepository.findByOrder(orderId);
 
     const earned = transactions

@@ -1,14 +1,14 @@
-import { prisma } from '../../shared/config/database'
-import { CreateAddressDto, UpdateAddressDto } from './address.schema'
+import { prisma } from "../../shared/config/database";
+import { CreateAddressDto, UpdateAddressDto } from "./address.schema";
 
 export const addressRepository = {
-  findAllByUser: (userId: number) =>
-    prisma.address.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }),
+  findAllByUser: (userId: string) =>
+    prisma.address.findMany({ where: { userId }, orderBy: { createdAt: "desc" } }),
 
   findById: (id: string) =>
     prisma.address.findUnique({ where: { id } }),
 
-  create: (userId: number, data: CreateAddressDto) =>
+  create: (userId: string, data: CreateAddressDto) =>
     prisma.address.create({ data: { userId, ...data } }),
 
   update: (id: string, data: UpdateAddressDto) =>
@@ -17,6 +17,6 @@ export const addressRepository = {
   delete: (id: string) =>
     prisma.address.delete({ where: { id } }),
 
-  unsetDefault: (userId: number) =>
+  unsetDefault: (userId: string) =>
     prisma.address.updateMany({ where: { userId }, data: { isDefault: false } }),
-}
+};

@@ -24,7 +24,7 @@ export const pickupRequestService = {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
-  getById: async (id: string, userId: number, isAdmin: boolean) => {
+  getById: async (id: string, userId: string, isAdmin: boolean) => {
     const request = await pickupRequestRepository.findById(id);
     if (!request) throw new AppError("Pickup request not found", 404);
     if (!isAdmin && request.userId !== userId)
@@ -74,7 +74,7 @@ export const pickupRequestService = {
   updateStatus: async (
     id: string,
     dto: UpdatePickupStatusDto,
-    adminUserId: number,
+    adminUserId: string,
   ) => {
     const request = await pickupRequestRepository.findById(id);
     if (!request) throw new AppError("Pickup request not found", 404);
@@ -114,7 +114,7 @@ export const pickupRequestService = {
   // Appelé uniquement par return.service.ts lors de l'approbation d'un
   // retour — pas de route publique de création.
   createFromReturn: async (params: {
-    userId: number;
+    userId: string;
     returnRequestId: string;
     orderId: string;
     method: PickupCollectionMethod;

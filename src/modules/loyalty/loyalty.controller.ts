@@ -7,7 +7,7 @@ export const loyaltyController = {
     try {
       const isAdmin = req.user!.role === "ADMIN";
       const result = await loyaltyService.getBalance(
-        Number(req.params.userId),
+        req.params.userId as string,
         req.user!.userId,
         isAdmin,
       );
@@ -21,7 +21,7 @@ export const loyaltyController = {
     try {
       const isAdmin = req.user!.role === "ADMIN";
       const result = await loyaltyService.getHistory(
-        Number(req.params.userId),
+        req.params.userId as string,
         req.user!.userId,
         isAdmin,
       );

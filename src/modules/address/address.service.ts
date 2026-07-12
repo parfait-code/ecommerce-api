@@ -45,16 +45,16 @@ export const addressService = {
     };
   },
 
-  getAll: (userId: number) => addressRepository.findAllByUser(userId),
+  getAll: (userId: string) => addressRepository.findAllByUser(userId),
 
-  getById: async (id: string, userId: number) => {
+  getById: async (id: string, userId: string) => {
     const address = await addressRepository.findById(id);
     if (!address) throw new AppError("Address not found", 404);
     if (address.userId !== userId) throw new AppError("Forbidden", 403);
     return address;
   },
 
-  create: async (userId: number, dto: CreateAddressDto) => {
+  create: async (userId: string, dto: CreateAddressDto) => {
     const normalizedCountry = assertNormalizedCountry(dto.country);
 
     if (dto.isDefault) await addressRepository.unsetDefault(userId);
@@ -77,7 +77,7 @@ export const addressService = {
     return address;
   },
 
-  update: async (id: string, userId: number, dto: UpdateAddressDto) => {
+  update: async (id: string, userId: string, dto: UpdateAddressDto) => {
     const address = await addressRepository.findById(id);
     if (!address) throw new AppError("Address not found", 404);
     if (address.userId !== userId) throw new AppError("Forbidden", 403);
@@ -103,7 +103,7 @@ export const addressService = {
     return updated;
   },
 
-  delete: async (id: string, userId: number) => {
+  delete: async (id: string, userId: string) => {
     const address = await addressRepository.findById(id);
     if (!address) throw new AppError("Address not found", 404);
     if (address.userId !== userId) throw new AppError("Forbidden", 403);
