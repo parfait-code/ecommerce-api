@@ -69,7 +69,7 @@ export const productRepository = {
     return [items, total] as const;
   },
 
-  findById: (id: number, includeInactive = false) =>
+  findById: (id: string, includeInactive = false) =>
     prisma.product.findUnique({
       where: {
         id,
@@ -81,12 +81,12 @@ export const productRepository = {
   create: (data: CreateProductDto) =>
     prisma.product.create({ data, include: productInclude }),
 
-  update: (id: number, data: UpdateProductDto) =>
+  update: (id: string, data: UpdateProductDto) =>
     prisma.product.update({ where: { id }, data, include: productInclude }),
 
-  delete: (id: number) => prisma.product.delete({ where: { id } }),
+  delete: (id: string) => prisma.product.delete({ where: { id } }),
 
-  addImages: (productId: number, urls: string[], combinationId?: string) =>
+  addImages: (productId: string, urls: string[], combinationId?: string) =>
     prisma.productImage.createMany({
       data: urls.map((url, index) => ({
         productId,
@@ -103,6 +103,6 @@ export const productRepository = {
   findImageById: (id: string) =>
     prisma.productImage.findUnique({ where: { id } }),
 
-  deleteImagesByProduct: (productId: number) =>
+  deleteImagesByProduct: (productId: string) =>
     prisma.productImage.deleteMany({ where: { productId } }),
 };

@@ -18,7 +18,7 @@ export const makeUser = (overrides: Partial<any> = {}) => ({
 });
 
 export const makeProduct = (overrides: Partial<any> = {}) => ({
-  id: 1,
+  id: "product_test_id",
   sku: "SKU-001",
   name: "Test Product",
   description: "A test product",
@@ -173,7 +173,7 @@ export const makeBasket = (overrides: Partial<any> = {}) => ({
 
 export const makeVariant = (overrides: Partial<any> = {}) => ({
   id: "variant_1",
-  productId: 1,
+  productId: "product_test_id",
   sku: "SKU-VAR-1",
   price: 1500,
   isActive: true,

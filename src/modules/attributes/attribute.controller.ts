@@ -106,7 +106,7 @@ export const attributeController = {
   ) => {
     try {
       const result = await attributeService.setProductAttributes(
-        Number(req.params.productId),
+        req.params.productId as string,
         req.body,
       );
       respond(res, result);

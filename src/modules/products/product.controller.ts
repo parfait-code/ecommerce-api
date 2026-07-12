@@ -28,7 +28,7 @@ export const productController = {
       const isAdmin = req.user?.role === "ADMIN";
       const includeInactive = isAdmin && req.query.includeInactive === "true";
       const result = await productService.getById(
-        Number(req.params.productId),
+        req.params.productId as string,
         includeInactive,
       );
       respond(res, result);
@@ -49,7 +49,7 @@ export const productController = {
   update: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await productService.update(
-        Number(req.params.productId),
+        req.params.productId as string,
         req.body,
       );
       respond(res, result);
@@ -60,7 +60,9 @@ export const productController = {
 
   delete: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await productService.delete(Number(req.params.productId));
+      const result = await productService.delete(
+        req.params.productId as string,
+      );
       respond(res, result);
     } catch (err) {
       next(err);
@@ -74,7 +76,7 @@ export const productController = {
         throw new AppError("No files uploaded", 400);
       const combinationId = req.body.combinationId as string | undefined;
       const result = await productService.uploadImages(
-        Number(req.params.productId),
+        req.params.productId as string,
         files,
         combinationId,
       );
@@ -89,7 +91,7 @@ export const productController = {
       const { imageId } = req.body;
       if (!imageId) throw new AppError("imageId is required", 400);
       const result = await productService.deleteImage(
-        Number(req.params.productId),
+        req.params.productId as string,
         imageId,
       );
       respond(res, result);

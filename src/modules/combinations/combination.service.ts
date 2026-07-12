@@ -16,7 +16,7 @@ const buildOptionsKey = (optionIds: string[]) =>
 
 export const combinationService = {
   setOptionsForAttribute: async (
-    productId: number,
+    productId: string,
     attributeDefinitionId: string,
     dto: SetVariantOptionsDto,
   ) => {
@@ -66,7 +66,7 @@ export const combinationService = {
     });
   },
 
-  getSelections: async (productId: number) => {
+  getSelections: async (productId: string) => {
     const product = await productRepository.findById(productId, true);
     if (!product) throw new AppError("Product not found", 404);
 
@@ -79,7 +79,7 @@ export const combinationService = {
     });
   },
 
-  generate: async (productId: number) => {
+  generate: async (productId: string) => {
     const product = await productRepository.findById(productId, true);
     if (!product) throw new AppError("Product not found", 404);
 
@@ -164,7 +164,7 @@ export const combinationService = {
     return combinationRepository.findByProduct(productId);
   },
 
-  getByProduct: async (productId: number, includeInactive = false) => {
+  getByProduct: async (productId: string, includeInactive = false) => {
     const product = await productRepository.findById(
       productId,
       includeInactive,
@@ -179,7 +179,7 @@ export const combinationService = {
     return combination;
   },
 
-  update: async (id: string, productId: number, dto: UpdateCombinationDto) => {
+  update: async (id: string, productId: string, dto: UpdateCombinationDto) => {
     const combination = await combinationRepository.findById(id);
     if (!combination) throw new AppError("Combination not found", 404);
     if (combination.productId !== productId)
@@ -214,7 +214,7 @@ export const combinationService = {
     return updated;
   },
 
-  delete: async (id: string, productId: number) => {
+  delete: async (id: string, productId: string) => {
     const combination = await combinationRepository.findById(id);
     if (!combination) throw new AppError("Combination not found", 404);
     if (combination.productId !== productId)

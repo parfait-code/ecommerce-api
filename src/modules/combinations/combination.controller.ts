@@ -10,7 +10,7 @@ export const combinationController = {
   ) => {
     try {
       const result = await combinationService.setOptionsForAttribute(
-        Number(req.params.productId),
+        req.params.productId as string,
         req.params.attributeDefinitionId as string,
         req.body,
       );
@@ -23,7 +23,7 @@ export const combinationController = {
   getSelections: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await combinationService.getSelections(
-        Number(req.params.productId),
+        req.params.productId as string,
       );
       respond(res, result);
     } catch (err) {
@@ -34,7 +34,7 @@ export const combinationController = {
   generate: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await combinationService.generate(
-        Number(req.params.productId),
+        req.params.productId as string,
       );
       respond(res, result, 201);
     } catch (err) {
@@ -46,7 +46,7 @@ export const combinationController = {
       const isAdmin = req.user?.role === "ADMIN";
       const includeInactive = isAdmin && req.query.includeInactive === "true";
       const result = await combinationService.getByProduct(
-        Number(req.params.productId),
+        req.params.productId as string,
         includeInactive,
       );
       respond(res, result);
@@ -70,7 +70,7 @@ export const combinationController = {
     try {
       const result = await combinationService.update(
         req.params.combinationId as string,
-        Number(req.params.productId),
+        req.params.productId as string,
         req.body,
       );
       respond(res, result);
@@ -83,7 +83,7 @@ export const combinationController = {
     try {
       const result = await combinationService.delete(
         req.params.combinationId as string,
-        Number(req.params.productId),
+        req.params.productId as string,
       );
       respond(res, result);
     } catch (err) {

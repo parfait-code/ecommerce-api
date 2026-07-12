@@ -98,7 +98,7 @@ export const attributeRepository = {
   // ── Product attribute values ──────────────────────────────────────────────
 
   setProductAttributes: async (
-    productId: number,
+    productId: string,
     dto: SetProductAttributesDto,
   ) => {
     return prisma.$transaction(async (tx) => {

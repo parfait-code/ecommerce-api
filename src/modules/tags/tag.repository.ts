@@ -21,7 +21,7 @@ export const tagRepository = {
 
   delete: (id: string) => prisma.tag.delete({ where: { id } }),
 
-  setProductTags: (productId: number, tagIds: string[]) =>
+  setProductTags: (productId: string, tagIds: string[]) =>
     prisma.$transaction(async (tx) => {
       await tx.productTag.deleteMany({ where: { productId } });
       if (tagIds.length > 0) {
@@ -35,7 +35,7 @@ export const tagRepository = {
       });
     }),
 
-  findByProduct: (productId: number) =>
+  findByProduct: (productId: string) =>
     prisma.productTag.findMany({
       where: { productId },
       include: { tag: true },

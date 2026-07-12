@@ -145,7 +145,7 @@ export const attributeService = {
   // ── Product attribute values ──────────────────────────────────────────────
 
   setProductAttributes: async (
-    productId: number,
+    productId: string,
     dto: SetProductAttributesDto,
   ) => {
     const product = await productRepository.findById(productId, true);

@@ -13,7 +13,7 @@ const combinationInclude = {
 };
 
 export const combinationRepository = {
-  findByProduct: (productId: number) =>
+  findByProduct: (productId: string) =>
     prisma.productCombination.findMany({
       where: { productId },
       include: combinationInclude,
@@ -29,7 +29,7 @@ export const combinationRepository = {
   findBySku: (sku: string) =>
     prisma.productCombination.findUnique({ where: { sku } }),
 
-  findByOptionsKey: (productId: number, optionsKey: string) =>
+  findByOptionsKey: (productId: string, optionsKey: string) =>
     prisma.productCombination.findUnique({
       where: { productId_optionsKey: { productId, optionsKey } },
       include: combinationInclude,
@@ -38,7 +38,7 @@ export const combinationRepository = {
   // Nouveau — utilisé par combination.service.ts::generate() pour détecter,
   // AVANT désactivation, quelles combinaisons sur le point d'être désactivées
   // ont encore du stock actif (S3).
-  findActiveExcept: (productId: number, keepOptionsKeys: string[]) =>
+  findActiveExcept: (productId: string, keepOptionsKeys: string[]) =>
     prisma.productCombination.findMany({
       where: {
         productId,
@@ -51,7 +51,7 @@ export const combinationRepository = {
     }),
 
   create: (
-    productId: number,
+    productId: string,
     optionsKey: string,
     values: { attributeDefinitionId: string; attributeOptionId: string }[],
   ) =>
@@ -67,7 +67,7 @@ export const combinationRepository = {
       include: combinationInclude,
     }),
 
-  deactivateManyExcept: (productId: number, keepOptionsKeys: string[]) =>
+  deactivateManyExcept: (productId: string, keepOptionsKeys: string[]) =>
     prisma.productCombination.updateMany({
       where: { productId, optionsKey: { notIn: keepOptionsKeys } },
       data: { isActive: false },

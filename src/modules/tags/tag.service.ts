@@ -47,7 +47,7 @@ export const tagService = {
     return { message: "Tag deleted successfully" };
   },
 
-  setProductTags: async (productId: number, dto: SetProductTagsDto) => {
+  setProductTags: async (productId: string, dto: SetProductTagsDto) => {
     const product = await productRepository.findById(productId, true);
     if (!product) throw new AppError("Product not found", 404);
 
@@ -61,7 +61,7 @@ export const tagService = {
     return result;
   },
 
-  getByProduct: async (productId: number, includeInactive = false) => {
+  getByProduct: async (productId: string, includeInactive = false) => {
     const product = await productRepository.findById(
       productId,
       includeInactive,

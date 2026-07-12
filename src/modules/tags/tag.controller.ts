@@ -50,7 +50,10 @@ export const tagController = {
     try {
       respond(
         res,
-        await tagService.setProductTags(Number(req.params.productId), req.body),
+        await tagService.setProductTags(
+          req.params.productId as string,
+          req.body,
+        ),
       );
     } catch (err) {
       next(err);
@@ -59,7 +62,10 @@ export const tagController = {
 
   getByProduct: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      respond(res, await tagService.getByProduct(Number(req.params.productId)));
+      respond(
+        res,
+        await tagService.getByProduct(req.params.productId as string),
+      );
     } catch (err) {
       next(err);
     }

@@ -4,7 +4,6 @@ import { attributeRepository } from "../attributes/attribute.repository";
 import { promotionRepository } from "../promotions/promotion.repository";
 import { categoryRepository } from "../categories/category.repository";
 import { getBestPricing } from "../promotions/promotion.pricing";
-import { inventoryRepository } from "../inventory/inventory.repository";
 import { CreateProductDto, UpdateProductDto } from "./product.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { cache } from "../../shared/utils/cache";
@@ -23,7 +22,7 @@ type ProductQuery = {
 const CACHE_KEYS = {
   all: (page: number, limit: number, categoryId?: string, search?: string) =>
     `products:all:${page}:${limit}${categoryId ? `:${categoryId}` : ""}${search ? `:${search}` : ""}`,
-  single: (id: number) => `products:${id}`,
+  single: (id: string) => `products:${id}`,
 };
 
 /**
@@ -100,7 +99,7 @@ export const productService = {
     return result;
   },
 
-  getById: async (id: number, includeInactive = false) => {
+  getById: async (id: string, includeInactive = false) => {
     const cacheKey = CACHE_KEYS.single(id);
     if (!includeInactive) {
       const cached = await cache.get(cacheKey);
@@ -153,7 +152,7 @@ export const productService = {
     return product;
   },
 
-  update: async (id: number, dto: UpdateProductDto) => {
+  update: async (id: string, dto: UpdateProductDto) => {
     const product = await productRepository.findById(id);
     if (!product) throw new AppError("Product not found", 404);
 
@@ -206,7 +205,7 @@ export const productService = {
     return updated;
   },
 
-  delete: async (id: number) => {
+  delete: async (id: string) => {
     const product = await productRepository.findById(id, true);
     if (!product) throw new AppError("Product not found", 404);
 
@@ -241,7 +240,7 @@ export const productService = {
   },
 
   uploadImages: async (
-    id: number,
+    id: string,
     files: Express.Multer.File[],
     combinationId?: string,
   ) => {
@@ -263,7 +262,7 @@ export const productService = {
     return productRepository.findById(id);
   },
 
-  deleteImage: async (id: number, imageId: string) => {
+  deleteImage: async (id: string, imageId: string) => {
     const product = await productRepository.findById(id);
     if (!product) throw new AppError("Product not found", 404);
 
