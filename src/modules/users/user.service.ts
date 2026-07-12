@@ -45,13 +45,13 @@ export const userService = {
     return strip(user as Record<string, unknown>);
   },
 
-  getProfile: async (userId: number) => {
+  getProfile: async (userId: string) => {
     const user = await userRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
     return strip(user as Record<string, unknown>);
   },
 
-  updateProfile: async (userId: number, dto: UpdateUserDto) => {
+  updateProfile: async (userId: string, dto: UpdateUserDto) => {
     const user = await userRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
 
@@ -75,7 +75,7 @@ export const userService = {
     return users.map((u) => strip(u as Record<string, unknown>));
   },
 
-  changeRole: async (userId: number, dto: ChangeRoleDto) => {
+  changeRole: async (userId: string, dto: ChangeRoleDto) => {
     const user = await userRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
 
@@ -100,7 +100,7 @@ export const userService = {
   },
 
   // U2 — un admin ne peut plus se supprimer lui-même
-  deleteUser: async (userId: number, callerId: number) => {
+  deleteUser: async (userId: string, callerId: string) => {
     if (userId === callerId) {
       throw new AppError("You cannot delete your own account", 400);
     }
@@ -128,10 +128,7 @@ export const userService = {
   },
 
   // U2/U4 — suspension/réactivation réversible, indépendante de deletedAt.
-  // findById filtre déjà deletedAt:null : un compte soft-supprimé est donc
-  // automatiquement invisible ici (404), cohérent avec le reste de l'API —
-  // pas de vérification supplémentaire nécessaire.
-  changeStatus: async (userId: number, callerId: number, isActive: boolean) => {
+  changeStatus: async (userId: string, callerId: string, isActive: boolean) => {
     const user = await userRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
 

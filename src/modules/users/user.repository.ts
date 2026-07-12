@@ -4,8 +4,8 @@ import { UpdateUserDto } from "./user.schema";
 import { UserRole } from "@prisma/client";
 
 export const userRepository = {
-  findById: (id: number) => {
-    if (id === undefined || id === null || Number.isNaN(id)) {
+  findById: (id: string) => {
+    if (!id) {
       throw new AppError("A valid user id is required", 400);
     }
     return prisma.user.findUnique({ where: { id, deletedAt: null } });
@@ -14,18 +14,17 @@ export const userRepository = {
   findAll: () => prisma.user.findMany({ where: { deletedAt: null } }),
 
   update: (
-    id: number,
+    id: string,
     data: Omit<UpdateUserDto, "dateOfBirth"> & { dateOfBirth?: Date },
   ) => prisma.user.update({ where: { id }, data }),
 
-  changeRole: (id: number, role: UserRole) =>
+  changeRole: (id: string, role: UserRole) =>
     prisma.user.update({ where: { id }, data: { role } }),
 
-  // U2/U3/U4 — bascule isActive indépendamment de deletedAt
-  setActive: (id: number, isActive: boolean) =>
+  setActive: (id: string, isActive: boolean) =>
     prisma.user.update({ where: { id }, data: { isActive } }),
 
-  delete: (id: number) =>
+  delete: (id: string) =>
     prisma.user.update({
       where: { id },
       data: { deletedAt: new Date(), isActive: false },

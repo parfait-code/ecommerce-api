@@ -35,7 +35,7 @@ export const userController = {
 
   getUserById: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await userService.getProfile(Number(req.params.userId));
+      const result = await userService.getProfile(req.params.userId as string);
       respond(res, result);
     } catch (err) {
       next(err);
@@ -45,7 +45,7 @@ export const userController = {
   changeRole: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await userService.changeRole(
-        Number(req.params.userId),
+        req.params.userId as string,
         req.body,
       );
       respond(res, result);
@@ -67,7 +67,7 @@ export const userController = {
   deleteUser: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await userService.deleteUser(
-        Number(req.params.userId),
+        req.params.userId as string,
         req.user!.userId,
       );
       respond(res, result);
@@ -80,7 +80,7 @@ export const userController = {
   changeStatus: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await userService.changeStatus(
-        Number(req.params.userId),
+        req.params.userId as string,
         req.user!.userId,
         req.body.isActive,
       );

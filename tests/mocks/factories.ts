@@ -1,7 +1,7 @@
 import { UserRole, ProductStatus, OrderStatus } from "@prisma/client";
 
 export const makeUser = (overrides: Partial<any> = {}) => ({
-  id: 1,
+  id: "user_test_id",
   username: "johndoe",
   email: "john@example.com",
   password: "$2a$10$hashedpassword",

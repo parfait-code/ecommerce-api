@@ -13,8 +13,6 @@ enum SettingType {
   JSON
 }
 
-// ─── Enums ────────────────────────────────────────────────────────────────────
-
 enum UserRole {
   USER
   ADMIN
@@ -117,7 +115,7 @@ model Setting {
   category    String
   description String?
   isPublic    Boolean     @default(false)
-  updatedBy   Int?
+  updatedBy   String?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -127,7 +125,7 @@ model Setting {
 // ─── User ─────────────────────────────────────────────────────────────────────
 
 model User {
-  id          Int       @id @default(autoincrement())
+  id          String    @id @default(cuid())
   username    String    @unique
   email       String    @unique
   password    String
@@ -154,11 +152,9 @@ model User {
   loyaltyTransactions LoyaltyTransaction[]
 }
 
-// ─── UserProfile ──────────────────────────────────────────────────────────────
-
 model UserProfile {
   id              String   @id @default(cuid())
-  userId          Int      @unique
+  userId          String   @unique
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   avatarUrl       String?
   language        String   @default("fr")
@@ -190,8 +186,6 @@ model Category {
   updatedAt       DateTime   @updatedAt
 }
 
-// ─── AttributeDefinition ──────────────────────────────────────────────────────
-
 model AttributeDefinition {
   id           String        @id @default(cuid())
   categoryId   String
@@ -216,8 +210,6 @@ model AttributeDefinition {
   @@index([categoryId])
 }
 
-// ─── AttributeOption ──────────────────────────────────────────────────────────
-
 model AttributeOption {
   id                    String              @id @default(cuid())
   attributeDefinitionId String
@@ -236,7 +228,7 @@ model AttributeOption {
 // ─── Product ──────────────────────────────────────────────────────────────────
 
 model Product {
-  id              Int           @id @default(autoincrement())
+  id              String        @id @default(cuid())
   sku             String        @unique
   name            String
   description     String?
@@ -267,11 +259,9 @@ model Product {
   @@index([status])
 }
 
-// ─── ProductImage ─────────────────────────────────────────────────────────────
-
 model ProductImage {
   id        String         @id @default(cuid())
-  productId Int
+  productId String
   product   Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
   combinationId String?
   combination   ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
@@ -285,11 +275,9 @@ model ProductImage {
   @@index([combinationId])
 }
 
-// ─── ProductAttributeValue ────────────────────────────────────────────────────
-
 model ProductAttributeValue {
   id                    String              @id @default(cuid())
-  productId             Int
+  productId             String
   product               Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
   attributeDefinitionId String
   attributeDefinition   AttributeDefinition @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
@@ -300,11 +288,9 @@ model ProductAttributeValue {
   @@index([attributeDefinitionId, value])
 }
 
-// ─── ProductAttributeSelection ──────────────────────────────────────────────────────────────────────
-
 model ProductAttributeSelection {
   id                     String              @id @default(cuid())
-  productId              Int
+  productId              String
   product                Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
   attributeDefinitionId  String
   attributeDefinition    AttributeDefinition @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
@@ -318,9 +304,9 @@ model ProductAttributeSelection {
 
 model ProductCombination {
   id         String   @id @default(cuid())
-  productId  Int
+  productId  String
   product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  optionsKey String   // clé canonique triée des attributeOptionId — garantit l'unicité de la combinaison
+  optionsKey String
   sku        String?  @unique
   price      Float?
   isActive   Boolean  @default(true)
@@ -351,8 +337,6 @@ model ProductCombinationValue {
   @@index([combinationId])
 }
 
-// ─── Tag ──────────────────────────────────────────────────────────────────────
-
 model Tag {
   id       String       @id @default(cuid())
   name     String       @unique
@@ -361,7 +345,7 @@ model Tag {
 }
 
 model ProductTag {
-  productId Int
+  productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   tagId     String
   tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
@@ -369,8 +353,6 @@ model ProductTag {
   @@id([productId, tagId])
   @@index([tagId])
 }
-
-// ─── ShippingMethod ───────────────────────────────────────────────────────────
 
 model ShippingMethod {
   id            String   @id @default(cuid())
@@ -387,11 +369,9 @@ model ShippingMethod {
   orders Order[]
 }
 
-// ─── Basket ───────────────────────────────────────────────────────────────────
-
 model Basket {
   id        String       @id @default(cuid())
-  userId    Int          @unique
+  userId    String       @unique
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     BasketItem[]
   createdAt DateTime     @default(now())
@@ -402,7 +382,7 @@ model BasketItem {
   id        String          @id @default(cuid())
   basketId  String
   basket    Basket          @relation(fields: [basketId], references: [id], onDelete: Cascade)
-  productId Int
+  productId String
   product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   combinationId String?
   combination   ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
@@ -413,11 +393,9 @@ model BasketItem {
   @@index([combinationId])
 }
 
-// ─── Order ────────────────────────────────────────────────────────────────────
-
 model Order {
   id                      String          @id @default(cuid())
-  userId                  Int
+  userId                  String
   user                    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   status                  OrderStatus     @default(PENDING)
   shippingAddressId       String?
@@ -451,15 +429,13 @@ model Order {
   @@index([shippingMethodId])
 }
 
-// ─── OrderItem ────────────────────────────────────────────────────────────────
-
 model OrderItem {
   id                   String              @id @default(cuid())
   orderId              String
   order                Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId            Int?
+  productId            String?
   product              Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
-  productName          String?             // instantané — survit à la suppression réelle du produit
+  productName          String?
   productSku           String?
   combinationId        String?
   combination          ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
@@ -478,22 +454,18 @@ model OrderItem {
   @@index([combinationId])
 }
 
-// ─── OrderStatusHistory ───────────────────────────────────────────────────────
-
 model OrderStatusHistory {
   id         String       @id @default(cuid())
   orderId    String
   order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   fromStatus OrderStatus?
   toStatus   OrderStatus
-  changedBy  Int?
+  changedBy  String?
   reason     String?
   createdAt  DateTime     @default(now())
 
   @@index([orderId])
 }
-
-// ─── OrderItemReservation ──────────────────────────────────────────────────────────────────
 
 model OrderItemReservation {
   id          String    @id @default(cuid())
@@ -508,13 +480,11 @@ model OrderItemReservation {
   @@index([warehouseId])
 }
 
-// ─── Payment ──────────────────────────────────────────────────────────────────
-
 model Payment {
   id        String        @id @default(cuid())
   orderId   String
   order     Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  userId    Int
+  userId    String
   user      User          @relation(fields: [userId], references: [id])
   method    PaymentMethod
   status    PaymentStatus @default(PENDING)
@@ -528,15 +498,13 @@ model Payment {
   @@index([userId])
 }
 
-// ─── Review ───────────────────────────────────────────────────────────────────
-
 model Review {
   id          String    @id @default(cuid())
   orderItemId String
   orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  productId   Int
+  productId   String
   product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  userId      Int
+  userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   rating      Float
   comment     String?
@@ -547,8 +515,6 @@ model Review {
   @@index([productId])
   @@index([userId])
 }
-
-// ─── Warehouse ────────────────────────────────────────────────────────────────
 
 model Warehouse {
   id        String      @id @default(cuid())
@@ -564,11 +530,9 @@ model Warehouse {
   returnCollections ReturnRequest[]
 }
 
-// ─── Inventory ────────────────────────────────────────────────────────────────
-
 model Inventory {
   id          String          @id @default(cuid())
-  productId   Int
+  productId   String
   product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   combinationId String?
   combination   ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: Restrict)
@@ -583,8 +547,6 @@ model Inventory {
   @@index([combinationId])
   @@index([warehouseId])
 }
-
-// ─── Shipment ─────────────────────────────────────────────────────────────────
 
 model Shipment {
   id                    String         @id @default(cuid())
@@ -624,19 +586,15 @@ model ShippingLabel {
   createdAt  DateTime @default(now())
 }
 
-// ─── PickupRequest ────────────────────────────────────────────────────────────
-
 model PickupRequest {
   id              String                 @id @default(cuid())
-  userId          Int
+  userId          String
   user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   returnRequestId String                 @unique
   returnRequest   ReturnRequest          @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
   orderId         String
   order           Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  // Modifiable librement par l'admin ("contrôle total") — indépendant du
-  // choix initial du client conservé sur ReturnRequest.collectionMethod.
   method      PickupCollectionMethod @default(ORIGINAL_ADDRESS)
   addressId   String?
   address     Address?               @relation(fields: [addressId], references: [id], onDelete: SetNull)
@@ -657,11 +615,9 @@ model PickupRequest {
   @@index([deadline])
 }
 
-// ─── Address ──────────────────────────────────────────────────────────────────
-
 model Address {
   id            String   @id @default(cuid())
-  userId        Int
+  userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   recipientName String   @default("")
   phone         String?
@@ -683,11 +639,9 @@ model Address {
   @@index([userId])
 }
 
-// ─── Wishlist ─────────────────────────────────────────────────────────────────
-
 model Wishlist {
   id        String         @id @default(cuid())
-  userId    Int            @unique
+  userId    String         @unique
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     WishlistItem[]
   createdAt DateTime       @default(now())
@@ -698,7 +652,7 @@ model WishlistItem {
   id         String          @id @default(cuid())
   wishlistId String
   wishlist   Wishlist        @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  productId  Int
+  productId  String
   product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   combinationId  String?
   combination    ProductCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
@@ -710,20 +664,16 @@ model WishlistItem {
   @@index([combinationId])
 }
 
-// ─── ReturnRequest ────────────────────────────────────────────────────────────
-
 model ReturnRequest {
   id        String       @id @default(cuid())
   orderId   String
   order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  userId    Int
+  userId    String
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   status    ReturnStatus @default(PENDING)
   reason    String
   notes     String?
 
-  // Préférence exprimée par le client à la création — snapshot figé même
-  // si l'admin modifie ensuite le lieu réel sur la PickupRequest.
   collectionMethod      PickupCollectionMethod @default(ORIGINAL_ADDRESS)
   collectionAddressId   String?
   collectionAddress     Address?               @relation(fields: [collectionAddressId], references: [id], onDelete: SetNull)
@@ -753,11 +703,9 @@ model ReturnItem {
   @@index([orderItemId])
 }
 
-// ─── LoyaltyTransaction ───────────────────────────────────────────────────────
-
 model LoyaltyTransaction {
   id        String           @id @default(cuid())
-  userId    Int
+  userId    String
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   orderId   String?
   order     Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
@@ -768,8 +716,6 @@ model LoyaltyTransaction {
   @@index([userId])
   @@index([orderId])
 }
-
-// ─── Promotion ────────────────────────────────────────────────────────────────
 
 model Promotion {
   id          String          @id @default(cuid())
@@ -808,7 +754,7 @@ model DiscountProduct {
   id         String   @id @default(cuid())
   discountId String
   discount   Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
-  productId  Int
+  productId  String
   product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([discountId, productId])
@@ -840,7 +786,7 @@ model CouponUse {
   id        String     @id @default(cuid())
   couponId  String
   coupon    CouponCode @relation(fields: [couponId], references: [id], onDelete: Cascade)
-  userId    Int
+  userId    String
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   orderId   String
   createdAt DateTime   @default(now())

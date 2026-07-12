@@ -84,8 +84,6 @@ export const authService = {
         metadata: { username: dto.username, reason: "Wrong password" },
       });
 
-      // U3 — comptage des échecs consécutifs sur une fenêtre glissante.
-      // Seuil et fenêtre désormais pilotés par le module Settings.
       const [attemptLimit, windowSeconds] = await Promise.all([
         settingService.getNumber(SETTING_KEYS.SECURITY_LOGIN_ATTEMPT_LIMIT, 5),
         settingService.getNumber(
@@ -136,7 +134,6 @@ export const authService = {
       throw new AppError("Provided username and password did not match.", 400);
     }
 
-    // Login réussi — le compteur d'échecs est explicitement réinitialisé
     await redis.del(loginAttemptsKey(dto.username));
 
     const token = jwt.sign(

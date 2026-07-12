@@ -5,7 +5,7 @@ import { securityLogger } from "../logger";
 import { UserRole } from "@prisma/client";
 
 export interface JwtPayload {
-  userId: number;
+  userId: string;
   username: string;
   role: UserRole;
 }
