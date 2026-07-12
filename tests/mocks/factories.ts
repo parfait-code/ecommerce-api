@@ -41,7 +41,7 @@ export const makeProduct = (overrides: Partial<any> = {}) => ({
 
 export const makeOrder = (overrides: Partial<any> = {}) => ({
   id: "order_1",
-  userId: 1,
+  userId: "user_test_id",
   status: OrderStatus.PENDING,
   shippingAddressId: null,
   shippingAddressSnapshot: {
@@ -88,7 +88,7 @@ export const makeCoupon = (overrides: Partial<any> = {}) => ({
 
 export const makeProductImage = (overrides: Partial<any> = {}) => ({
   id: "img_1",
-  productId: 1,
+  productId: "product_test_id",
   variantId: null,
   url: "https://r2.example.com/products/img_1.jpg",
   altText: null,
@@ -110,13 +110,13 @@ export const makeWarehouse = (overrides: Partial<any> = {}) => ({
 
 export const makeInventoryItem = (overrides: Partial<any> = {}) => ({
   id: "inv_1",
-  productId: 1,
+  productId: "product_test_id",
   variantId: null,
   warehouseId: "wh_1",
   quantity: 50,
   createdAt: new Date(),
   updatedAt: new Date(),
-  product: { id: 1, name: "Test Product" },
+  product: { id: "product_test_id", name: "Test Product" },
   warehouse: { id: "wh_1", name: "Entrepôt Douala" },
   variant: null,
   ...overrides,
@@ -124,26 +124,31 @@ export const makeInventoryItem = (overrides: Partial<any> = {}) => ({
 export const makeReview = (overrides: Partial<any> = {}) => ({
   id: "review_1",
   orderItemId: "item_1",
-  productId: 1,
-  userId: 1,
+  productId: "product_test_id",
+  userId: "user_test_id",
   rating: 5,
   comment: "Très bon produit",
   createdAt: new Date(),
   updatedAt: new Date(),
-  user: { id: 1, username: "johndoe", firstName: "John", lastName: "Doe" },
+  user: {
+    id: "user_test_id",
+    username: "johndoe",
+    firstName: "John",
+    lastName: "Doe",
+  },
   ...overrides,
 });
 
 export const makeOrderItemForReview = (overrides: Partial<any> = {}) => ({
   id: "item_1",
-  productId: 1,
-  order: { userId: 1 },
+  productId: "product_test_id",
+  order: { userId: "user_test_id" },
   ...overrides,
 });
 
 export const makeLoyaltyTransaction = (overrides: Partial<any> = {}) => ({
   id: "lt_1",
-  userId: 1,
+  userId: "user_test_id",
   orderId: null,
   points: 100,
   type: "EARNED",
@@ -154,17 +159,17 @@ export const makeLoyaltyTransaction = (overrides: Partial<any> = {}) => ({
 export const makeBasketItem = (overrides: Partial<any> = {}) => ({
   id: "bi_1",
   basketId: "basket_1",
-  productId: 1,
+  productId: "product_test_id",
   variantId: null,
   quantity: 2,
-  product: { id: 1, name: "Test Product", price: 1000 },
+  product: { id: "product_test_id", name: "Test Product", price: 1000 },
   variant: null,
   ...overrides,
 });
 
 export const makeBasket = (overrides: Partial<any> = {}) => ({
   id: "basket_1",
-  userId: 1,
+  userId: "user_test_id",
   items: [],
   createdAt: new Date(),
   updatedAt: new Date(),

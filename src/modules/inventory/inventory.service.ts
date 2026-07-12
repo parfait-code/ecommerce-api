@@ -27,7 +27,7 @@ export const inventoryService = {
   },
 
   getProductLines: async (
-    productId: number,
+    productId: string,
     query: { page?: string; limit?: string },
   ) => {
     const product = await productRepository.findById(productId);

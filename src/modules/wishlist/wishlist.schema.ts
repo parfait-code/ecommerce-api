@@ -1,12 +1,12 @@
 import { z } from "zod";
 
 export const addWishlistItemSchema = z.object({
-  product_id: z.number().int().positive(),
+  product_id: z.string(),
   combination_id: z.string().optional(),
 });
 
 export const removeWishlistItemSchema = z.object({
-  product_id: z.number().int().positive(),
+  product_id: z.string(),
   combination_id: z.string().optional(),
 });
 

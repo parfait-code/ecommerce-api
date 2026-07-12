@@ -1,20 +1,20 @@
-import { wishlistRepository } from "./wishlist.repository";
 import { productRepository } from "../products/product.repository";
+import { wishlistRepository } from "../wishlist/wishlist.repository";
 import { combinationRepository } from "../combinations/combination.repository";
 import { AddWishlistItemDto, RemoveWishlistItemDto } from "./wishlist.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
 
-const getOrCreate = async (userId: number) => {
+const getOrCreate = async (userId: string) => {
   const existing = await wishlistRepository.findByUserId(userId);
   if (existing) return existing;
   return wishlistRepository.create(userId);
 };
 
 export const wishlistService = {
-  getByUser: (userId: number) => getOrCreate(userId),
+  getByUser: (userId: string) => getOrCreate(userId),
 
-  addItem: async (userId: number, dto: AddWishlistItemDto) => {
+  addItem: async (userId: string, dto: AddWishlistItemDto) => {
     const product = await productRepository.findById(dto.product_id);
     if (!product) throw new AppError("Product not found", 404);
 
@@ -43,7 +43,7 @@ export const wishlistService = {
     return wishlistRepository.findByUserId(userId);
   },
 
-  removeItem: async (userId: number, dto: RemoveWishlistItemDto) => {
+  removeItem: async (userId: string, dto: RemoveWishlistItemDto) => {
     const wishlist = await getOrCreate(userId);
 
     const item = wishlist.items.find(

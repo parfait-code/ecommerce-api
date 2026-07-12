@@ -23,13 +23,13 @@ const basketInclude = {
 };
 
 export const basketRepository = {
-  create: (userId: number) =>
+  create: (userId: string) =>
     prisma.basket.create({ data: { userId }, include: basketInclude }),
 
   findById: (id: string) =>
     prisma.basket.findUnique({ where: { id }, include: basketInclude }),
 
-  findByUserId: (userId: number) =>
+  findByUserId: (userId: string) =>
     prisma.basket.findUnique({ where: { userId }, include: basketInclude }),
 
   clearItems: (basketId: string) =>
@@ -37,7 +37,7 @@ export const basketRepository = {
 
   addItem: async (
     basketId: string,
-    productId: number,
+    productId: string,
     quantity: number,
     combinationId?: string,
   ) => {
@@ -60,7 +60,7 @@ export const basketRepository = {
 
   updateQuantity: (
     basketId: string,
-    productId: number,
+    productId: string,
     quantity: number,
     combinationId?: string,
   ) => {
@@ -71,7 +71,7 @@ export const basketRepository = {
     });
   },
 
-  removeItem: (basketId: string, productId: number, combinationId?: string) => {
+  removeItem: (basketId: string, productId: string, combinationId?: string) => {
     const cId = combinationId ?? null;
     return prisma.basketItem.deleteMany({
       where: { basketId, productId, combinationId: cId },

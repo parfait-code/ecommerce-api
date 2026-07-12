@@ -60,7 +60,7 @@ export const inventoryRepository = {
     prisma.inventory.findUnique({ where: { id }, include: inventoryInclude }),
 
   findByProductAndWarehouse: (
-    productId: number,
+    productId: string,
     warehouseId: string,
     combinationId?: string,
   ) => {
@@ -82,13 +82,13 @@ export const inventoryRepository = {
     });
   },
 
-  findAvailableOrdered: (productId: number, combinationId: string | null) =>
+  findAvailableOrdered: (productId: string, combinationId: string | null) =>
     prisma.inventory.findMany({
       where: { productId, combinationId, quantity: { gt: 0 } },
       orderBy: { createdAt: "asc" },
     }),
 
-  sumAvailable: async (productId: number, combinationId: string | null) => {
+  sumAvailable: async (productId: string, combinationId: string | null) => {
     const result = await prisma.inventory.aggregate({
       where: { productId, combinationId },
       _sum: { quantity: true },
@@ -148,13 +148,6 @@ export const inventoryRepository = {
 
   delete: (id: string) => prisma.inventory.delete({ where: { id } }),
 
-  /**
-   * S1 — décrément utilisé par inventoryService.transfer() ET par la
-   * réservation FIFO d'order.service.ts. C'est le SEUL point de passage
-   * commun aux deux chemins qui, avant cet event bus, ne déclenchaient
-   * jamais d'alerte LOW_STOCK/OUT_OF_STOCK. On émet ici plutôt que dans
-   * chaque appelant pour ne pas avoir à dupliquer la logique.
-   */
   decrementQuantity: async (id: string, quantity: number) => {
     const updated = await prisma.inventory.update({
       where: { id },
@@ -172,11 +165,6 @@ export const inventoryRepository = {
     return updated;
   },
 
-  /**
-   * Même logique que decrementQuantity — utilisé par le transfert (côté
-   * destination) et par la restitution de stock (annulation de commande,
-   * retour complété via return.listeners.ts).
-   */
   incrementQuantity: async (id: string, quantity: number) => {
     const updated = await prisma.inventory.update({
       where: { id },
@@ -194,11 +182,8 @@ export const inventoryRepository = {
     return updated;
   },
 
-  deleteByProduct: (productId: number) =>
+  deleteByProduct: (productId: string) =>
     prisma.inventory.deleteMany({ where: { productId } }),
-
-  // Dupliqué volontairement — même seuil que dans inventory.service.ts et
-  // inventory.listeners.ts (pattern déjà établi dans ce module).
 
   findGroupedByProduct: async (query: {
     category?: string;
@@ -226,10 +211,6 @@ export const inventoryRepository = {
       ...(query.warehouse_id && { warehouseId: query.warehouse_id }),
     };
 
-    // Filtres indépendants — chacun sélectionne un ensemble de PRODUITS distinct.
-    // out_of_stock : lignes à quantité 0.
-    // low_stock : lignes en dessous du seuil MAIS pas encore à 0 (catégorie
-    // distincte de out_of_stock, pas un sur-ensemble).
     const selectionWhere =
       query.out_of_stock === "true"
         ? { ...scopeWhere, quantity: 0 }
@@ -301,10 +282,8 @@ export const inventoryRepository = {
     return { items, total };
   },
 
-  // Drill-down — toutes les lignes d'UN produit (combinaisons × entrepôts),
-  // paginé, SANS filtre additionnel. Pour filtrer, revenir à la liste groupée.
   findLinesByProduct: (
-    productId: number,
+    productId: string,
     query: { page?: string; limit?: string },
   ) => {
     const { skip, take } = paginate(query);

@@ -10,7 +10,7 @@ const reviewInclude = {
 
 export const reviewRepository = {
   findByProduct: (
-    productId: number,
+    productId: string,
     query: { page?: string; limit?: string },
   ) => {
     const { skip, take } = paginate(query);
@@ -27,9 +27,7 @@ export const reviewRepository = {
     ]);
   },
 
-  // Utilisé pour le calcul de la moyenne — doit porter sur TOUS les avis,
-  // pas seulement la page courante, sinon average_rating varie selon la page.
-  findAllRatingsByProduct: (productId: number) =>
+  findAllRatingsByProduct: (productId: string) =>
     prisma.review.findMany({
       where: { productId },
       select: { rating: true },
@@ -38,7 +36,7 @@ export const reviewRepository = {
   findById: (id: string) =>
     prisma.review.findUnique({ where: { id }, include: reviewInclude }),
 
-  findByOrderItemAndUser: (orderItemId: string, userId: number) =>
+  findByOrderItemAndUser: (orderItemId: string, userId: string) =>
     prisma.review.findUnique({
       where: { orderItemId_userId: { orderItemId, userId } },
     }),
@@ -53,7 +51,7 @@ export const reviewRepository = {
       },
     }),
 
-  create: (userId: number, dto: CreateReviewDto) =>
+  create: (userId: string, dto: CreateReviewDto) =>
     prisma.review.create({
       data: {
         userId,

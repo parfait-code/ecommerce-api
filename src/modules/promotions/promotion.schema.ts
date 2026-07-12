@@ -1,9 +1,5 @@
 import { z } from "zod";
 
-// ============================================
-// SCHÉMAS POUR LES PROMOTIONS
-// ============================================
-
 export const createPromotionSchema = z
   .object({
     name: z.string().min(2).max(200),
@@ -40,11 +36,9 @@ export const updatePromotionSchema = z
   })
   .refine(
     (data) => {
-      // Si les deux dates sont fournies, vérifier que endDate > startDate
       if (data.startDate && data.endDate) {
         return new Date(data.endDate) > new Date(data.startDate);
       }
-      // Si une seule date est fournie ou aucune, pas de validation nécessaire
       return true;
     },
     {
@@ -57,15 +51,13 @@ export const updatePromotionSchema = z
 // SCHÉMAS POUR LES REMISES (DISCOUNTS)
 // ============================================
 
-// Schéma de base pour les remises (sans validation de ciblage)
 const discountBaseSchema = z.object({
   type: z.enum(["PERCENTAGE", "FIXED_AMOUNT"]),
   value: z.number().positive(),
   categoryId: z.string().optional(),
-  productIds: z.array(z.number().int().positive()).optional(),
+  productIds: z.array(z.string()).optional(),
 });
 
-// Schéma de création - avec validation stricte
 export const createDiscountSchema = discountBaseSchema.refine(
   (data) => data.categoryId || (data.productIds && data.productIds.length > 0),
   {
@@ -74,22 +66,18 @@ export const createDiscountSchema = discountBaseSchema.refine(
   },
 );
 
-// Schéma de mise à jour - tous les champs sont optionnels
 export const updateDiscountSchema = z
   .object({
     type: z.enum(["PERCENTAGE", "FIXED_AMOUNT"]).optional(),
     value: z.number().positive().optional(),
     categoryId: z.string().optional(),
-    productIds: z.array(z.number().int().positive()).optional(),
+    productIds: z.array(z.string()).optional(),
   })
   .refine(
     (data) => {
-      // Cas 1: Aucune modification du ciblage → valide
       if (data.categoryId === undefined && data.productIds === undefined) {
         return true;
       }
-
-      // Cas 2: Modification du ciblage → au moins un champ doit être renseigné
       return data.categoryId || (data.productIds && data.productIds.length > 0);
     },
     {
@@ -113,7 +101,6 @@ export const createCouponSchema = z
   })
   .refine(
     (data) => {
-      // Si les deux dates sont fournies, vérifier que endDate > startDate
       if (data.startDate && data.endDate) {
         return new Date(data.endDate) > new Date(data.startDate);
       }
@@ -136,7 +123,6 @@ export const updateCouponSchema = z
   })
   .refine(
     (data) => {
-      // Si les deux dates sont fournies, vérifier que endDate > startDate
       if (data.startDate && data.endDate) {
         return new Date(data.endDate) > new Date(data.startDate);
       }

@@ -240,7 +240,7 @@ export const promotionRepository = {
 
     if (data.productIds && data.productIds.length > 0) {
       await prisma.discountProduct.createMany({
-        data: data.productIds.map((productId) => ({
+        data: data.productIds.map((productId: string) => ({
           discountId: discount.id,
           productId,
         })),
@@ -347,7 +347,7 @@ export const promotionRepository = {
       data: { usedCount: { increment: 1 } },
     }),
 
-  createCouponUse: (couponId: string, userId: number, orderId: string) =>
+  createCouponUse: (couponId: string, userId: string, orderId: string) =>
     prisma.couponUse.create({
       data: { couponId, userId, orderId },
     }),

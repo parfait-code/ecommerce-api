@@ -35,7 +35,7 @@ export const loyaltyService = {
 
   // Usage interne (event listeners order.service / return.listeners) — pas de contrôle d'accès ici
   earnFromOrder: async (
-    userId: number,
+    userId: string,
     orderId: string,
     totalAmount: number,
   ) => {

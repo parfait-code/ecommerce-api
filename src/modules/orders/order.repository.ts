@@ -57,7 +57,7 @@ export const orderRepository = {
       page?: string;
       limit?: string;
     },
-    userId?: number,
+    userId?: string,
   ) => {
     const { skip, take } = paginate(query);
     const where = {
@@ -86,11 +86,11 @@ export const orderRepository = {
     prisma.order.findUnique({ where: { id }, include: orderInclude }),
 
   create: (
-    userId: number,
+    userId: string,
     data: CreateOrderDto,
     totalAmount: number,
     items: {
-      productId: number;
+      productId: string;
       productName: string;
       productSku: string;
       combinationId?: string | null;
@@ -140,7 +140,7 @@ export const orderRepository = {
       include: orderInclude,
     }),
 
-  findByUser: (userId: number, query: { page?: string; limit?: string }) => {
+  findByUser: (userId: string, query: { page?: string; limit?: string }) => {
     const { skip, take } = paginate(query);
     return Promise.all([
       prisma.order.findMany({
@@ -154,9 +154,6 @@ export const orderRepository = {
     ]);
   },
 
-  // Utilisé par la tâche cron d'expiration des commandes abandonnées —
-  // sélection minimale (juste l'id), le traitement complet passe par
-  // orderService.updateStatus() qui gère déjà transition + libération stock.
   findStalePending: (olderThan: Date) =>
     prisma.order.findMany({
       where: { status: OrderStatus.PENDING, createdAt: { lt: olderThan } },
@@ -190,7 +187,7 @@ export const orderRepository = {
   updateStatus: (
     id: string,
     status: OrderStatus,
-    changedBy: number | null,
+    changedBy: string | null,
     reason?: string,
   ) =>
     prisma.$transaction(async (tx) => {

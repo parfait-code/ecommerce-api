@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createInventorySchema = z.object({
-  product_id: z.number().int().positive(),
+  product_id: z.string(),
   warehouse_id: z.string(),
   combination_id: z.string().optional(),
   quantity: z.number().int().min(0).default(0),

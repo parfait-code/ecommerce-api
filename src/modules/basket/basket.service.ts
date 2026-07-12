@@ -12,7 +12,7 @@ import { businessLogger } from "../../shared/logger";
 
 const findOwnedBasket = async (
   basketId: string,
-  userId: number,
+  userId: string,
   isAdmin: boolean,
 ) => {
   const basket = await basketRepository.findById(basketId);
@@ -23,20 +23,20 @@ const findOwnedBasket = async (
 };
 
 export const basketService = {
-  getOrCreateForUser: async (userId: number) => {
+  getOrCreateForUser: async (userId: string) => {
     const existing = await basketRepository.findByUserId(userId);
     if (existing) return existing;
     return basketRepository.create(userId);
   },
 
-  create: (userId: number) => basketService.getOrCreateForUser(userId),
+  create: (userId: string) => basketService.getOrCreateForUser(userId),
 
-  getById: async (basketId: string, userId: number, isAdmin: boolean) =>
+  getById: async (basketId: string, userId: string, isAdmin: boolean) =>
     findOwnedBasket(basketId, userId, isAdmin),
 
   addProduct: async (
     basketId: string,
-    userId: number,
+    userId: string,
     isAdmin: boolean,
     dto: AddProductDto,
   ) => {
@@ -93,7 +93,7 @@ export const basketService = {
 
   updateQuantity: async (
     basketId: string,
-    userId: number,
+    userId: string,
     isAdmin: boolean,
     dto: UpdateQuantityDto,
   ) => {
@@ -127,7 +127,7 @@ export const basketService = {
 
   removeProduct: async (
     basketId: string,
-    userId: number,
+    userId: string,
     isAdmin: boolean,
     dto: RemoveProductDto,
   ) => {

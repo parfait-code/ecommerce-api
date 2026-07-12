@@ -1,3 +1,4 @@
+import { PromotionStatus } from "@prisma/client";
 import { promotionRepository } from "./promotion.repository";
 import { categoryRepository } from "../categories/category.repository";
 import { productRepository } from "../products/product.repository";
@@ -24,7 +25,7 @@ import {
 const withDisplayStatus = <
   T extends {
     isActive: boolean;
-    status: any;
+    status: PromotionStatus;
     startDate: Date;
     endDate: Date;
   },
@@ -42,10 +43,6 @@ export const promotionService = {
     page?: string;
     limit?: string;
   }) => {
-    // Le statut affiché est calculé (dates + isActive), pas filtrable/paginable
-    // en SQL. On charge l'ensemble correspondant à isActive, on filtre par
-    // statut calculé en mémoire si demandé, PUIS on pagine en mémoire — pour
-    // garder un total et des pages cohérents avec le filtre appliqué.
     const promotions = await promotionRepository.findAll({
       isActive: query.isActive,
     });
@@ -157,10 +154,6 @@ export const promotionService = {
 
     return withStatus;
   },
-
-  // ── Produits affectés par une promotion ─────────────────────────────────
-  // Accepte soit un id, soit un slug (utilisé par les deux routes équivalentes,
-  // admin et publique — voir promotion.router.ts).
 
   create: async (dto: CreatePromotionDto) => {
     const existingSlug = await promotionRepository.existsBySlug(dto.slug);
@@ -279,7 +272,6 @@ export const promotionService = {
     return promotionRepository.removeImage(id, remaining);
   },
 
-  // ── Discounts / Coupons : inchangés (voir fichier original) ──
   createDiscount: async (promotionId: string, dto: CreateDiscountDto) => {
     const promotion = await promotionRepository.findById(promotionId);
     if (!promotion) throw new AppError("Promotion not found", 404);
@@ -372,7 +364,7 @@ export const promotionService = {
     return { message: "Coupon deleted successfully" };
   },
 
-  validateCoupon: async (dto: ValidateCouponDto, userId: number) => {
+  validateCoupon: async (dto: ValidateCouponDto, userId: string) => {
     const coupon = await promotionRepository.findCouponByCode(dto.code);
     if (!coupon) throw new AppError("Invalid coupon code", 404);
     if (!coupon.isActive) throw new AppError("This coupon is not active", 400);
@@ -400,7 +392,6 @@ export const promotionService = {
         400,
       );
 
-    // ── Preview optionnel : calcule le total réel si items fourni ──
     let preview:
       | {
           totalAmount: number;
@@ -414,7 +405,7 @@ export const promotionService = {
       let totalAmount = 0;
 
       for (const item of dto.items) {
-        const product = await productRepository.findById(Number(item.id));
+        const product = await productRepository.findById(item.id);
         if (!product) continue;
         const pricing = getBestPricing(product, activeDiscounts as any);
         totalAmount += pricing.finalPrice * item.quantity;

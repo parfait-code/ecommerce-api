@@ -6,7 +6,7 @@ import { businessLogger } from "../../shared/logger";
 
 export const reviewService = {
   getByProduct: async (
-    productId: number,
+    productId: string,
     query: { page?: string; limit?: string },
   ) => {
     const product = await productRepository.findById(productId);
@@ -44,7 +44,7 @@ export const reviewService = {
     return review;
   },
 
-  create: async (userId: number, dto: CreateReviewDto) => {
+  create: async (userId: string, dto: CreateReviewDto) => {
     const product = await productRepository.findById(dto.product_id);
     if (!product) throw new AppError("Product not found", 404);
 
@@ -82,11 +82,9 @@ export const reviewService = {
     return review;
   },
 
-  // Bypass admin — même pattern que orders/returns/baskets/shipments :
-  // le propriétaire OU un admin peut agir, sinon 403.
   update: async (
     id: string,
-    userId: number,
+    userId: string,
     isAdmin: boolean,
     dto: UpdateReviewDto,
   ) => {
@@ -107,7 +105,7 @@ export const reviewService = {
     return updated;
   },
 
-  delete: async (id: string, userId: number, isAdmin: boolean) => {
+  delete: async (id: string, userId: string, isAdmin: boolean) => {
     const review = await reviewRepository.findById(id);
     if (!review) throw new AppError("Review not found", 404);
     if (!isAdmin && review.userId !== userId)

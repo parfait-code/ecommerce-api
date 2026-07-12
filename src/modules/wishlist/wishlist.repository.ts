@@ -17,15 +17,15 @@ const wishlistInclude = {
 };
 
 export const wishlistRepository = {
-  findByUserId: (userId: number) =>
+  findByUserId: (userId: string) =>
     prisma.wishlist.findUnique({ where: { userId }, include: wishlistInclude }),
 
-  create: (userId: number) =>
+  create: (userId: string) =>
     prisma.wishlist.create({ data: { userId }, include: wishlistInclude }),
 
   addItem: async (
     wishlistId: string,
-    productId: number,
+    productId: string,
     combinationId?: string,
   ) => {
     const cId = combinationId ?? null;
@@ -39,7 +39,7 @@ export const wishlistRepository = {
     });
   },
 
-  removeItem: (wishlistId: string, productId: number, combinationId?: string) =>
+  removeItem: (wishlistId: string, productId: string, combinationId?: string) =>
     prisma.wishlistItem.deleteMany({
       where: { wishlistId, productId, combinationId: combinationId ?? null },
     }),

@@ -6,7 +6,7 @@ export const reviewController = {
   getByProduct: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await reviewService.getByProduct(
-        Number(req.params.pid),
+        req.params.pid as string,
         req.query as { page?: string; limit?: string },
       );
       respond(res, result);

@@ -15,7 +15,7 @@ interface DiscountWithRelations {
   categoryId: string | null;
   applicableCategoryIds: string[];
   promotion: PromotionInfo;
-  products: { productId: number }[];
+  products: { productId: string }[];
 }
 
 export interface PricingInfo {
@@ -54,7 +54,7 @@ const computePrice = (
  * Ne cumule pas les remises entre elles.
  */
 export const getBestPricing = (
-  product: { id: number; price: number; categoryId: string },
+  product: { id: string; price: number; categoryId: string },
   activeDiscounts: DiscountWithRelations[],
 ): PricingInfo => {
   const applicable = activeDiscounts.filter((d) => {
@@ -106,13 +106,6 @@ export const getBestPricing = (
   };
 };
 
-/**
- * T1/T2 — status affiché, recalculé à chaque lecture à partir des dates.
- * Ne touche JAMAIS la base : le champ `status` stocké redevient informatif
- * (ex: CANCELLED posé manuellement reste respecté), mais SCHEDULED/ACTIVE/
- * EXPIRED sont toujours dérivés de la réalité (isActive + dates), jamais
- * figés au moment de la création.
- */
 export const computeDisplayStatus = (promotion: {
   isActive: boolean;
   status: PromotionStatus;
@@ -120,7 +113,7 @@ export const computeDisplayStatus = (promotion: {
   endDate: Date;
 }): PromotionStatus => {
   if (promotion.status === "CANCELLED") return "CANCELLED";
-  if (!promotion.isActive) return promotion.status; // toggle manuel, indépendant des dates
+  if (!promotion.isActive) return promotion.status;
 
   const now = new Date();
   if (now < promotion.startDate) return "SCHEDULED";
@@ -128,10 +121,6 @@ export const computeDisplayStatus = (promotion: {
   return "ACTIVE";
 };
 
-/**
- * T3 — statut effectif d'un coupon, recalculé à la lecture (isActive stocké
- * reste l'intention admin ; ce champ reflète la réalité opérationnelle).
- */
 export const computeCouponEffectiveStatus = (coupon: {
   isActive: boolean;
   usedCount: number;

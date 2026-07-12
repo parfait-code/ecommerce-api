@@ -159,6 +159,8 @@ export type CouponEvent =
 
 export type WishlistEvent = "WISHLIST_ITEM_ADDED" | "WISHLIST_ITEM_REMOVED";
 
+export type BasketEvent = "ITEM_ADDED" | "ITEM_REMOVED";
+
 export type PickupEvent =
   | "PICKUP_REQUEST_CREATED"
   | "PICKUP_LOCATION_UPDATED"
@@ -181,6 +183,7 @@ export type BusinessEvent =
   | DiscountEvent
   | CouponEvent
   | WishlistEvent
+  | BasketEvent
   | PickupEvent;
 
 // ─── Audit Events (section 14) ────────────────────────────────────────────────

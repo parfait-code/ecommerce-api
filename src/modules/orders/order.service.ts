@@ -37,7 +37,7 @@ const CACHE_KEYS = {
 
 const resolveCoupon = async (
   code: string,
-  userId: number,
+  userId: string,
   orderTotal: number,
 ) => {
   const coupon = await promotionRepository.findCouponByCode(code);
@@ -107,12 +107,12 @@ export const orderService = {
       page?: string;
       limit?: string;
     },
-    userId: number,
+    userId: string,
     isAdmin: boolean,
   ) => {
     const cacheKey = CACHE_KEYS.all({
       ...query,
-      scope: isAdmin ? "all" : String(userId),
+      scope: isAdmin ? "all" : userId,
     } as Record<string, string>);
     const cached = await cache.get(cacheKey);
     if (cached) return cached;
@@ -135,9 +135,9 @@ export const orderService = {
     return result;
   },
 
-  getById: async (id: string, userId: number, isAdmin: boolean) => {
+  getById: async (id: string, userId: string, isAdmin: boolean) => {
     const cacheKey = CACHE_KEYS.single(id);
-    const cached = await cache.get<{ userId: number }>(cacheKey);
+    const cached = await cache.get<{ userId: string }>(cacheKey);
     if (cached) {
       if (!isAdmin && cached.userId !== userId)
         throw new AppError("Forbidden", 403);
@@ -153,11 +153,7 @@ export const orderService = {
     return order;
   },
 
-  create: async (userId: number, dto: CreateOrderDto) => {
-    // Nouveau — normalisation pays, même source de vérité que le module
-    // address (shared/constants/countries.ts). Avant ça, un snapshot de
-    // commande pouvait contenir n'importe quelle string en `country`,
-    // y compris des valeurs non reconnues (cf. audit).
+  create: async (userId: string, dto: CreateOrderDto) => {
     const normalizedShippingCountry = normalizeCountry(
       dto.shippingAddress.country,
     );
@@ -192,10 +188,6 @@ export const orderService = {
       }),
     };
 
-    // Corrigé — le calculateur (/shipments/cost) vérifiait déjà isActive,
-    // mais rien n'empêchait de construire directement la requête de commande
-    // avec un shippingMethodId désactivé. Contrôle déplacé ici, avant toute
-    // écriture, pour couvrir le chemin réel de création de commande.
     if (dto.shippingMethodId) {
       const shippingMethod = await shippingMethodRepository.findById(
         dto.shippingMethodId,
@@ -204,7 +196,6 @@ export const orderService = {
       if (!shippingMethod.isActive)
         throw new AppError("This shipping method is not available", 400);
 
-      // Nouveau — rapprochement Address.country ↔ ShippingMethod.zones.
       if (!shippingMethod.zones.includes(normalizedShippingCountry))
         throw new AppError(
           `Shipping method "${shippingMethod.name}" does not deliver to ${normalizedShippingCountry}`,
@@ -229,7 +220,7 @@ export const orderService = {
       if (basket.items.length === 0) throw new AppError("Basket is empty", 400);
 
       sourceItems = basket.items.map((i) => ({
-        id: String(i.productId),
+        id: i.productId,
         combinationId: i.combinationId ?? undefined,
         quantity: i.quantity,
       }));
@@ -237,7 +228,7 @@ export const orderService = {
     }
 
     const orderItems: {
-      productId: number;
+      productId: string;
       productName: string;
       productSku: string;
       combinationId?: string | null;
@@ -252,7 +243,7 @@ export const orderService = {
     let totalOriginalAmount = 0;
 
     for (const item of sourceItems) {
-      const product = await productRepository.findById(Number(item.id));
+      const product = await productRepository.findById(item.id);
       if (!product) throw new AppError(`Product ${item.id} not found`, 404);
 
       if (!item.combinationId && product.combinations.length > 0)
@@ -415,7 +406,7 @@ export const orderService = {
   update: async (
     id: string,
     dto: UpdateOrderDto,
-    userId: number,
+    userId: string,
     isAdmin: boolean,
   ) => {
     const order = await orderRepository.findById(id);
@@ -423,7 +414,6 @@ export const orderService = {
     if (!isAdmin && order.userId !== userId)
       throw new AppError("Forbidden", 403);
 
-    // Nouveau — même normalisation qu'à la création, si l'adresse change.
     if (dto.shippingAddress) {
       const normalized = normalizeCountry(dto.shippingAddress.country);
       if (!normalized)
@@ -450,8 +440,6 @@ export const orderService = {
       };
     }
 
-    // Nouveau — si la méthode de livraison change (ou si l'adresse change
-    // pour une méthode déjà choisie), on revérifie la couverture de zone.
     if (dto.shippingMethodId) {
       const shippingMethod = await shippingMethodRepository.findById(
         dto.shippingMethodId,
@@ -482,7 +470,7 @@ export const orderService = {
   },
 
   getByUser: async (
-    userId: number,
+    userId: string,
     query: { page?: string; limit?: string },
   ) => {
     const [items, total] = await orderRepository.findByUser(userId, query);
@@ -491,10 +479,6 @@ export const orderService = {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
-  // Nouveau — miroir de pickupRequestService.expireOverdue(). Une commande
-  // PENDING jamais payée bloque du stock réservé indéfiniment. Réutilise
-  // updateStatus() telle quelle : state machine, libération de stock via
-  // releaseReservedStock, logs, event bus — rien de dupliqué.
   expireStalePending: async (hoursThreshold?: number): Promise<number> => {
     const effectiveHours =
       hoursThreshold ??
@@ -534,7 +518,7 @@ export const orderService = {
   updateStatus: async (
     id: string,
     dto: UpdateOrderStatusDto,
-    changedBy: number | null,
+    changedBy: string | null,
     actorRole: ActorRole = "ADMIN",
   ) => {
     const order = await orderRepository.findById(id);
@@ -592,7 +576,7 @@ export const orderService = {
     return updated;
   },
 
-  delete: async (id: string, userId: number, isAdmin: boolean) => {
+  delete: async (id: string, userId: string, isAdmin: boolean) => {
     const order = await orderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
     if (!isAdmin && order.userId !== userId)

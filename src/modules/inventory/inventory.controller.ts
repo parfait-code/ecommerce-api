@@ -53,7 +53,7 @@ export const inventoryController = {
   getProductLines: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await inventoryService.getProductLines(
-        Number(req.params.productId),
+        req.params.productId as string,
         req.query as { page?: string; limit?: string },
       );
       respond(res, result);

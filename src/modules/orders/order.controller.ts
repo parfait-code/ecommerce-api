@@ -34,7 +34,7 @@ export const orderController = {
   getByUser: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await orderService.getByUser(
-        Number(req.params.userId),
+        req.params.userId as string,
         req.query as Record<string, string>,
       );
       respond(res, result);
