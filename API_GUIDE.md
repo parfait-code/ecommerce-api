@@ -85,13 +85,13 @@ Toutes les dates sont des chaînes ISO 8601 (`Date.toISOString()`), sauf mention
 
 Trois ressources gèrent l'upload de fichiers, avec le **même pattern** : l'API reçoit le fichier en `multipart/form-data`, l'uploade elle-même vers Cloudflare R2, et renvoie l'URL publique générée. Le frontend n'a **jamais** à connaître ou saisir une URL manuellement pour ces flux :
 
-| Ressource   | Route                                | Champ(s)          | Cardinalité       |
-| ----------- | ------------------------------------- | ----------------- | ------------------ |
-| Produit     | `POST /product/:productId/images`     | `images`          | 1 à 5 fichiers     |
-| Promotion   | `POST /promotions/:promotionId/images` | `images`          | 1 à 5 fichiers     |
-| Catégorie   | `POST /categories/:categoryId/assets`  | `image`, `icon`   | 1 fichier chacun, indépendants (l'un, l'autre, ou les deux) |
+| Ressource | Route                                  | Champ(s)        | Cardinalité                                                 |
+| --------- | -------------------------------------- | --------------- | ----------------------------------------------------------- |
+| Produit   | `POST /product/:productId/images`      | `images`        | 1 à 5 fichiers                                              |
+| Promotion | `POST /promotions/:promotionId/images` | `images`        | 1 à 5 fichiers                                              |
+| Catégorie | `POST /categories/:categoryId/assets`  | `image`, `icon` | 1 fichier chacun, indépendants (l'un, l'autre, ou les deux) |
 
-Contraintes communes : `image/jpeg`, `image/png`, `image/webp`, `image/gif` uniquement, 5MB max par fichier (validé côté middleware `multer`, avant l'upload R2).
+Contraintes communes : types MIME et taille max définis dynamiquement par les settings `uploads.allowed_mime_types` / `uploads.max_file_size_mb` (récupérables via `GET /settings/public`), validés côté middleware `multer` avant l'upload R2.
 
 **Recommandation d'implémentation** : créer d'abord la ressource (champs texte uniquement), récupérer son `id`, puis appeler la route d'upload dédiée avec un `FormData` contenant le(s) fichier(s) sélectionné(s) localement.
 
@@ -137,7 +137,7 @@ interface PublicUser {
 
 `POST /signup`, `POST /login` → `AuthResponse`.
 
-**Point d'attention front** : `POST /login` peut renvoyer `403` si le compte est désactivé — **soit manuellement par un admin, soit automatiquement après 5 échecs de mot de passe en 15 min**. Le message est identique dans les deux cas (`"This account has been deactivated."`) : ne pas tenter de distinguer ces deux cas côté UI, afficher un message générique invitant à contacter le support.
+**Point d'attention front** : `POST /login` peut renvoyer `403` si le compte est désactivé — **soit manuellement par un admin, soit automatiquement après 5 échecs de mot de passe en 15 min** (seuils configurables via `security.login_attempt_limit` / `security.login_attempt_window_seconds`). Le message est identique dans les deux cas (`"This account has been deactivated."`) : ne pas tenter de distinguer ces deux cas côté UI.
 
 ---
 
@@ -187,7 +187,7 @@ interface ChangeStatusRequest {
 
 - Sur l'écran de gestion des utilisateurs, **désactiver le bouton "Supprimer" pour le compte de l'admin actuellement connecté** — l'API renvoie `400` sinon (`"You cannot delete your own account"`).
 - Un bouton "Suspendre" / "Réactiver" (toggle sur `isActive`) doit appeler `PATCH /user/:userId/status`, distinct du bouton "Supprimer" (`DELETE`, qui pose aussi `deletedAt` — irréversible via l'API).
-- Un compte listé dans `GET /user/all` avec `isActive: false` peut soit être suspendu manuellement, soit avoir été verrouillé automatiquement (brute-force) — l'API ne distingue pas les deux dans la donnée elle-même ; envisager un log d'audit séparé si cette distinction est nécessaire côté UI.
+- Un compte listé dans `GET /user/all` avec `isActive: false` peut soit être suspendu manuellement, soit avoir été verrouillé automatiquement (brute-force) — l'API ne distingue pas les deux dans la donnée elle-même.
 
 ---
 
@@ -255,9 +255,11 @@ type UpdateProductRequest = Partial<Omit<CreateProductRequest, "categoryId">>;
 | Détail                    | `GET /product/:productId` → `Product`                                           |
 | Création                  | `POST /product` `CreateProductRequest` → `Product` (201, `status:DRAFT`)        |
 | Mise à jour               | `PATCH /product/:productId` `UpdateProductRequest` → `Product`                  |
-| Suppression (soft delete) | `DELETE /product/:productId` → `{ numberOfProductsDeleted: 1 }`                 |
+| Suppression (hard delete) | `DELETE /product/:productId` → `{ message: "Product deleted successfully" }`    |
 | Upload images             | `POST /product/:productId/images` (multipart, champ `images`, `combinationId?`) |
 | Suppression image         | `DELETE /product/:productId/images` `{ imageId }`                               |
+
+⚠️ Contrairement à `User` (soft delete via `deletedAt`), un produit supprimé l'est **définitivement** — les commandes passées conservent `productName`/`productSku` en snapshot sur `OrderItem`, mais le produit lui-même disparaît.
 
 **Point d'attention front** : `categoryId` ne peut jamais être modifié après création — le champ doit être en lecture seule sur l'écran d'édition. Le passage à `status: ACTIVE` peut échouer avec 400 si des attributs produit requis manquent — afficher le message d'erreur retourné (il liste les attributs manquants par nom).
 
@@ -305,10 +307,10 @@ interface SetProductAttributesRequest {
 ```
 
 | Action                                   | Appel                                                                        |
-| ----------------------------------------- | ------------------------------------------------------------------------------ |
-| Attributs d'une catégorie **(public)**    | `GET /categories/:categoryId/attributes` → `AttributeDefinition[]`           |
+| ---------------------------------------- | ---------------------------------------------------------------------------- |
+| Attributs d'une catégorie **(public)**   | `GET /categories/:categoryId/attributes` → `AttributeDefinition[]`           |
 | Création                                 | `POST /categories/:categoryId/attributes` `CreateAttributeDefinitionRequest` |
-| Détail                                   | `GET /attributes/:definitionId` → `AttributeDefinition`                      |
+| Détail **(public)**                      | `GET /attributes/:definitionId` → `AttributeDefinition`                      |
 | Mise à jour                              | `PATCH /attributes/:definitionId` (body partiel)                             |
 | Suppression                              | `DELETE /attributes/:definitionId`                                           |
 | Ajout d'option                           | `POST /attributes/:definitionId/options` `{ value, colorHex?, position? }`   |
@@ -316,7 +318,7 @@ interface SetProductAttributesRequest {
 | Suppression option                       | `DELETE /attributes/options/:optionId`                                       |
 | Valeurs produit (attributs non-variante) | `PUT /product/:productId/attributes` `SetProductAttributesRequest`           |
 
-⚠️ **Correctif catalogue public** : `GET /categories/:categoryId/attributes` ne nécessite plus de token — un visiteur non connecté peut charger les attributs (donc les options de filtre/variante) d'une catégorie pour afficher une fiche produit complète. `GET /attributes/:definitionId` reste protégé.
+⚠️ **Correctif catalogue public** : `GET /categories/:categoryId/attributes` **et** `GET /attributes/:definitionId` ne nécessitent plus de token (authentification optionnelle) — les deux routes de lecture de ce module sont désormais publiques.
 
 **⚠️ Point critique frontend** : le champ `isVariant` détermine **totalement** quel flux utiliser pour un attribut donné :
 
@@ -367,17 +369,17 @@ interface UpdateCombinationRequest {
 }
 ```
 
-| Action                                                       | Appel                                                                              |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Combinaisons actives d'un produit **(public)**                 | `GET /product/:productId/combinations` → `ProductCombination[]`                    |
-| Sélections courantes d'options par attribut **(public)**       | `GET /product/:productId/combinations/selections` → `ProductAttributeSelection[]`  |
-| Définir les options disponibles pour un attribut (admin)       | `PUT /product/:productId/combinations/selections/:attributeDefinitionId`           |
-| Générer le produit cartésien (admin)                           | `POST /product/:productId/combinations/generate`                                   |
-| Détail d'une combinaison                                       | `GET /product/:productId/combinations/:combinationId`                              |
-| Mise à jour (admin)                                             | `PATCH /product/:productId/combinations/:combinationId`                            |
-| Suppression (admin)                                             | `DELETE /product/:productId/combinations/:combinationId`                           |
+| Action                                                   | Appel                                                                             |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Combinaisons d'un produit **(public)**                   | `GET /product/:productId/combinations` → `ProductCombination[]`                   |
+| Sélections courantes d'options par attribut **(public)** | `GET /product/:productId/combinations/selections` → `ProductAttributeSelection[]` |
+| Définir les options disponibles pour un attribut (admin) | `PUT /product/:productId/combinations/selections/:attributeDefinitionId`          |
+| Générer le produit cartésien (admin)                     | `POST /product/:productId/combinations/generate`                                  |
+| Détail d'une combinaison **(public)**                    | `GET /product/:productId/combinations/:combinationId`                             |
+| Mise à jour (admin)                                      | `PATCH /product/:productId/combinations/:combinationId`                           |
+| Suppression (admin)                                      | `DELETE /product/:productId/combinations/:combinationId`                          |
 
-⚠️ **Correctif catalogue public** : les deux routes de lecture (`GET .../combinations` et `GET .../combinations/selections`) ne nécessitent plus de token. C'était bloquant pour la fiche produit publique : le sélecteur de variante (taille, couleur...) ne pouvait pas se charger pour un visiteur non connecté, empêchant l'ajout au panier avant authentification. `GET .../:combinationId` (détail d'une combinaison par id) reste protégé pour le moment.
+⚠️ **Correctif catalogue public** : les trois routes de lecture (`GET .../combinations`, `GET .../combinations/selections`, `GET .../combinations/:combinationId`) ne nécessitent **aucune** d'entre elles de token — indispensable pour que la fiche produit publique (sélecteur de variante taille/couleur) fonctionne pour un visiteur non connecté.
 
 **Workflow d'intégration recommandé (écran admin "Variantes produit")** :
 
@@ -404,19 +406,16 @@ await api.patch(`/product/${productId}/combinations/${combinationId}`, {
 
 ```ts
 const [combinations, selections] = await Promise.all([
-  api.get(`/product/${productId}/combinations`),   // public
+  api.get(`/product/${productId}/combinations`), // public
   api.get(`/product/${productId}/combinations/selections`), // public
 ]);
-// → construire le sélecteur Taille/Couleur à partir de `selections`,
-//   puis résoudre la ProductCombination correspondante dans `combinations`
-//   une fois toutes les options choisies, pour connaître prix/stock/sku réels.
 ```
 
 **Points d'attention** :
 
-- Relancer `generate()` après une modification de sélection **désactive automatiquement** (sans les supprimer) les combinaisons qui ne correspondent plus — prévenir l'admin que c'est non destructif mais que les combinaisons disparaîtront du catalogue public.
-- `DELETE .../combinations/:combinationId` échoue avec 400 si de l'inventaire existe encore — rediriger l'admin vers l'écran de gestion de stock avant de permettre la suppression définitive.
-- Côté panier/commande/wishlist, `combinationId` (optionnel) remplace l'ancien `variantId` — voir §9-11.
+- Relancer `generate()` après une modification de sélection **désactive automatiquement** (sans les supprimer) les combinaisons qui ne correspondent plus — prévenir l'admin.
+- `DELETE .../combinations/:combinationId` échoue avec 400 si de l'inventaire existe encore.
+- Côté panier/commande/wishlist, `combinationId` (optionnel) remplace l'ancien `variantId`.
 
 ---
 
@@ -440,7 +439,7 @@ interface SetProductTagsRequest {
 ```
 
 | Action                 | Appel                                                                           |
-| ---------------------- | --------------------------------------------------------------------------------- |
+| ---------------------- | ------------------------------------------------------------------------------- |
 | Liste                  | `GET /tags` → `Tag[]`                                                           |
 | Détail (avec produits) | `GET /tags/:tagId`                                                              |
 | Création (admin)       | `POST /tags` `CreateTagRequest`                                                 |
@@ -474,8 +473,8 @@ interface CreateCategoryRequest {
   name: string; // 2-100
   slug: string; // kebab-case
   description?: string;
-  imageUrl?: string;  // optionnel — préférer l'upload dédié, voir ci-dessous
-  iconUrl?: string;   // optionnel — préférer l'upload dédié, voir ci-dessous
+  imageUrl?: string; // optionnel — préférer l'upload dédié, voir ci-dessous
+  iconUrl?: string; // optionnel — préférer l'upload dédié, voir ci-dessous
   metaTitle?: string; // max 70
   metaDescription?: string; // max 160
   isActive?: boolean; // défaut true
@@ -483,47 +482,42 @@ interface CreateCategoryRequest {
 }
 ```
 
-| Action                       | Appel                                                                          |
-| ----------------------------- | ------------------------------------------------------------------------------ |
-| Liste publique **(public)**   | `GET /categories` → `Category[]` (uniquement `isActive:true`)                  |
-| Liste admin (avec inactives) | `GET /categories?includeInactive=true` (nécessite un JWT ADMIN — sinon ignoré) |
-| Détail admin                 | `GET /categories/:categoryId` (retourne même si inactive)                      |
-| Détail public par slug       | `GET /categories/slug/:slug` (**404 si inactive**)                             |
-| Produits par slug            | `GET /categories/slug/:slug/products?page&limit` (**404 si inactive**)         |
-| Création (admin)             | `POST /categories` `CreateCategoryRequest`                                     |
-| Mise à jour (admin)          | `PUT /categories/:categoryId`                                                  |
-| Suppression (admin)          | `DELETE /categories/:categoryId` (**400** si `_count.products > 0`)            |
+| Action                         | Appel                                                                                                           |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Liste publique **(public)**    | `GET /categories` → `Category[]` (uniquement `isActive:true`)                                                   |
+| Liste admin (avec inactives)   | `GET /categories?includeInactive=true` (nécessite un JWT ADMIN — sinon ignoré)                                  |
+| Détail admin                   | `GET /categories/:categoryId` (retourne même si inactive)                                                       |
+| Détail public par slug         | `GET /categories/slug/:slug` (**404 si inactive**)                                                              |
+| Produits par slug              | `GET /categories/slug/:slug/products?page&limit` (**404 si inactive**)                                          |
+| Création (admin)               | `POST /categories` `CreateCategoryRequest`                                                                      |
+| Mise à jour (admin)            | `PUT /categories/:categoryId`                                                                                   |
+| Suppression (admin)            | `DELETE /categories/:categoryId` (**400** si `_count.products > 0` ou discounts encore rattachés)               |
 | **Upload image/icône (admin)** | `POST /categories/:categoryId/assets` (multipart, champs `image?` et/ou `icon?`, 1 fichier chacun) → `Category` |
-| **Suppression image (admin)**  | `DELETE /categories/:categoryId/image` (**404** si aucune image définie)       |
-| **Suppression icône (admin)**  | `DELETE /categories/:categoryId/icon` (**404** si aucune icône définie)        |
+| **Suppression image (admin)**  | `DELETE /categories/:categoryId/image` (**404** si aucune image définie)                                        |
+| **Suppression icône (admin)**  | `DELETE /categories/:categoryId/icon` (**404** si aucune icône définie)                                         |
 
-⚠️ **Correctif catalogue public** : `GET /categories` ne nécessite plus de token — la navigation par catégories (menu, homepage, page `/categories`) doit fonctionner pour tout visiteur.
+⚠️ **Correctif catalogue public** : `GET /categories` ne nécessite plus de token.
 
-⚠️ **Nouveau — upload aligné sur le comportement produit/promotion** : contrairement à ce qui existait initialement, l'API **uploade elle-même** l'image/icône vers Cloudflare R2 — le formulaire de création de catégorie ne doit **plus** demander à l'utilisateur de saisir une URL. Flux recommandé, identique au flux produit :
+⚠️ **Upload aligné sur le comportement produit/promotion** : l'API **uploade elle-même** l'image/icône vers Cloudflare R2 — ne pas demander à l'utilisateur de saisir une URL manuellement :
 
 ```ts
-// 1. Créer la catégorie (champs texte uniquement, sans imageUrl/iconUrl)
 const category = await api.post("/categories", {
   name: "Hauts",
   slug: "hauts",
   description: "T-shirts, chemises, pulls et vestes",
 } satisfies CreateCategoryRequest);
 
-// 2. Uploader l'image et/ou l'icône via un input file local
 const formData = new FormData();
 if (imageFile) formData.append("image", imageFile);
 if (iconFile) formData.append("icon", iconFile);
 
 const updatedCategory = await api.post(
   `/categories/${category.id}/assets`,
-  formData, // Content-Type: multipart/form-data — laisser le navigateur le définir
+  formData,
 );
-// → updatedCategory.imageUrl / updatedCategory.iconUrl sont maintenant remplis par l'API
 ```
 
-`imageUrl`/`iconUrl` restent acceptés comme chaînes d'URL directes dans `POST`/`PUT` classiques (`z.string().url()`) si vous voulez conserver une saisie manuelle en complément — mais ce n'est plus le flux recommandé.
-
-**Point d'attention front** : sur le site public (section client), utiliser systématiquement les routes par slug — elles renvoient nativement 404 pour une catégorie désactivée, pas besoin de filtrer `isActive` côté client. Sur le dashboard admin, `GET /categories?includeInactive=true` permet de voir/gérer les catégories désactivées, avec un indicateur visuel (`isActive: false`) sur chaque ligne.
+`imageUrl`/`iconUrl` restent acceptés comme chaînes d'URL directes dans `POST`/`PUT` classiques si besoin — mais ce n'est plus le flux recommandé.
 
 ---
 
@@ -567,7 +561,7 @@ interface RemoveProductRequest {
 ```
 
 | Action                        | Appel                                                                        |
-| ----------------------------- | ------------------------------------------------------------------------------ |
+| ----------------------------- | ---------------------------------------------------------------------------- |
 | Panier unique (get-or-create) | `GET /user/basket` → `Basket`                                                |
 | Nouveau panier (historique)   | `POST /basket` → `Basket` (201)                                              |
 | Détail                        | `GET /basket/:basket_id` → `Basket`                                          |
@@ -575,7 +569,7 @@ interface RemoveProductRequest {
 | Modifier la quantité          | `PUT /basket/:basket_id/product/quantity` `UpdateQuantityRequest` → `Basket` |
 | Retirer un produit            | `DELETE /basket/:basket_id/product` `RemoveProductRequest` → `Basket`        |
 
-**Recommandation front** : privilégier `GET /user/basket` (get-or-create implicite) pour le panier principal de la section client, et réserver `POST /basket` aux cas nécessitant plusieurs paniers simultanés (rare).
+**Recommandation front** : privilégier `GET /user/basket` pour le panier principal, et réserver `POST /basket` aux cas nécessitant plusieurs paniers simultanés (rare).
 
 ---
 
@@ -630,8 +624,8 @@ interface Order {
     | "DELIVERED"
     | "CANCELLED"
     | "REFUNDED";
-  shippingAddressSnapshot: Address;
-  billingAddressSnapshot: Address | null;
+  shippingAddressSnapshot: OrderAddress;
+  billingAddressSnapshot: OrderAddress | null;
   shippingMethod: { id: string; name: string; estimatedDays: number } | null;
   notes: string | null;
   appliedCoupon: {
@@ -675,21 +669,26 @@ interface OrderStatusHistory {
   createdAt: string;
 }
 
-interface Address {
+// Même forme que UserAddress (§18) — champs partagés via addressFieldsSchema,
+// avec recipientName requis et postalCode optionnel.
+interface OrderAddress {
+  recipientName: string;
+  phone?: string;
   street: string;
+  addressLine2?: string;
   city: string;
   state?: string;
   country: string;
-  postalCode: string;
+  postalCode?: string;
 }
 
 interface CreateOrderRequest {
   items?: { id: string; combinationId?: string; quantity: number }[]; // productId en string
   basketId?: string; // alternative à items
   shippingAddressId?: string;
-  shippingAddress: Address;
+  shippingAddress: OrderAddress;
   billingAddressId?: string;
-  billingAddress?: Address;
+  billingAddress?: OrderAddress;
   shippingMethodId?: string;
   paymentMethodId?: string;
   notes?: string;
@@ -705,23 +704,26 @@ interface UpdateOrderStatusRequest {
 }
 ```
 
-| Action                             | Appel                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------- |
-| Liste                              | `GET /orders?page&limit&status&customer` → `Paginated<Order>`             |
-| Création                           | `POST /orders` `CreateOrderRequest` → `Order` (201)                       |
-| Détail                             | `GET /orders/:orderId` → `Order`                                          |
-| Mise à jour (adresses/notes)       | `PUT /orders/:orderId` (body partiel)                                     |
-| Annulation                         | `DELETE /orders/:orderId` → `{ message: "Order cancelled successfully" }` |
-| Changement de statut (admin)       | `PUT /orders/:orderId/status` `UpdateOrderStatusRequest`                  |
-| Commandes d'un utilisateur (admin) | `GET /user/:userId/orders?page&limit` → `Paginated<Order>`                |
+| Action                                                     | Appel                                                                     |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Liste                                                      | `GET /orders?page&limit&status&customer` → `Paginated<Order>`             |
+| Création                                                   | `POST /orders` `CreateOrderRequest` → `Order` (201)                       |
+| Détail                                                     | `GET /orders/:orderId` → `Order`                                          |
+| Mise à jour (adresses/notes)                               | `PUT /orders/:orderId` (body partiel)                                     |
+| Annulation                                                 | `DELETE /orders/:orderId` → `{ message: "Order cancelled successfully" }` |
+| Changement de statut (admin)                               | `PUT /orders/:orderId/status` `UpdateOrderStatusRequest`                  |
+| Commandes d'un utilisateur (admin)                         | `GET /user/:userId/orders?page&limit` → `Paginated<Order>`                |
+| Forcer l'annulation des commandes PENDING périmées (admin) | `POST /orders/expire-stale` → `{ expiredCount: number }`                  |
 
 **Points d'attention front** :
 
 - Toujours envoyer `items[].id` comme **string** représentant le `productId` (pas un `basketItemId`).
-- `combinationSnapshot` sur chaque `OrderItem` est la source fiable pour afficher les caractéristiques achetées (taille, couleur...) dans l'historique — reste correct même si l'attribut/option source a été renommé ou supprimé depuis. Préférer `combinationSnapshot` à `combination.values` pour l'affichage de l'historique de commande.
-- `couponCode` est validé et appliqué à la commande, mais **ne réduit le total que si la promotion liée a au moins un `Discount`** ciblant les articles du panier — voir §19 pour le détail. Ne pas supposer qu'un coupon accepté réduit automatiquement `totalAmount`.
-- Un échec de stock retourne soit `400` (stock global insuffisant, message explicite avec quantité disponible/demandée), soit `409` (rare — stock pris entre vérification et réservation, la commande n'est pas créée).
+- `recipientName` (min 2) est requis dans `shippingAddress`/`billingAddress` — c'est le même schéma partagé que le module Addresses (§18), `postalCode` y est optionnel.
+- `combinationSnapshot` sur chaque `OrderItem` est la source fiable pour afficher les caractéristiques achetées — préférer `combinationSnapshot` à `combination.values` pour l'historique de commande.
+- `couponCode` est validé et appliqué à la commande, mais **ne réduit le total que si la promotion liée a au moins un `Discount`** ciblant les articles du panier — voir §19.
+- Un échec de stock retourne soit `400` (stock global insuffisant), soit `409` (rare — stock pris entre vérification et réservation, la commande n'est pas créée).
 - `statusHistory` est limité aux 10 dernières entrées côté API.
+- `POST /orders/expire-stale` (admin) déclenche manuellement le même job qui tourne automatiquement toutes les heures (annulation des `PENDING` non payées au-delà de `orders.stale_pending_hours`, 24h par défaut) — utile pour un contrôle manuel/tests, pas nécessaire en usage normal.
 
 ---
 
@@ -770,16 +772,20 @@ interface UpdatePaymentStatusRequest {
 }
 ```
 
-| Action                    | Appel                                                                             |
-| ------------------------- | ----------------------------------------------------------------------------------- |
-| Méthodes disponibles      | `GET /payment-methods` → `PaymentMethodInfo[]`                                    |
-| Créer un paiement         | `POST /payments` `CreatePaymentRequest` → `Payment` (201, ou 503 si indisponible) |
-| Détail                    | `GET /payments/:payment_id` → `Payment`                                           |
-| Paiements d'une commande  | `GET /orders/:orderId/payments` → `Payment[]`                                     |
-| Liste (admin)             | `GET /payments?page&limit&status&method&order_id` → `Paginated<Payment>`          |
-| Changer le statut (admin) | `PUT /payments/:payment_id/status` `UpdatePaymentStatusRequest`                   |
+| Action                    | Appel                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Méthodes disponibles      | `GET /payment-methods` → `PaymentMethodInfo[]`                                                                     |
+| Créer un paiement         | `POST /payments` `CreatePaymentRequest` → `Payment` (201, ou 503 si indisponible)                                  |
+| Détail                    | `GET /payments/:payment_id` → `Payment`                                                                            |
+| Paiements d'une commande  | `GET /orders/:orderId/payments` → `Payment[]`                                                                      |
+| Liste (admin)             | `GET /payments?page&limit&status&method&order_id` → `Paginated<Payment>`                                           |
+| Changer le statut (admin) | `PUT /payments/:payment_id/status` `UpdatePaymentStatusRequest`                                                    |
+| Compléter (déprécié)      | `PUT /payments/:payment_id/complete` — équivalent à `PUT .../status { status: "COMPLETED" }`, conservé pour compat |
 
-**Point d'attention front** : seul `CASH_ON_DELIVERY` a `available: true` actuellement — griser les autres options de paiement dans le formulaire de checkout en utilisant directement le champ `available` retourné par `GET /payment-methods` plutôt qu'une liste codée en dur côté client, pour rester synchronisé si de nouveaux moyens de paiement sont activés côté API sans redéploiement frontend.
+**Points d'attention front** :
+
+- Les méthodes disponibles sont pilotées par le setting `payments.enabled_methods` (`CASH_ON_DELIVERY` uniquement par défaut) — utiliser le champ `available` retourné par `GET /payment-methods` plutôt qu'une liste codée en dur, ces valeurs pouvant changer sans redéploiement.
+- Les changements manuels de statut par un admin sont **restreints à `REFUNDED`** — les autres transitions (`COMPLETED`, `FAILED`, `CANCELLED`) sont exclusivement déclenchées automatiquement par le cycle de vie de la commande (COD complété à la livraison) ou d'un retour (remboursement automatique).
 
 ---
 
@@ -803,6 +809,9 @@ interface ProductReviewsResponse {
   average_rating: number;
   total_reviews: number;
   reviews: Review[];
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 interface CreateReviewRequest {
@@ -813,15 +822,15 @@ interface CreateReviewRequest {
 }
 ```
 
-| Action      | Appel                                                          |
-| ----------- | --------------------------------------------------------------- |
-| Par produit | `GET /products/:pid/reviews` → `ProductReviewsResponse`        |
-| Détail      | `GET /reviews/:rid` → `Review`                                 |
-| Création    | `POST /reviews` `CreateReviewRequest` → `Review` (201)         |
-| Mise à jour | `PUT /reviews/:rid` `{ rating?, comment? }` (owner uniquement) |
-| Suppression | `DELETE /reviews/:rid` (owner uniquement)                      |
+| Action      | Appel                                                                       |
+| ----------- | --------------------------------------------------------------------------- |
+| Par produit | `GET /products/:pid/reviews?page&limit` → `ProductReviewsResponse` (paginé) |
+| Détail      | `GET /reviews/:rid` → `Review`                                              |
+| Création    | `POST /reviews` `CreateReviewRequest` → `Review` (201)                      |
+| Mise à jour | `PUT /reviews/:rid` `{ rating?, comment? }` (owner uniquement)              |
+| Suppression | `DELETE /reviews/:rid` (owner uniquement)                                   |
 
-Un avis est lié à un `orderItemId` précis (achat vérifié) — un produit acheté plusieurs fois (commandes distinctes) peut recevoir plusieurs avis du même utilisateur.
+Un avis est lié à un `orderItemId` précis (achat vérifié) — un produit acheté plusieurs fois peut recevoir plusieurs avis du même utilisateur.
 
 ---
 
@@ -858,8 +867,6 @@ interface CreateWarehouseRequest {
 | Mise à jour (admin)      | `PUT /warehouses/:warehouse_id` (body partiel)                               |
 | Suppression (admin)      | `DELETE /warehouses/:warehouse_id` (**400** si du stock actif existe encore) |
 
-**Point d'attention front** : gérer explicitement le cas `400` sur la suppression — le message précise le nombre d'articles en stock restants, à afficher tel quel plutôt qu'un message générique.
-
 ---
 
 ## 15. Inventory
@@ -891,21 +898,43 @@ interface TransferInventoryRequest {
   to_warehouse: string;
   quantity: number;
 }
+
+// Vue groupée par produit — un item par produit (pas par ligne d'inventaire)
+interface InventoryGroupedItem {
+  product: {
+    id: number;
+    name: string;
+    sku: string;
+    status: Product["status"];
+  } | null;
+  hasVariants: boolean;
+  totalQuantity: number;
+  warehouseCount: number;
+  combinationsWithStockCount: number;
+  lowStockLineCount: number;
+  outOfStockLineCount: number;
+  lines?: {
+    id: string;
+    warehouseId: string;
+    warehouse: { id: string; name: string };
+    quantity: number;
+  }[]; // uniquement si hasVariants === false
+}
 ```
 
-| Action              | Appel                                                                      |
-| ------------------- | -------------------------------------------------------------------------- |
-| Liste               | `GET /inventory?page&limit&category&location` → `Paginated<InventoryItem>` |
-| Stock faible        | `GET /inventory/low-stock?threshold` → `InventoryItem[]`                   |
-| Rupture de stock    | `GET /inventory/out-of-stock` → `InventoryItem[]`                          |
-| Recherche           | `GET /inventory/search?keyword` (⚠️ `keyword` requis, sinon 500)           |
-| Détail              | `GET /inventory/:item_id` → `InventoryItem`                                |
-| Création (admin)    | `POST /inventory` `CreateInventoryRequest` (201, ou 409 si doublon)        |
-| Mise à jour (admin) | `PUT /inventory/:item_id` `{ quantity?, warehouse_id? }`                   |
-| Suppression (admin) | `DELETE /inventory/:item_id`                                               |
-| Transfert (admin)   | `POST /inventory/transfer` `TransferInventoryRequest`                      |
+| Action                                                   | Appel                                                                                                                                                  |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Liste (par ligne d'inventaire)                           | `GET /inventory?category&location&warehouse_id&page&limit` → `Paginated<InventoryItem>`                                                                |
+| Recherche                                                | `GET /inventory/search?keyword&page&limit` (⚠️ `keyword` requis, sinon 500) → `Paginated<InventoryItem>`                                               |
+| Vue groupée par produit (avec filtres stock)             | `GET /inventory/grouped?category&warehouse_id&low_stock&out_of_stock&page&limit` → `{ items: InventoryGroupedItem[]; total; page; limit; totalPages }` |
+| Lignes détaillées d'un produit (par variante × entrepôt) | `GET /inventory/grouped/:productId?page&limit` → `Paginated<InventoryItem>`                                                                            |
+| Détail d'une ligne                                       | `GET /inventory/:item_id` → `InventoryItem`                                                                                                            |
+| Création (admin)                                         | `POST /inventory` `CreateInventoryRequest` (201, ou 409 si doublon)                                                                                    |
+| Mise à jour (admin)                                      | `PUT /inventory/:item_id` `{ quantity?, warehouse_id? }`                                                                                               |
+| Suppression (admin)                                      | `DELETE /inventory/:item_id`                                                                                                                           |
+| Transfert (admin)                                        | `POST /inventory/transfer` `TransferInventoryRequest`                                                                                                  |
 
-**Point d'attention front** : toujours envoyer un `keyword` non vide sur `/inventory/search`, sinon l'API renvoie une 500 non structurée (pas un message JSON exploitable de la même forme que les autres erreurs) — valider côté client avant l'appel.
+**Point d'attention front** : il n'existe **pas** de routes dédiées `/inventory/low-stock` ou `/inventory/out-of-stock` — le filtrage stock faible/rupture se fait via les query params `?low_stock=true` / `?out_of_stock=true` sur `GET /inventory/grouped`. Le seuil de stock faible est piloté par le setting `inventory.low_stock_threshold` (10 par défaut) — ne pas le coder en dur côté client. Toujours envoyer un `keyword` non vide sur `/inventory/search`, sinon l'API renvoie une 500 non structurée.
 
 ---
 
@@ -963,45 +992,83 @@ interface UpdateShipmentStatusRequest {
   reason?: string;
 }
 
+interface ShippingCostRequest {
+  origin: string;
+  destination: string;
+  weight: number;
+  dimensions?: { length: number; width: number; height: number };
+}
+
+interface ShippingCostResponse {
+  cost: number;
+  currency: "XAF";
+}
+
+// Voir aussi UserAddress (§18) pour la forme de `address` ci-dessous.
 interface PickupRequest {
   id: string;
   userId: number;
-  orderId: string | null;
-  shipmentId: string | null;
-  pickupDate: string;
-  pickupAddress: string;
-  status: "PENDING" | "CONFIRMED" | "CANCELLED";
+  returnRequestId: string;
+  orderId: string;
+  method: "ORIGINAL_ADDRESS" | "WAREHOUSE_DROPOFF" | "CUSTOM_ADDRESS";
+  addressId: string | null;
+  address: UserAddress | null;
+  warehouseId: string | null;
+  warehouse: { id: string; name: string; location: string } | null;
+  pickupDate: string | null;
+  deadline: string;
+  status: "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "EXPIRED";
+  notes: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
-interface CreatePickupRequestRequest {
-  pickup_date: string; // ISO
-  pickup_address: string;
-  order_id?: string;
-  shipment_id?: string;
+interface UpdatePickupLocationRequest {
+  method: "ORIGINAL_ADDRESS" | "WAREHOUSE_DROPOFF" | "CUSTOM_ADDRESS";
+  address_id?: string; // requis si method = CUSTOM_ADDRESS
+  warehouse_id?: string; // requis si method = WAREHOUSE_DROPOFF
+  pickup_date?: string;
+  deadline?: string;
+}
+
+interface UpdatePickupStatusRequest {
+  status: PickupRequest["status"];
+  notes?: string;
 }
 ```
 
-| Action                             | Appel                                                                  |
-| ---------------------------------- | ---------------------------------------------------------------------- |
-| Calculer un coût                   | `POST /shipments/cost` `{ origin, destination, weight, dimensions? }`  |
-| Création (admin)                   | `POST /shipments` `CreateShipmentRequest` → `Shipment` (201)           |
-| Détail                             | `GET /shipments/:shipmentId` → `Shipment`                              |
-| Liste (admin)                      | `GET /shipments?page&limit&status&order_id` → `Paginated<Shipment>`    |
-| Ajouter un événement de suivi      | `POST /shipments/:shipmentId/track` `TrackingEventRequest`             |
-| Consulter le suivi                 | `GET /shipments/:shipmentId/track` → `TrackingResponse`                |
-| Changer le statut officiel (admin) | `PUT /shipments/:shipmentId/status` `UpdateShipmentStatusRequest`      |
-| Annuler                            | `POST /shipments/:shipmentId/cancel`                                   |
-| Étiquette                          | `GET /labels/:shipmentId` → `{ label_id, label_url }`                  |
-| Créer une demande de collecte      | `POST /pickup-requests` `CreatePickupRequestRequest` → `PickupRequest` |
-| Liste des collectes (admin)        | `GET /pickup-requests?page&limit&status`                               |
-| Détail collecte                    | `GET /pickup-requests/:requestId`                                      |
-| Annuler une collecte               | `POST /pickup-requests/:requestId/cancel` (owner uniquement)           |
-| Expédition d'une commande          | `GET /orders/:orderId/shipment` → `Shipment \| null`                   |
+| Action                                | Appel                                                                 |
+| ------------------------------------- | --------------------------------------------------------------------- |
+| Calculer un coût                      | `POST /shipments/cost` `ShippingCostRequest` → `ShippingCostResponse` |
+| Création (admin)                      | `POST /shipments` `CreateShipmentRequest` → `Shipment` (201)          |
+| Détail                                | `GET /shipments/:shipmentId` → `Shipment`                             |
+| Liste (admin)                         | `GET /shipments?page&limit&status&order_id` → `Paginated<Shipment>`   |
+| Ajouter un événement de suivi (admin) | `POST /shipments/:shipmentId/track` `TrackingEventRequest`            |
+| Consulter le suivi                    | `GET /shipments/:shipmentId/track` → `TrackingResponse`               |
+| Changer le statut officiel (admin)    | `PUT /shipments/:shipmentId/status` `UpdateShipmentStatusRequest`     |
+| Annuler                               | `POST /shipments/:shipmentId/cancel`                                  |
+| Étiquette                             | `GET /labels/:shipmentId` → `{ label_id, label_url }`                 |
+| Expédition d'une commande             | `GET /orders/:orderId/shipment` → `Shipment \| null`                  |
 
-**⚠️ Distinction importante côté UI** : ne pas confondre `POST /shipments/:shipmentId/track` (ajout d'un événement d'historique, `status` en texte libre) avec `PUT /shipments/:shipmentId/status` (transition officielle du statut, enum strict). Le premier peut optionnellement déclencher le second via `shipment_status`, mais ce sont deux actions différentes dans l'UI — typiquement deux boutons distincts ("Ajouter une mise à jour" vs "Changer le statut").
+⚠️ Le calcul de coût est actuellement un **tarif forfaitaire** (`5 + 0.1 × weight`, en XAF) — `origin`, `destination` et `dimensions` sont acceptés par la validation mais n'influencent pas encore le résultat. Ne pas construire d'UI suggérant un calcul basé sur la distance ou les dimensions.
 
-**Point d'attention** : une annulation de commande ou d'expédition annule automatiquement les collectes `PENDING` liées — rafraîchir l'écran de collecte après une annulation de commande/expédition plutôt que de se fier à un état local potentiellement obsolète.
+⚠️ Si `order_id` est fourni à la création d'une expédition, la commande liée doit être au statut `PROCESSING` (sinon 400).
+
+**⚠️ Distinction importante côté UI** : ne pas confondre `POST /shipments/:shipmentId/track` (ajout d'un événement d'historique, `status` en texte libre) avec `PUT /shipments/:shipmentId/status` (transition officielle du statut, enum strict).
+
+### Demandes de retrait (pickup requests)
+
+| Action                                             | Appel                                                                          |
+| -------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Liste (admin)                                      | `GET /pickup-requests?page&limit&status&order_id` → `Paginated<PickupRequest>` |
+| Détail                                             | `GET /pickup-requests/:requestId` → `PickupRequest` (owner ou admin)           |
+| Modifier le lieu de collecte (admin)               | `PATCH /pickup-requests/:requestId/location` `UpdatePickupLocationRequest`     |
+| Changer le statut (admin)                          | `PATCH /pickup-requests/:requestId/status` `UpdatePickupStatusRequest`         |
+| Forcer l'expiration des demandes en retard (admin) | `POST /pickup-requests/expire-overdue` → `{ expiredCount: number }`            |
+
+**⚠️ Aucune route de création manuelle** : une `PickupRequest` naît automatiquement quand un retour passe à `APPROVED` (voir §21) — il n'existe **aucune** route `POST /pickup-requests`. **Aucune route d'annulation côté client** non plus — seul un admin peut faire évoluer son statut via `PATCH .../status` ; annuler la pickup (`CANCELLED`) annule automatiquement en cascade le `ReturnRequest` lié, et l'inverse n'est pas automatique (`COMPLETED` sur la pickup ne marque pas le retour comme `COMPLETED`).
+
+Chaque `ReturnRequest` (§21) inclut un champ `pickupRequest` nullable — c'est le point d'entrée recommandé pour la page "mes demandes d'enlèvement", pas besoin de connaître l'id de la pickup request à l'avance.
 
 ---
 
@@ -1022,6 +1089,7 @@ interface ShippingMethod {
 interface CalculateShippingRequest {
   shippingMethodId: string;
   weight: number;
+  country: string; // code ISO — 400 si le pays n'est pas couvert par les zones de la méthode
 }
 
 interface CalculateShippingResponse {
@@ -1035,7 +1103,7 @@ interface CalculateShippingResponse {
 
 | Action              | Appel                                                                                       |
 | ------------------- | ------------------------------------------------------------------------------------------- |
-| Liste               | `GET /shipping-methods?active` → `ShippingMethod[]`                                         |
+| Liste               | `GET /shipping-methods?includeInactive=true` (admin uniquement) → `ShippingMethod[]`        |
 | Détail              | `GET /shipping-methods/:methodId` → `ShippingMethod`                                        |
 | Création (admin)    | `POST /shipping-methods` (body : tous les champs sauf `id`)                                 |
 | Mise à jour (admin) | `PATCH /shipping-methods/:methodId` (body partiel)                                          |
@@ -1050,41 +1118,53 @@ interface CalculateShippingResponse {
 interface UserAddress {
   id: string;
   userId: number;
+  recipientName: string;
+  phone: string | null;
   street: string;
+  addressLine2: string | null;
   city: string;
   state: string | null;
   country: string;
-  postalCode: string;
+  postalCode: string | null;
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 interface ValidateAddressRequest {
-  street: string;
-  city: string;
+  recipientName: string; // min 2, max 100
+  phone?: string;
+  street: string; // min 2
+  addressLine2?: string;
+  city: string; // min 2
   state?: string;
-  country: string;
-  postal_code: string;
+  country: string; // min 2
+  postalCode?: string; // optionnel — certains pays (dont le Cameroun) n'ont pas de code postal résidentiel généralisé
 }
 
 interface ValidateAddressResponse {
   valid: boolean;
   normalized_address: {
+    recipientName: string;
+    phone: string | null;
     street: string;
+    addressLine2: string | null;
     city: string;
     state: string | null;
-    country: string;
-    postal_code: string;
+    country: string; // normalisé en code ISO
+    postalCode: string | null;
   } | null;
 }
 
 interface CreateAddressRequest {
+  recipientName: string;
+  phone?: string;
   street: string;
+  addressLine2?: string;
   city: string;
   state?: string;
   country: string;
-  postalCode: string;
+  postalCode?: string;
   isDefault?: boolean; // défaut false
 }
 ```
@@ -1098,7 +1178,10 @@ interface CreateAddressRequest {
 | Mise à jour         | `PATCH /addresses/:addressId` (body partiel, owner uniquement)                |
 | Suppression         | `DELETE /addresses/:addressId` (owner uniquement)                             |
 
-**Point d'attention front** : `POST /address/validate` utilise une liste de pays supportés codée en dur côté serveur (pas un service de géocodage externe) — utile pour un formulaire de saisie guidée, mais ne pas présenter le résultat comme une validation postale réelle à l'utilisateur.
+**Points d'attention front** :
+
+- `recipientName` est **requis** (min 2 caractères). `postalCode` est **optionnel**. Tous les champs, y compris dans `normalized_address`, sont en **camelCase** (seule la clé racine `normalized_address` reste en snake_case).
+- `POST /address/validate` utilise le même schéma partagé (`addressFieldsSchema`) que `shippingAddress`/`billingAddress` du module Orders (§11) — utile pour un formulaire de saisie guidée réutilisable entre les deux flux, mais ne pas présenter le résultat comme une validation postale réelle (liste de pays codée en dur côté serveur, pas de service de géocodage externe).
 
 ---
 
@@ -1115,6 +1198,9 @@ interface Promotion {
   isActive: boolean;
   startDate: string;
   endDate: string;
+  isFeaturedInHero: boolean;
+  heroPosition: number | null;
+  heroImages: string[];
   discounts: Discount[];
   coupons: CouponSummary[];
   _count: { coupons: number; discounts: number };
@@ -1151,6 +1237,9 @@ interface CreatePromotionRequest {
   startDate: string; // ISO
   endDate: string; // ISO, > startDate
   isActive?: boolean;
+  isFeaturedInHero?: boolean; // défaut false — mise en avant carrousel homepage
+  heroPosition?: number; // ordre d'affichage si isFeaturedInHero
+  heroImages?: string[]; // URLs, défaut []
 }
 
 interface CreateDiscountRequest {
@@ -1188,7 +1277,6 @@ interface ValidateCouponResponse {
   };
 }
 
-// ── Produits affectés par une promotion (nouveau) ──────────────────────────
 interface AffectedProductsResponse {
   promotionId: string;
   promotionName: string;
@@ -1197,52 +1285,50 @@ interface AffectedProductsResponse {
 }
 ```
 
-| Action                                | Appel                                                                                    |
-| -------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Page publique par slug                 | `GET /promotions/slug/:slug` → `Promotion`                                               |
-| **Produits affectés (public)**         | `GET /promotions/slug/:slug/products` → `AffectedProductsResponse`                       |
-| **Produits affectés (admin)**          | `GET /promotions/:promotionId/products` → `AffectedProductsResponse`                     |
-| Promotions actives (public)            | `GET /promotions/active` → `Promotion[]` (triées par `endDate` croissante)               |
-| Valider un coupon                      | `POST /coupons/validate` `ValidateCouponRequest` → `ValidateCouponResponse`              |
-| Liste (admin)                          | `GET /promotions?status&isActive` → `Promotion[]`                                        |
-| Détail (admin)                         | `GET /promotions/:promotionId` → `Promotion`                                             |
-| Création (admin)                       | `POST /promotions` `CreatePromotionRequest`                                              |
-| Mise à jour (admin)                    | `PUT /promotions/:promotionId`                                                            |
-| Bascule isActive (admin)               | `PATCH /promotions/:promotionId/toggle`                                                   |
-| Suppression (admin)                    | `DELETE /promotions/:promotionId`                                                         |
-| Upload images (admin)                  | `POST /promotions/:promotionId/images` (multipart, champ `images`, 1-5 fichiers)         |
-| Suppression image (admin)              | `DELETE /promotions/:promotionId/images` `{ imageUrl }`                                  |
-| Créer une remise (admin)               | `POST /promotions/:promotionId/discounts` `CreateDiscountRequest`                        |
-| Supprimer une remise (admin)           | `DELETE /promotions/:promotionId/discounts/:discountId`                                  |
-| Coupons d'une promotion (admin)        | `GET /promotions/:promotionId/coupons` → `CouponSummary[]` (avec `effectiveIsActive`)    |
-| Créer un coupon (admin)                | `POST /promotions/:promotionId/coupons` `CreateCouponRequest`                            |
-| Supprimer un coupon (admin)            | `DELETE /promotions/:promotionId/coupons/:couponId`                                      |
+| Action                          | Appel                                                                                                                                                         |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Page publique par slug          | `GET /promotions/slug/:slug` → `Promotion`                                                                                                                    |
+| **Produits affectés (public)**  | `GET /promotions/slug/:slug/products` → `AffectedProductsResponse`                                                                                            |
+| **Produits affectés (admin)**   | `GET /promotions/:promotionId/products` → `AffectedProductsResponse`                                                                                          |
+| Promotions actives (public)     | `GET /promotions/active?page&limit&slot=hero` → `Paginated<Promotion>` (triées par `endDate` croissante, ou par `heroPosition` puis `endDate` si `slot=hero`) |
+| Valider un coupon               | `POST /coupons/validate` `ValidateCouponRequest` → `ValidateCouponResponse`                                                                                   |
+| Liste (admin)                   | `GET /promotions?status&isActive` → `Promotion[]`                                                                                                             |
+| Détail (admin)                  | `GET /promotions/:promotionId` → `Promotion`                                                                                                                  |
+| Création (admin)                | `POST /promotions` `CreatePromotionRequest`                                                                                                                   |
+| Mise à jour (admin)             | `PUT /promotions/:promotionId`                                                                                                                                |
+| Bascule isActive (admin)        | `PATCH /promotions/:promotionId/toggle`                                                                                                                       |
+| Suppression (admin)             | `DELETE /promotions/:promotionId`                                                                                                                             |
+| Upload images (admin)           | `POST /promotions/:promotionId/images` (multipart, champ `images`, 1-5 fichiers)                                                                              |
+| Suppression image (admin)       | `DELETE /promotions/:promotionId/images` `{ imageUrl }`                                                                                                       |
+| Créer une remise (admin)        | `POST /promotions/:promotionId/discounts` `CreateDiscountRequest`                                                                                             |
+| Supprimer une remise (admin)    | `DELETE /promotions/:promotionId/discounts/:discountId`                                                                                                       |
+| Coupons d'une promotion (admin) | `GET /promotions/:promotionId/coupons` → `CouponSummary[]` (avec `effectiveIsActive`)                                                                         |
+| Créer un coupon (admin)         | `POST /promotions/:promotionId/coupons` `CreateCouponRequest`                                                                                                 |
+| Supprimer un coupon (admin)     | `DELETE /promotions/:promotionId/coupons/:couponId`                                                                                                           |
 
-**⚠️ Note importante sur `status`** : ce champ est **recalculé à chaque lecture** à partir de `isActive` + dates (`SCHEDULED` avant `startDate`, `ACTIVE` entre les deux, `EXPIRED` après `endDate` — sauf si `status: CANCELLED` a été posé manuellement, auquel cas il reste figé). Ne pas mettre ce champ en cache local trop longtemps côté dashboard — recharger la promotion après une action qui pourrait faire évoluer son statut effectif (typiquement, simplement le fait qu'une date limite soit franchie entre deux visites de l'écran).
+**⚠️ Note importante sur `status`** : ce champ est **recalculé à chaque lecture** à partir de `isActive` + dates. Ne pas mettre ce champ en cache local trop longtemps côté dashboard.
 
-**Point d'attention pour les coupons** : afficher `effectiveIsActive` (pas seulement `isActive`) dans le tableau de gestion des coupons — un coupon avec `isActive: true` mais `effectiveIsActive: false` (épuisé ou expiré) doit être visuellement distingué, même si la seule action possible reste la suppression (pas de route de désactivation dédiée pour un coupon).
+**Point d'attention pour `slot=hero`** : filtre sur les promotions marquées `isFeaturedInHero: true`, triées par `heroPosition` — utile pour un carrousel homepage distinct de la simple liste `active`.
+
+**Point d'attention pour les coupons** : afficher `effectiveIsActive` (pas seulement `isActive`).
 
 **🆕 Flux recommandé pour la homepage (bannière promo cliquable)** :
 
 ```ts
-// La promotion est affichée avec promotion.images[0] comme bannière.
-const { count, products } = await api.get(
+const { count, products } = (await api.get(
   `/promotions/slug/${promotion.slug}/products`,
-) as AffectedProductsResponse;
+)) as AffectedProductsResponse;
 
 if (count === 0) {
   // Promotion "coupon pur" — aucun Discount ciblant un produit/catégorie.
-  // Il n'y a pas de page produits ou de fiche produit à afficher : n'affichez
-  // pas de bannière cliquable pour ce cas, ou redirigez vers une page dédiée
-  // "codes promo" listant simplement le code à copier/appliquer au checkout.
 } else if (count === 1) {
-  router.push(`/products/${products[0].id}`); // fiche produit unique
+  router.push(`/products/${products[0].id}`);
 } else {
-  router.push(`/promotions/${promotion.slug}`); // page listing des produits en promo
+  router.push(`/promotions/${promotion.slug}`);
 }
 ```
 
-**🆕 Important — coupon sans effet sur le prix** : un `CouponCode` n'a **aucune valeur de réduction propre** dans le schéma actuel (pas de champ `value`/`type` sur `CouponCode`, contrairement à `Discount`). La réduction appliquée à une commande provient exclusivement des `Discount` de la promotion liée. **Conséquence directe** : si vous créez une promotion avec un coupon mais sans aucun `Discount` associé ("un code qui réduit juste le total"), l'API validera bien le coupon (`POST /coupons/validate` répond `valid: true`) et l'appliquera à la commande (`Order.appliedCoupon` renseigné), mais **aucun prix d'article ne sera réduit** — `discountedAmount` restera `null`. Ce cas d'usage n'est pas supporté par l'implémentation actuelle ; si votre besoin métier est "un coupon = X% ou -Y XAF sur le total peu importe le panier", il faut soit créer un `Discount` `PERCENTAGE`/`FIXED_AMOUNT` ciblant toutes les catégories concernées, soit faire évoluer le schéma `CouponCode` (hors périmètre de cette version de l'API — à discuter avec l'équipe backend si besoin).
+**🆕 Important — coupon sans effet sur le prix** : un `CouponCode` n'a **aucune valeur de réduction propre** — la réduction provient exclusivement des `Discount` de la promotion liée. Une promotion avec un coupon mais sans `Discount` associé validera le coupon mais ne réduira aucun prix (`discountedAmount` restera `null`).
 
 ---
 
@@ -1277,7 +1363,7 @@ interface AdjustLoyaltyRequest {
 | Historique         | `GET /loyalty/:userId/history` → `LoyaltyTransaction[]`              |
 | Ajustement (admin) | `POST /loyalty/adjust` `AdjustLoyaltyRequest` → `LoyaltyTransaction` |
 
-1 point crédité automatiquement par tranche de 100 XAF à la livraison (`DELIVERED`) ; reversal automatique si un retour complété annule la commande. Aucune expiration automatique n'est implémentée malgré le type `EXPIRED` existant — un `type: EXPIRED` posé via `/loyalty/adjust` équivaut à un débit manuel.
+Le barème (points crédités par unité de devise dépensée, 0.01 par défaut soit 1 point / 100 XAF) est configurable via le setting `loyalty.points_per_currency_unit`, crédité automatiquement à la livraison (`DELIVERED`) ; reversal automatique si un retour lié à la commande est complété.
 
 ---
 
@@ -1289,9 +1375,13 @@ interface ReturnRequest {
   orderId: string;
   order: { id: string; userId: number; status: Order["status"] };
   userId: number;
-  status: "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED";
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "COMPLETED";
   reason: string;
   notes: string | null;
+  collectionMethod: "ORIGINAL_ADDRESS" | "WAREHOUSE_DROPOFF" | "CUSTOM_ADDRESS";
+  collectionAddressId: string | null;
+  collectionWarehouseId: string | null;
+  pickupRequest: PickupRequest | null; // voir §16 — non-null uniquement une fois APPROVED
   items: ReturnItem[];
   createdAt: string;
   updatedAt: string;
@@ -1309,12 +1399,20 @@ interface CreateReturnRequest {
   order_id: string;
   reason: string; // min 2
   notes?: string;
-  items: { order_item_id: string; quantity: number; condition?: string }[]; // min 1
+  // Pas de `quantity` — un retour porte toujours la quantité complète de
+  // l'orderItem visé (pas de retour partiel d'un même article).
+  items: { order_item_id: string; condition?: string }[]; // min 1
+  collection?: {
+    method?: "ORIGINAL_ADDRESS" | "WAREHOUSE_DROPOFF" | "CUSTOM_ADDRESS"; // défaut ORIGINAL_ADDRESS
+    address_id?: string; // requis si CUSTOM_ADDRESS
+    warehouse_id?: string; // requis si WAREHOUSE_DROPOFF
+  };
 }
 
 interface UpdateReturnStatusRequest {
   status: ReturnRequest["status"];
   notes?: string;
+  pickup_deadline?: string; // ISO — requis uniquement pour la transition vers APPROVED
 }
 ```
 
@@ -1326,7 +1424,11 @@ interface UpdateReturnStatusRequest {
 | Changer le statut (admin) | `PUT /returns/:returnId/status` `UpdateReturnStatusRequest`         |
 | Retours d'une commande    | `GET /orders/:orderId/returns` → `ReturnRequest[]` (owner ou admin) |
 
-**Point d'attention** : `POST /returns` requiert que la commande soit `DELIVERED` — afficher le bouton "Demander un retour" uniquement pour les commandes dans cet état côté client. Un passage à `COMPLETED` déclenche en cascade : remboursement, réintégration de stock, reversal des points fidélité — informer l'utilisateur que ces effets sont automatiques et peuvent prendre quelques instants à se refléter (event bus asynchrone, fire-and-forget).
+**Points d'attention** :
+
+- `POST /returns` requiert que la commande soit `DELIVERED`, et qu'aucun retour `PENDING`/`APPROVED` ne soit déjà actif sur cette commande (409 sinon).
+- La transition vers `APPROVED` requiert `pickup_deadline` dans le body — c'est à ce moment qu'une `PickupRequest` est automatiquement matérialisée (voir §16), avec la méthode de collecte choisie à la création du retour (`collection.method`).
+- Un passage à `COMPLETED` déclenche en cascade : remboursement des paiements complétés, réintégration du stock, reversal des points fidélité, et passage de `Order.status → REFUNDED` (fire-and-forget via event bus, peut prendre quelques instants).
 
 ---
 
@@ -1334,17 +1436,52 @@ interface UpdateReturnStatusRequest {
 
 ```ts
 interface DashboardStats {
-  products: { total: number; addedThisMonth: number };
-  orders: { total: number; thisMonth: number; trend: number }; // trend en %
-  users: { total: number; active: number };
-  payments: { totalAmountThisMonth: number; currency: "XAF"; trend: number };
-  inventory: { lowStockCount: number };
-  shipments: { inProgress: number; trend: number };
+  products: {
+    total: number;
+    byStatus: Record<"DRAFT" | "ACTIVE" | "ARCHIVED", number>;
+    addedThisMonth: number;
+  };
+  orders: {
+    total: number;
+    byStatus: Record<Order["status"], number>;
+    thisMonth: number;
+    trend: number; // %
+  };
+  users: {
+    total: number;
+    active: number;
+    newThisMonth: number;
+    byRole: Record<"USER" | "ADMIN" | "MANAGER" | "SUPPORT", number>;
+  };
+  payments: {
+    totalAmountThisMonth: number;
+    totalAmountAllTime: number;
+    currency: "XAF";
+    trend: number;
+    pendingCodCount: number;
+  };
+  inventory: {
+    lowStockCount: number;
+    outOfStockCount: number;
+  };
+  shipments: {
+    inProgress: number;
+    trend: number;
+    pendingPickupRequests: number;
+  };
   promotions: {
     active: number;
     couponUsageThisMonth: number;
     revenueFromCouponsThisMonth: number;
     currency: "XAF";
+  };
+  returns: {
+    pending: number;
+    thisMonth: number;
+  };
+  reviews: {
+    total: number;
+    averageRating: number;
   };
 }
 
@@ -1357,7 +1494,7 @@ interface SalesChartResponse {
 ```
 
 | Action               | Appel                                                           |
-| -------------------- | ----------------------------------------------------------------- |
+| -------------------- | --------------------------------------------------------------- |
 | Statistiques         | `GET /dashboard/stats` → `DashboardStats`                       |
 | Graphique des ventes | `GET /dashboard/sales-chart?year&period` → `SalesChartResponse` |
 
