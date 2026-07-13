@@ -406,30 +406,49 @@ C'est le point d'entrée recommandé pour la page "mes demandes d'enlèvement" �
 
 ### 6.17 Promotions, remises & coupons (`/promotions`, `/coupons`)
 
-| Méthode | Route                                            | Auth   | Description                                                                                        |
-| ------- | ------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------- |
-| GET     | `/promotions`                                    | Admin  | `?status&isActive&page&limit`                                                                      |
-| GET     | `/promotions/active`                             | Public | Promotions actuellement actives, triées par date de fin                                            |
-| GET     | `/promotions/slug/:slug`                         | Public | —                                                                                                  |
-| GET     | `/promotions/slug/:slug/products`                | Public | Produits affectés + `pricing` calculé                                                              |
-| GET     | `/promotions/:promotionId`                       | Admin  | —                                                                                                  |
-| GET     | `/promotions/:promotionId/products`              | Admin  | —                                                                                                  |
-| POST    | `/promotions`                                    | Admin  | `{ name, slug, description?, startDate, endDate, isActive? }`                                      |
-| PUT     | `/promotions/:promotionId`                       | Admin  | —                                                                                                  |
-| PATCH   | `/promotions/:promotionId/toggle`                | Admin  | Bascule `isActive`                                                                                 |
-| DELETE  | `/promotions/:promotionId`                       | Admin  | —                                                                                                  |
-| POST    | `/promotions/:promotionId/images`                | Admin  | multipart `images` (5 max)                                                                         |
-| DELETE  | `/promotions/:promotionId/images`                | Admin  | body `{ imageUrl }`                                                                                |
-| POST    | `/promotions/:promotionId/discounts`             | Admin  | `{ type: PERCENTAGE\|FIXED_AMOUNT, value, categoryId?, productIds? }` (au moins un ciblage requis) |
-| DELETE  | `/promotions/:promotionId/discounts/:discountId` | Admin  | —                                                                                                  |
-| GET     | `/promotions/:promotionId/coupons`               | Admin  | Chaque coupon inclut `effectiveIsActive` (calculé — voir §7.3)                                     |
-| POST    | `/promotions/:promotionId/coupons`               | Admin  | `{ code, maxUses?, perUserLimit?, startDate?, endDate?, isActive? }`                               |
-| DELETE  | `/promotions/:promotionId/coupons/:couponId`     | Admin  | —                                                                                                  |
-| POST    | `/coupons/validate`                              | User   | `{ code, basketId?, items? }` — retourne un `preview` du montant si `items` fourni                 |
+| Méthode | Route                                            | Auth   | Description                                                                                                                                    |
+| ------- | ------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/promotions`                                    | Admin  | `?status&isActive&page&limit`                                                                                                                  |
+| GET     | `/promotions/active`                             | Public | `?slot=hero&page&limit` — promotions actuellement actives, triées par date de fin ; `slot=hero` renvoie les promos mises en avant pour le hero |
+| GET     | `/promotions/slug/:slug`                         | Public | —                                                                                                                                              |
+| GET     | `/promotions/slug/:slug/products`                | Public | Produits affectés + `pricing` calculé                                                                                                          |
+| GET     | `/promotions/:promotionId`                       | Admin  | —                                                                                                                                              |
+| GET     | `/promotions/:promotionId/products`              | Admin  | —                                                                                                                                              |
+| POST    | `/promotions`                                    | Admin  | `{ name, slug, description?, startDate, endDate, isActive? }`                                                                                  |
+| PUT     | `/promotions/:promotionId`                       | Admin  | —                                                                                                                                              |
+| PATCH   | `/promotions/:promotionId/toggle`                | Admin  | Bascule `isActive`                                                                                                                             |
+| DELETE  | `/promotions/:promotionId`                       | Admin  | —                                                                                                                                              |
+| POST    | `/promotions/:promotionId/images`                | Admin  | multipart `images` (5 max)                                                                                                                     |
+| DELETE  | `/promotions/:promotionId/images`                | Admin  | body `{ imageUrl }`                                                                                                                            |
+| POST    | `/promotions/:promotionId/discounts`             | Admin  | `{ type: PERCENTAGE\|FIXED_AMOUNT, value, categoryId?, productIds? }` (au moins un ciblage requis)                                             |
+| DELETE  | `/promotions/:promotionId/discounts/:discountId` | Admin  | —                                                                                                                                              |
+| GET     | `/promotions/:promotionId/coupons`               | Admin  | Chaque coupon inclut `effectiveIsActive` (calculé — voir §7.3)                                                                                 |
+| POST    | `/promotions/:promotionId/coupons`               | Admin  | `{ code, maxUses?, perUserLimit?, startDate?, endDate?, isActive? }`                                                                           |
+| DELETE  | `/promotions/:promotionId/coupons/:couponId`     | Admin  | —                                                                                                                                              |
+| POST    | `/coupons/validate`                              | User   | `{ code, basketId?, items? }` — retourne un `preview` du montant si `items` fourni                                                             |
 
 Le `status` d'une promotion (`SCHEDULED / ACTIVE / EXPIRED / CANCELLED`) est **recalculé dynamiquement** à chaque lecture à partir des dates — ne pas se fier à un statut mis en cache côté frontend au-delà de quelques minutes. De même, `effectiveIsActive` sur un coupon reflète l'état opérationnel réel (dates, plafond d'utilisation) indépendamment du champ `isActive` stocké.
 
 ⚠️ **Point d'attention connu** : après expiration d'une promotion (`endDate` dépassée), le prix remisé peut rester visible sur `/product` jusqu'à expiration du cache Redis des produits (TTL piloté par `cache.default_ttl_seconds`, 5 minutes par défaut — voir §6.21). `/promotions/active` reflète en revanche l'état réel immédiatement. Ne pas construire de logique de countdown critique sur le prix produit.
+
+### Popups (`/popups`)
+
+| Méthode | Route              | Auth   | Description                                                                                                                                     |
+| ------- | ------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/popups/active`   | Public | Retourne les popups actuellement actifs ; chaque item expose aussi `resolvedUrl` calculé côté serveur                                           |
+| GET     | `/popups`          | Admin  | `?isActive&targetType&page&limit`                                                                                                               |
+| GET     | `/popups/:popupId` | Admin  | —                                                                                                                                               |
+| POST    | `/popups`          | Admin  | `{ title, imageUrl?, message?, isActive?, startDate?, endDate?, targetType, targetId?, externalUrl?, ctaLabel?, displayFrequency?, priority? }` |
+| PUT     | `/popups/:popupId` | Admin  | Champs partiels, validation Zod                                                                                                                 |
+| DELETE  | `/popups/:popupId` | Admin  | —                                                                                                                                               |
+
+Règles métier côté frontend à connaître :
+
+- `targetType` ∈ `PROMOTION | CATEGORY | PRODUCT | INFO | EXTERNAL_LINK`
+- pour `PROMOTION`, `CATEGORY` et `PRODUCT`, `targetId` est requis
+- pour `EXTERNAL_LINK`, `externalUrl` est requis
+- pour `INFO`, aucun lien n'est requis
+- `GET /popups/active` renvoie déjà `resolvedUrl` prêt à être consommé par le frontend, sans devoir reconstruire l’URL de destination
 
 ### 6.18 Fidélité (`/loyalty`)
 
@@ -485,10 +504,94 @@ Quand un retour passe à `COMPLETED` : `Order.status → REFUNDED`, remboursemen
 
 ### 6.20 Tableau de bord (`/dashboard`)
 
-| Méthode | Route                    | Auth  | Description                                                                                         |
-| ------- | ------------------------ | ----- | --------------------------------------------------------------------------------------------------- |
-| GET     | `/dashboard/stats`       | Admin | KPIs globaux (produits, commandes, paiements, stock faible, expéditions, promotions, retours, avis) |
-| GET     | `/dashboard/sales-chart` | Admin | `?year&period` — série mensuelle de CA/commandes                                                    |
+| Méthode | Route                    | Auth  | Description                                                                                                                                                |
+| ------- | ------------------------ | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/dashboard/stats`       | Admin | Retourne les KPIs agrégés globaux du back-office : `products`, `orders`, `users`, `payments`, `inventory`, `shipments`, `promotions`, `returns`, `reviews` |
+| GET     | `/dashboard/sales-chart` | Admin | `?year&period` — série mensuelle de CA et nombre de commandes pour l'année demandée ; le calcul actuel renvoie un point par mois                           |
+
+Exemple de payload renvoyé par `GET /dashboard/stats` :
+
+```json
+{
+  "status": true,
+  "data": {
+    "products": {
+      "total": 123,
+      "byStatus": { "DRAFT": 10, "ACTIVE": 100, "ARCHIVED": 13 },
+      "addedThisMonth": 5
+    },
+    "orders": {
+      "total": 87,
+      "byStatus": {
+        "PENDING": 2,
+        "CONFIRMED": 3,
+        "PROCESSING": 4,
+        "SHIPPED": 10,
+        "DELIVERED": 58,
+        "CANCELLED": 5,
+        "REFUNDED": 5
+      },
+      "thisMonth": 14,
+      "trend": 12
+    },
+    "users": {
+      "total": 540,
+      "active": 420,
+      "newThisMonth": 18,
+      "byRole": { "USER": 500, "ADMIN": 10, "MANAGER": 5, "SUPPORT": 25 }
+    },
+    "payments": {
+      "totalAmountThisMonth": 1250000,
+      "totalAmountAllTime": 9800000,
+      "currency": "XAF",
+      "trend": 8,
+      "pendingCodCount": 3
+    },
+    "inventory": {
+      "lowStockCount": 7,
+      "outOfStockCount": 2
+    },
+    "shipments": {
+      "inProgress": 12,
+      "trend": -3,
+      "pendingPickupRequests": 4
+    },
+    "promotions": {
+      "active": 5,
+      "couponUsageThisMonth": 23,
+      "revenueFromCouponsThisMonth": 65000,
+      "currency": "XAF"
+    },
+    "returns": {
+      "pending": 4,
+      "thisMonth": 8
+    },
+    "reviews": {
+      "total": 44,
+      "averageRating": 4.6
+    }
+  }
+}
+```
+
+Exemple de payload renvoyé par `GET /dashboard/sales-chart` :
+
+```json
+{
+  "status": true,
+  "data": {
+    "period": "monthly",
+    "year": 2026,
+    "currency": "XAF",
+    "points": [
+      { "label": "Jan", "amount": 120000, "orderCount": 12 },
+      { "label": "Fév", "amount": 98000, "orderCount": 9 }
+    ]
+  }
+}
+```
+
+> Remarque côté frontend : les agrégats du dashboard sont destinés à l'admin. Les valeurs `trend` sont des pourcentages calculés côté serveur et la devise est actuellement `XAF`.
 
 ### 6.21 Paramètres (`/settings`)
 
