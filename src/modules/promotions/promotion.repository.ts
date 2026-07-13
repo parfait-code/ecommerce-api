@@ -177,6 +177,9 @@ export const promotionRepository = {
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
         isActive: data.isActive,
+        isFeaturedInHero: data.isFeaturedInHero,
+        heroPosition: data.heroPosition,
+        heroImages: data.heroImages,
         status: new Date(data.startDate) <= new Date() ? "ACTIVE" : "SCHEDULED",
       },
       include: promotionInclude,
@@ -194,8 +197,22 @@ export const promotionRepository = {
         ...(data.startDate && { startDate: new Date(data.startDate) }),
         ...(data.endDate && { endDate: new Date(data.endDate) }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
+        ...(data.isFeaturedInHero !== undefined && {
+          isFeaturedInHero: data.isFeaturedInHero,
+        }),
+        ...(data.heroPosition !== undefined && {
+          heroPosition: data.heroPosition,
+        }),
+        ...(data.heroImages !== undefined && { heroImages: data.heroImages }),
       },
       include: promotionInclude,
+    }),
+
+  findFeaturedInHero: () =>
+    prisma.promotion.findMany({
+      where: { isFeaturedInHero: true, isActive: true },
+      include: promotionInclude,
+      orderBy: [{ heroPosition: "asc" }, { endDate: "asc" }],
     }),
 
   toggle: (id: string, isActive: boolean) =>

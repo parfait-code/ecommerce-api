@@ -107,6 +107,20 @@ enum LoyaltyEventType {
   ADJUSTED
 }
 
+enum PopupTargetType {
+  PROMOTION
+  CATEGORY
+  PRODUCT
+  INFO
+  EXTERNAL_LINK
+}
+
+enum PopupDisplayFrequency {
+  ONCE_PER_SESSION
+  ONCE_PER_DAY
+  ALWAYS
+}
+
 model Setting {
   id          String      @id @default(cuid())
   key         String      @unique
@@ -727,11 +741,39 @@ model Promotion {
   isActive    Boolean         @default(true)
   startDate   DateTime
   endDate     DateTime
+
+  isFeaturedInHero Boolean  @default(false)
+  heroPosition     Int?
+  heroImages       String[] @default([])
+
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
   coupons   CouponCode[]
   discounts Discount[]
+
+  @@index([isFeaturedInHero])
+}
+
+model Popup {
+  id               String                @id @default(cuid())
+  title            String
+  imageUrl         String?
+  message          String?
+  isActive         Boolean               @default(true)
+  startDate        DateTime?
+  endDate          DateTime?
+  targetType       PopupTargetType
+  targetId         String?
+  externalUrl      String?
+  ctaLabel         String?
+  displayFrequency PopupDisplayFrequency @default(ONCE_PER_SESSION)
+  priority         Int                   @default(0)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([isActive])
+  @@index([targetType])
 }
 
 model Discount {

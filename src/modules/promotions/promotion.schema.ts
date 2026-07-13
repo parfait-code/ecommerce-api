@@ -14,6 +14,9 @@ export const createPromotionSchema = z
     startDate: z.string().datetime(),
     endDate: z.string().datetime(),
     isActive: z.boolean().default(true),
+    isFeaturedInHero: z.boolean().default(false),
+    heroPosition: z.number().int().min(0).optional(),
+    heroImages: z.array(z.string().url()).default([]),
   })
   .refine((data) => new Date(data.endDate) > new Date(data.startDate), {
     message: "endDate must be after startDate",
@@ -33,6 +36,9 @@ export const updatePromotionSchema = z
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
     isActive: z.boolean().optional(),
+    isFeaturedInHero: z.boolean().optional(),
+    heroPosition: z.number().int().min(0).optional(),
+    heroImages: z.array(z.string().url()).optional(),
   })
   .refine(
     (data) => {
@@ -46,10 +52,6 @@ export const updatePromotionSchema = z
       path: ["endDate"],
     },
   );
-
-// ============================================
-// SCHÉMAS POUR LES REMISES (DISCOUNTS)
-// ============================================
 
 const discountBaseSchema = z.object({
   type: z.enum(["PERCENTAGE", "FIXED_AMOUNT"]),
@@ -85,10 +87,6 @@ export const updateDiscountSchema = z
       path: ["categoryId"],
     },
   );
-
-// ============================================
-// SCHÉMAS POUR LES COUPONS
-// ============================================
 
 export const createCouponSchema = z
   .object({
@@ -134,10 +132,6 @@ export const updateCouponSchema = z
     },
   );
 
-// ============================================
-// SCHÉMA DE VALIDATION DE COUPON
-// ============================================
-
 export const validateCouponSchema = z.object({
   code: z.string().min(1, "Code is required"),
   basketId: z.string().optional(),
@@ -151,10 +145,6 @@ export const validateCouponSchema = z.object({
     )
     .optional(),
 });
-
-// ============================================
-// TYPES INFÉRÉS
-// ============================================
 
 export type CreatePromotionDto = z.infer<typeof createPromotionSchema>;
 export type UpdatePromotionDto = z.infer<typeof updatePromotionSchema>;

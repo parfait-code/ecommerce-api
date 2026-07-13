@@ -25,7 +25,7 @@ export const promotionController = {
   getActive: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await promotionService.getActive(
-        req.query as { page?: string; limit?: string },
+        req.query as { page?: string; limit?: string; slot?: string },
       );
       respond(res, result);
     } catch (err) {

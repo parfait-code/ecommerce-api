@@ -40,6 +40,12 @@ CREATE TYPE "ReturnStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLE
 -- CreateEnum
 CREATE TYPE "LoyaltyEventType" AS ENUM ('EARNED', 'REDEEMED', 'EXPIRED', 'ADJUSTED');
 
+-- CreateEnum
+CREATE TYPE "PopupTargetType" AS ENUM ('PROMOTION', 'CATEGORY', 'PRODUCT', 'INFO', 'EXTERNAL_LINK');
+
+-- CreateEnum
+CREATE TYPE "PopupDisplayFrequency" AS ENUM ('ONCE_PER_SESSION', 'ONCE_PER_DAY', 'ALWAYS');
+
 -- CreateTable
 CREATE TABLE "Setting" (
     "id" TEXT NOT NULL,
@@ -534,10 +540,34 @@ CREATE TABLE "Promotion" (
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "startDate" TIMESTAMP(3) NOT NULL,
     "endDate" TIMESTAMP(3) NOT NULL,
+    "isFeaturedInHero" BOOLEAN NOT NULL DEFAULT false,
+    "heroPosition" INTEGER,
+    "heroImages" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Promotion_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Popup" (
+    "id" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "imageUrl" TEXT,
+    "message" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "startDate" TIMESTAMP(3),
+    "endDate" TIMESTAMP(3),
+    "targetType" "PopupTargetType" NOT NULL,
+    "targetId" TEXT,
+    "externalUrl" TEXT,
+    "ctaLabel" TEXT,
+    "displayFrequency" "PopupDisplayFrequency" NOT NULL DEFAULT 'ONCE_PER_SESSION',
+    "priority" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Popup_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -812,6 +842,15 @@ CREATE INDEX "LoyaltyTransaction_orderId_idx" ON "LoyaltyTransaction"("orderId")
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Promotion_slug_key" ON "Promotion"("slug");
+
+-- CreateIndex
+CREATE INDEX "Promotion_isFeaturedInHero_idx" ON "Promotion"("isFeaturedInHero");
+
+-- CreateIndex
+CREATE INDEX "Popup_isActive_idx" ON "Popup"("isActive");
+
+-- CreateIndex
+CREATE INDEX "Popup_targetType_idx" ON "Popup"("targetType");
 
 -- CreateIndex
 CREATE INDEX "Discount_promotionId_idx" ON "Discount"("promotionId");

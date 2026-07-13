@@ -62,12 +62,28 @@ export const promotionService = {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
 
-  getActive: async (query: { page?: string; limit?: string }) => {
-    const promotions = await promotionRepository.findAll({ isActive: "true" });
+  getActive: async (query: {
+    page?: string;
+    limit?: string;
+    slot?: string;
+  }) => {
+    const isHeroSlot = query.slot === "hero";
+
+    const promotions = isHeroSlot
+      ? await promotionRepository.findFeaturedInHero()
+      : await promotionRepository.findAll({ isActive: "true" });
+
     const active = promotions
       .map(withDisplayStatus)
       .filter((p) => p.status === "ACTIVE")
-      .sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
+      .sort((a, b) => {
+        if (isHeroSlot) {
+          const posA = a.heroPosition ?? Number.MAX_SAFE_INTEGER;
+          const posB = b.heroPosition ?? Number.MAX_SAFE_INTEGER;
+          if (posA !== posB) return posA - posB;
+        }
+        return a.endDate.getTime() - b.endDate.getTime();
+      });
 
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
@@ -76,7 +92,6 @@ export const promotionService = {
 
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   },
-
   getCoupons: async (
     promotionId: string,
     query: { page?: string; limit?: string } = {},
