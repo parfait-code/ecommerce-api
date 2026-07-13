@@ -35,6 +35,7 @@ export interface Target {
   discountId?: string;
   couponId?: string;
   returnRequestId?: string;
+  popupId?: string;
   [key: string]: unknown;
 }
 
@@ -166,6 +167,8 @@ export type PickupEvent =
   | "PICKUP_LOCATION_UPDATED"
   | "PICKUP_STATUS_CHANGED";
 
+export type PopupEvent = "POPUP_CREATED" | "POPUP_UPDATED" | "POPUP_DELETED";
+
 export type BusinessEvent =
   | AuthEvent
   | ProductEvent
@@ -184,7 +187,8 @@ export type BusinessEvent =
   | CouponEvent
   | WishlistEvent
   | BasketEvent
-  | PickupEvent;
+  | PickupEvent
+  | PopupEvent;
 
 // ─── Audit Events (section 14) ────────────────────────────────────────────────
 

@@ -23,6 +23,7 @@ import pickupRequestRouter from "./modules/pickup-requests/pickup-request.router
 import dashboardRouter from "./modules/dashboard/dashboard.router";
 import categoryRouter from "./modules/categories/category.router";
 import promotionRouter from "./modules/promotions/promotion.router";
+import popupRouter from "./modules/popups/popup.router";
 import attributeRouter from "./modules/attributes/attribute.router";
 import combinationRouter from "./modules/combinations/combination.router";
 import tagRouter from "./modules/tags/tag.router";
@@ -97,6 +98,7 @@ app.use(loyaltyRouter);
 app.use(wishlistRouter);
 app.use(returnRouter);
 app.use(settingRouter);
+app.use(popupRouter);
 
 app.use(errorHandler);
 
