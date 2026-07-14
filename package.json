@@ -19,6 +19,7 @@
     "seed:inventory": "tsx scripts/seed-inventory.ts",
     "seed:shipping-methods": "tsx scripts/seed-shipping-methods.ts",
     "seed:users": "tsx scripts/seed-users.ts",
+    "seed:popups": "tsx scripts/seed-popups.ts",
     "test": "dotenv -e .env.test jest --runInBand",
     "test:unit": "dotenv -e .env.test jest --runInBand tests/unit",
     "test:integration": "dotenv -e .env.test jest --runInBand tests/integration",

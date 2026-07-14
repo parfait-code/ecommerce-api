@@ -158,6 +158,7 @@ npm run seed:users            # clients de test + adresses (indépendant)
 
 npm run seed:tags
 npm run seed:promotions
+npm run seed:popups
 ```
 
 ---
