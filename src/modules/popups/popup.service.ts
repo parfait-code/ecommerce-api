@@ -5,6 +5,10 @@ import { productRepository } from "../products/product.repository";
 import { CreatePopupDto, UpdatePopupDto } from "./popup.schema";
 import { AppError } from "../../shared/utils/app-error";
 import { businessLogger } from "../../shared/logger";
+import {
+  uploadImage as uploadR2Image,
+  deleteImage as deleteR2Image,
+} from "../../shared/utils/upload";
 
 interface ResolvableTarget {
   targetType: string;
@@ -102,5 +106,49 @@ export const popupService = {
     });
 
     return { message: "Popup deleted successfully" };
+  },
+
+  // ── Upload / suppression de l'image (Cloudflare R2) ───────────────────
+  // Aligné sur categories/products/promotions : l'API uploade elle-même
+  // le fichier et stocke l'URL publique générée dans `imageUrl`.
+  uploadImage: async (id: string, file: Express.Multer.File) => {
+    const popup = await popupRepository.findById(id);
+    if (!popup) throw new AppError("Popup not found", 404);
+
+    const newImageUrl = await uploadR2Image(file, "popups");
+    if (popup.imageUrl) await deleteR2Image(popup.imageUrl);
+
+    const updated = await popupRepository.update(id, {
+      imageUrl: newImageUrl,
+    } as any);
+
+    businessLogger.log("POPUP_UPDATED", {
+      service: "popups",
+      actor: { userId: null, role: "ADMIN" },
+      target: { popupId: id },
+      metadata: { fields: ["imageUrl"] },
+    });
+
+    return withResolvedUrl(updated);
+  },
+
+  deleteImage: async (id: string) => {
+    const popup = await popupRepository.findById(id);
+    if (!popup) throw new AppError("Popup not found", 404);
+    if (!popup.imageUrl) throw new AppError("No image set on this popup", 404);
+
+    await deleteR2Image(popup.imageUrl);
+    const updated = await popupRepository.update(id, {
+      imageUrl: null,
+    } as any);
+
+    businessLogger.log("POPUP_UPDATED", {
+      service: "popups",
+      actor: { userId: null, role: "ADMIN" },
+      target: { popupId: id },
+      metadata: { fields: ["imageUrl"] },
+    });
+
+    return withResolvedUrl(updated);
   },
 };

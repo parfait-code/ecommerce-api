@@ -2,6 +2,7 @@ import { Router } from "express";
 import { tagController } from "./tag.controller";
 import { authGuard } from "../../shared/middlewares/auth-guard";
 import { adminGuard } from "../../shared/middlewares/admin-guard";
+import { optionalAuthGuard } from "../../shared/middlewares/optional-auth-guard";
 import { validate } from "../../shared/middlewares/validate";
 import {
   createTagSchema,
@@ -35,6 +36,10 @@ router.put(
   validate(setProductTagsSchema),
   tagController.setProductTags,
 );
-router.get("/product/:productId/tags", tagController.getByProduct);
+router.get(
+  "/product/:productId/tags",
+  optionalAuthGuard,
+  tagController.getByProduct,
+);
 
 export default router;

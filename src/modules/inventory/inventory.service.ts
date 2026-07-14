@@ -30,7 +30,9 @@ export const inventoryService = {
     productId: string,
     query: { page?: string; limit?: string },
   ) => {
-    const product = await productRepository.findById(productId);
+    // includeInactive: true — route admin, la vérification stock doit
+    // rester possible même si le produit est DRAFT/ARCHIVED.
+    const product = await productRepository.findById(productId, true);
     if (!product) throw new AppError("Product not found", 404);
 
     const [items, total] = await inventoryRepository.findLinesByProduct(

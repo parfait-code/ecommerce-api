@@ -301,7 +301,9 @@ export const promotionService = {
 
     if (dto.productIds) {
       for (const productId of dto.productIds) {
-        const product = await productRepository.findById(productId);
+        // includeInactive: true — un admin doit pouvoir cibler un discount
+        // sur un produit DRAFT/ARCHIVED (ex: préparer une promo avant activation).
+        const product = await productRepository.findById(productId, true);
         if (!product) throw new AppError(`Product ${productId} not found`, 404);
       }
     }

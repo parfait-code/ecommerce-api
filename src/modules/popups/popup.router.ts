@@ -3,6 +3,7 @@ import { popupController } from "./popup.controller";
 import { authGuard } from "../../shared/middlewares/auth-guard";
 import { adminGuard } from "../../shared/middlewares/admin-guard";
 import { validate } from "../../shared/middlewares/validate";
+import { upload } from "../../shared/middlewares/multer";
 import { createPopupSchema, updatePopupSchema } from "./popup.schema";
 
 const router = Router();
@@ -31,6 +32,21 @@ router.delete(
   authGuard,
   adminGuard,
   popupController.delete,
+);
+
+// ── Upload / suppression d'image (multipart, champ "image") ────────────
+router.post(
+  "/popups/:popupId/image",
+  authGuard,
+  adminGuard,
+  upload.single("image"),
+  popupController.uploadImage,
+);
+router.delete(
+  "/popups/:popupId/image",
+  authGuard,
+  adminGuard,
+  popupController.deleteImage,
 );
 
 export default router;

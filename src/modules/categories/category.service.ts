@@ -8,6 +8,8 @@ import {
   deleteImage as deleteR2Image,
 } from "../../shared/utils/upload";
 import { prisma } from "../../shared/config/database";
+import { promotionRepository } from "../promotions/promotion.repository";
+import { getBestPricing } from "../promotions/promotion.pricing";
 
 const CACHE_KEYS = {
   all: "categories:all",
@@ -93,9 +95,19 @@ export const categoryService = {
       query,
       includeInactive,
     );
+
+    // Correctif — cette route ne calculait jamais `pricing` (contrairement à
+    // product.service.ts::getAll), donc un produit avec une promotion active
+    // perdait son prix remisé une fois affiché via la catégorie.
+    const activeDiscounts = await promotionRepository.findActiveDiscounts();
+    const itemsWithPricing = items.map((item: any) => ({
+      ...item,
+      pricing: getBestPricing(item, activeDiscounts as any),
+    }));
+
     const result = {
       category: { id: category.id, name: category.name, slug: category.slug },
-      items,
+      items: itemsWithPricing,
       total,
       page,
       limit,

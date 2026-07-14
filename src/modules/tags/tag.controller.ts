@@ -62,9 +62,14 @@ export const tagController = {
 
   getByProduct: async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isAdmin = req.user?.role === "ADMIN";
+      const includeInactive = isAdmin && req.query.includeInactive === "true";
       respond(
         res,
-        await tagService.getByProduct(req.params.productId as string),
+        await tagService.getByProduct(
+          req.params.productId as string,
+          includeInactive,
+        ),
       );
     } catch (err) {
       next(err);
