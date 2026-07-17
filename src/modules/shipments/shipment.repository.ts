@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/config/database";
 import { CreateShipmentDto, TrackingEventDto } from "./shipment.schema";
+import { ShipmentStatus } from "@prisma/client";
 import { paginate } from "../../shared/utils/pagination";
 
 const shipmentInclude = {
@@ -60,19 +61,27 @@ export const shipmentRepository = {
     ]);
   },
 
+  // Entrée manuelle libre (ex: "Colis arrivé au tri Douala") — indépendante
+  // d'un changement de statut officiel.
   addTrackingEvent: (shipmentId: string, dto: TrackingEventDto) =>
     prisma.trackingEvent.create({
       data: { shipmentId, status: dto.status, location: dto.location },
     }),
 
-  updateStatus: (
-    id: string,
-    status: "PENDING" | "IN_TRANSIT" | "DELIVERED" | "CANCELLED",
-  ) =>
-    prisma.shipment.update({
-      where: { id },
-      data: { status },
-      include: shipmentInclude,
+  updateStatus: (id: string, status: ShipmentStatus, reason?: string) =>
+    prisma.$transaction(async (tx) => {
+      await tx.trackingEvent.create({
+        data: {
+          shipmentId: id,
+          status: reason ?? `Status automatically changed to ${status}`,
+        },
+      });
+
+      return tx.shipment.update({
+        where: { id },
+        data: { status },
+        include: shipmentInclude,
+      });
     }),
 
   createLabel: (shipmentId: string, labelUrl: string) =>

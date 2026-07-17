@@ -55,7 +55,11 @@ export const registerShipmentEventListeners = (): void => {
       if (shipment.status === "CANCELLED" || shipment.status === "DELIVERED")
         return;
 
-      await shipmentRepository.updateStatus(shipment.id, "CANCELLED");
+      await shipmentRepository.updateStatus(
+        shipment.id,
+        "CANCELLED",
+        "Automatically cancelled: linked order was cancelled",
+      );
     } catch (err) {
       systemLogger.error("ORDER_SYNC_FAILED", {
         service: "shipment-listeners",

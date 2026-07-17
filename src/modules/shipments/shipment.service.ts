@@ -20,13 +20,6 @@ const generateEstimatedDelivery = () => {
   return date.toISOString();
 };
 
-/**
- * Shipment.orderId n'est PAS une relation Prisma (juste un champ texte dans le
- * schéma) — on doit donc résoudre la commande liée séparément pour vérifier
- * qu'un client ne peut agir/lire que sur les expéditions de ses propres
- * commandes. Sans orderId (expédition créée hors commande), seul un admin
- * peut y accéder.
- */
 const assertShipmentAccess = async (
   shipment: { orderId: string | null },
   userId: string,
@@ -109,7 +102,6 @@ export const shipmentService = {
     return shipmentRepository.findByOrderId(orderId);
   },
 
-  // Réservé admin au niveau router — action opérationnelle transporteur
   addTrackingEvent: async (id: string, dto: TrackingEventDto) => {
     const shipment = await shipmentRepository.findById(id);
     if (!shipment) throw new AppError("Shipment not found", 404);
@@ -117,7 +109,11 @@ export const shipmentService = {
     await shipmentRepository.addTrackingEvent(id, dto);
 
     if (dto.shipment_status) {
-      await shipmentRepository.updateStatus(id, dto.shipment_status);
+      await shipmentRepository.updateStatus(
+        id,
+        dto.shipment_status,
+        dto.location ? `${dto.status} (${dto.location})` : dto.status,
+      );
 
       businessLogger.log(
         dto.shipment_status === "DELIVERED"
@@ -151,14 +147,11 @@ export const shipmentService = {
     if (shipment.status === "DELIVERED" && dto.status !== "DELIVERED")
       throw new AppError("Cannot change status of a delivered shipment", 400);
 
-    const updated = await shipmentRepository.updateStatus(id, dto.status);
-
-    if (dto.reason) {
-      await shipmentRepository.addTrackingEvent(id, {
-        status: dto.reason,
-        location: undefined,
-      });
-    }
+    const updated = await shipmentRepository.updateStatus(
+      id,
+      dto.status,
+      dto.reason,
+    );
 
     if (dto.status === "DELIVERED") {
       businessLogger.log("SHIPMENT_DELIVERED", {
@@ -199,7 +192,11 @@ export const shipmentService = {
     if (shipment.status === "CANCELLED")
       throw new AppError("Shipment already cancelled", 400);
 
-    const cancelled = await shipmentRepository.updateStatus(id, "CANCELLED");
+    const cancelled = await shipmentRepository.updateStatus(
+      id,
+      "CANCELLED",
+      "Cancelled by user",
+    );
 
     businessLogger.log("SHIPMENT_FAILED", {
       service: "shipments",
