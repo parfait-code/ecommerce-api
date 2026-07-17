@@ -4,10 +4,6 @@ import { CreateCategoryDto, UpdateCategoryDto } from "./category.schema";
 const categoryInclude = (includeInactive: boolean) => ({
   parent: { select: { id: true, name: true, slug: true } },
   children: { select: { id: true, name: true, slug: true } },
-  // En contexte public (includeInactive: false), le compteur ne doit
-  // refléter que les produits réellement visibles (ACTIVE) — sinon un
-  // badge "12 produits" côté client compterait aussi des DRAFT/ARCHIVED
-  // invisibles pour lui. En contexte admin, on compte tout.
   _count: {
     select: {
       products: includeInactive
@@ -101,4 +97,31 @@ export const categoryRepository = {
 
   existsBySlug: (slug: string) =>
     prisma.category.findUnique({ where: { slug } }),
+
+  // ── Nouveau — support du comptage récursif (direct + descendants) ────────
+
+  // Utilisé pour getAll(): une seule requête groupée pour toutes les
+  // catégories, plutôt qu'une requête de comptage par catégorie.
+  countProductsGroupedByCategory: (includeInactive: boolean) =>
+    prisma.product.groupBy({
+      by: ["categoryId"],
+      where: includeInactive ? undefined : { status: "ACTIVE" as const },
+      _count: { _all: true },
+    }),
+
+  findAllIdsWithParent: () =>
+    prisma.category.findMany({ select: { id: true, parentId: true } }),
+
+  // Utilisé pour getById()/getBySlug(): comptage direct sur un ensemble
+  // d'ids déjà résolu (catégorie + descendants).
+  countProductsForCategoryIds: (
+    categoryIds: string[],
+    includeInactive = false,
+  ) =>
+    prisma.product.count({
+      where: {
+        categoryId: { in: categoryIds },
+        ...(!includeInactive && { status: "ACTIVE" as const }),
+      },
+    }),
 };

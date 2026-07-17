@@ -19,19 +19,85 @@ const CACHE_KEYS = {
     `categories:${slug}:products:${page}:${limit}`,
 };
 
+// ── Comptage total (direct + descendants) ───────────────────────────────────
+
+// Pour une seule catégorie (getById/getBySlug) : résout ses descendants puis
+// fait un seul count() sur l'ensemble catégorie+descendants.
+const attachTotalProductCount = async (
+  category: any,
+  includeInactive: boolean,
+) => {
+  const descendantIds = await categoryRepository.findDescendantIds(category.id);
+  if (descendantIds.length === 0) return category; // feuille — le _count direct est déjà correct
+
+  const total = await categoryRepository.countProductsForCategoryIds(
+    [category.id, ...descendantIds],
+    includeInactive,
+  );
+
+  return { ...category, _count: { ...category._count, products: total } };
+};
+
+// Pour une liste complète (getAll) : évite le N+1 — une requête groupée pour
+// les comptes directs + une requête pour la structure de l'arbre, puis
+// sommation récursive en mémoire.
+const buildTotalCountResolver = async (includeInactive: boolean) => {
+  const [allCategories, grouped] = await Promise.all([
+    categoryRepository.findAllIdsWithParent(),
+    categoryRepository.countProductsGroupedByCategory(includeInactive),
+  ]);
+
+  const directCount = new Map<string, number>();
+  for (const row of grouped as any[]) {
+    directCount.set(row.categoryId, row._count._all);
+  }
+
+  const childrenMap = new Map<string, string[]>();
+  for (const c of allCategories) {
+    if (c.parentId) {
+      const list = childrenMap.get(c.parentId) ?? [];
+      list.push(c.id);
+      childrenMap.set(c.parentId, list);
+    }
+  }
+
+  const memo = new Map<string, number>();
+  const resolve = (id: string): number => {
+    if (memo.has(id)) return memo.get(id)!;
+    let total = directCount.get(id) ?? 0;
+    for (const childId of childrenMap.get(id) ?? []) {
+      total += resolve(childId);
+    }
+    memo.set(id, total);
+    return total;
+  };
+
+  return resolve;
+};
+
 export const categoryService = {
   getAll: async (includeInactive = false) => {
-    // Admin explicite (includeInactive) → pas de cache partagé avec la vue publique
     if (includeInactive) {
-      return categoryRepository.findAll(true);
+      const categories = await categoryRepository.findAll(true);
+      const resolveTotal = await buildTotalCountResolver(true);
+      return categories.map((c) => ({
+        ...c,
+        _count: { ...c._count, products: resolveTotal(c.id) },
+      }));
     }
 
     const cached = await cache.get(CACHE_KEYS.all);
     if (cached) return cached;
 
     const categories = await categoryRepository.findAll(false);
-    await cache.set(CACHE_KEYS.all, categories);
-    return categories;
+    const resolveTotal = await buildTotalCountResolver(false);
+    const withTotals = categories.map((c) => ({
+      ...c,
+      _count: { ...c._count, products: resolveTotal(c.id) },
+    }));
+
+    await cache.set(CACHE_KEYS.all, withTotals);
+    return withTotals;
   },
 
   getById: async (id: string, includeInactive = false) => {
@@ -46,11 +112,12 @@ export const categoryService = {
     if (!includeInactive && !category.isActive)
       throw new AppError("Category not found", 404);
 
-    if (!includeInactive) await cache.set(cacheKey, category);
-    return category;
+    const withTotal = await attachTotalProductCount(category, includeInactive);
+
+    if (!includeInactive) await cache.set(cacheKey, withTotal);
+    return withTotal;
   },
 
-  // U1 — une catégorie désactivée n'est plus consultable via cette route publique
   getBySlug: async (slug: string, includeInactive = false) => {
     const cacheKey = CACHE_KEYS.bySlug(slug);
     if (!includeInactive) {
@@ -62,11 +129,12 @@ export const categoryService = {
     if (!category || (!includeInactive && !category.isActive))
       throw new AppError("Category not found", 404);
 
-    if (!includeInactive) await cache.set(cacheKey, category);
-    return category;
+    const withTotal = await attachTotalProductCount(category, includeInactive);
+
+    if (!includeInactive) await cache.set(cacheKey, withTotal);
+    return withTotal;
   },
 
-  // U1 — idem, les produits d'une catégorie désactivée ne sont plus listables publiquement
   getProducts: async (
     slug: string,
     query: { page?: string; limit?: string },
@@ -96,9 +164,6 @@ export const categoryService = {
       includeInactive,
     );
 
-    // Correctif — cette route ne calculait jamais `pricing` (contrairement à
-    // product.service.ts::getAll), donc un produit avec une promotion active
-    // perdait son prix remisé une fois affiché via la catégorie.
     const activeDiscounts = await promotionRepository.findActiveDiscounts();
     const itemsWithPricing = items.map((item: any) => ({
       ...item,
@@ -223,11 +288,6 @@ export const categoryService = {
         400,
       );
 
-    // Les enfants directs sont automatiquement orphelinés (parentId -> null)
-    // par le schéma (onDelete: SetNull sur Category.parent) — supprimer un
-    // parent ne supprime jamais sa descendance. On capture enfants avant
-    // suppression pour invalider leur cache : leur champ `parent` inclus
-    // dans les réponses change silencieusement sinon.
     const children = category.children;
 
     await categoryRepository.delete(id);
@@ -263,10 +323,6 @@ export const categoryService = {
     return { message: "Category deleted successfully" };
   },
 
-  // ── Upload image / icône ────────────────────────────────────────────────────
-  // Aligné sur le comportement produit : l'API uploade elle-même le fichier
-  // vers R2 et stocke l'URL résultante — le frontend n'a plus besoin de
-  // connaître/saisir une URL manuellement.
   uploadAssets: async (
     id: string,
     files: {

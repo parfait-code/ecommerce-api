@@ -130,6 +130,7 @@ export const productService = {
       status: ProductStatus.DRAFT,
     });
     await cache.delByPattern("products:all:*");
+    await cache.delByPattern("categories:*");
 
     businessLogger.log("PRODUCT_CREATED", {
       service: "products",
@@ -166,6 +167,7 @@ export const productService = {
 
     await cache.del(CACHE_KEYS.single(id));
     await cache.delByPattern("products:all:*");
+    await cache.delByPattern("categories:*");
 
     businessLogger.log("PRODUCT_UPDATED", {
       service: "products",
