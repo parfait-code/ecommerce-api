@@ -96,6 +96,14 @@ export const inventoryRepository = {
     return result._sum.quantity ?? 0;
   },
 
+  sumDirectStock: async (productId: string): Promise<number> => {
+    const result = await prisma.inventory.aggregate({
+      where: { productId, combinationId: null },
+      _sum: { quantity: true },
+    });
+    return result._sum.quantity ?? 0;
+  },
+
   findLowStock: (threshold: number) =>
     prisma.inventory.findMany({
       where: { quantity: { lte: threshold, gt: 0 } },

@@ -1,6 +1,7 @@
 import { combinationRepository } from "./combination.repository";
 import { productRepository } from "../products/product.repository";
 import { attributeRepository } from "../attributes/attribute.repository";
+import { inventoryRepository } from "../inventory/inventory.repository";
 import { prisma } from "../../shared/config/database";
 import {
   SetVariantOptionsDto,
@@ -83,6 +84,14 @@ export const combinationService = {
     const product = await productRepository.findById(productId, true);
     if (!product) throw new AppError("Product not found", 404);
 
+    const directStock = await inventoryRepository.sumDirectStock(productId);
+    if (directStock > 0) {
+      throw new AppError(
+        `Cannot generate combinations: this product still has ${directStock} unit(s) of stock attached directly (no combination). Move or clear this stock first — a product must be tracked either as a simple product or via combinations, never both.`,
+        400,
+      );
+    }
+
     const selections = await prisma.productAttributeSelection.findMany({
       where: { productId },
     });
@@ -132,9 +141,6 @@ export const combinationService = {
       await combinationRepository.create(productId, optionsKey, combo);
     }
 
-    // S3 — avant de désactiver, on identifie celles qui ont encore du stock
-    // actif pour émettre un avertissement (la désactivation elle-même n'est
-    // PAS bloquée, comme documenté dans le guide).
     const toDeactivate = await combinationRepository.findActiveExcept(
       productId,
       generatedKeys,
@@ -156,9 +162,7 @@ export const combinationService = {
       }
     }
 
-    // Désactive (ne supprime pas) les combinaisons qui ne correspondent plus à la sélection actuelle
     await combinationRepository.deactivateManyExcept(productId, generatedKeys);
-
     await cache.del(`products:${productId}`);
 
     return combinationRepository.findByProduct(productId);
