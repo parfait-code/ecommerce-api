@@ -80,6 +80,8 @@ export const promotionRepository = {
       include: {
         promotion: {
           select: {
+            name: true,
+            slug: true,
             isActive: true,
             status: true,
             startDate: true,
@@ -90,8 +92,6 @@ export const promotionRepository = {
       },
     });
 
-    // Pour chaque discount ciblant une catégorie, résout catégorie + tous ses
-    // descendants — le pricing doit s'appliquer à toute la sous-arborescence.
     return Promise.all(
       discounts.map(async (d) => {
         if (!d.categoryId)

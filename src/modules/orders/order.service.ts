@@ -99,6 +99,17 @@ const releaseReservedStock = async (orderId: string) => {
   await orderReservationRepository.deleteByOrder(orderId);
 };
 
+// Formule identique à shippingMethodService.calculate() — seule source de
+// vérité pour le coût de livraison. Le client ne fournit JAMAIS ce montant :
+// il est toujours recalculé ici, à partir du poids réel des articles commandés.
+const computeShippingCost = (
+  shippingMethod: { basePrice: number; pricePerKg: number },
+  totalWeight: number,
+) =>
+  Math.round(
+    (shippingMethod.basePrice + shippingMethod.pricePerKg * totalWeight) * 100,
+  ) / 100;
+
 export const orderService = {
   getAll: async (
     query: {
@@ -188,8 +199,14 @@ export const orderService = {
       }),
     };
 
+    // Récupéré ici (hors du if) pour être réutilisé plus bas dans le calcul
+    // du coût de livraison — évite un second appel réseau à la DB.
+    let shippingMethod: Awaited<
+      ReturnType<typeof shippingMethodRepository.findById>
+    > | null = null;
+
     if (dto.shippingMethodId) {
-      const shippingMethod = await shippingMethodRepository.findById(
+      shippingMethod = await shippingMethodRepository.findById(
         dto.shippingMethodId,
       );
       if (!shippingMethod) throw new AppError("Shipping method not found", 404);
@@ -237,10 +254,12 @@ export const orderService = {
       price: number;
       originalPrice: number;
       discountAmount: number;
+      discountSnapshot?: Record<string, unknown> | null;
     }[] = [];
 
     let totalAmount = 0;
     let totalOriginalAmount = 0;
+    let totalWeight = 0;
 
     for (const item of sourceItems) {
       const product = await productRepository.findById(item.id);
@@ -304,15 +323,30 @@ export const orderService = {
         originalPrice: unitPrice,
         discountAmount:
           Math.round(pricing.discountAmount * item.quantity * 100) / 100,
+        // Copie figée du "pourquoi" de la remise — survit à la suppression
+        // ou modification ultérieure de la Promotion/du Discount concerné.
+        discountSnapshot: pricing.hasDiscount
+          ? {
+              promotionId: pricing.promotionId,
+              promotionName: pricing.promotionName,
+              discountId: pricing.discountId,
+              type: pricing.discountType,
+              value: pricing.discountValue,
+              percentage: pricing.discountPercentage,
+            }
+          : null,
       });
 
       totalAmount += pricing.finalPrice * item.quantity;
       totalOriginalAmount += unitPrice * item.quantity;
+      totalWeight += product.weight * item.quantity;
     }
 
     totalAmount = Math.round(totalAmount * 100) / 100;
     totalOriginalAmount = Math.round(totalOriginalAmount * 100) / 100;
 
+    // Le montant minimum d'un coupon se vérifie sur le sous-total produit,
+    // AVANT ajout des frais de port.
     const coupon = dto.couponCode
       ? await resolveCoupon(dto.couponCode, userId, totalAmount)
       : null;
@@ -322,13 +356,52 @@ export const orderService = {
         ? Math.round((totalOriginalAmount - totalAmount) * 100) / 100
         : undefined;
 
+    // Coût de livraison — calculé et figé côté serveur, JAMAIS fourni par
+    // le client. Corrige le bug où les frais de port n'étaient jamais
+    // inclus dans le montant payé.
+    let shippingCost = 0;
+    let shippingMethodSnapshot: Record<string, unknown> | null = null;
+    if (shippingMethod) {
+      shippingCost = computeShippingCost(shippingMethod, totalWeight);
+      shippingMethodSnapshot = {
+        id: shippingMethod.id,
+        name: shippingMethod.name,
+        estimatedDays: shippingMethod.estimatedDays,
+        basePrice: shippingMethod.basePrice,
+        pricePerKg: shippingMethod.pricePerKg,
+        zones: shippingMethod.zones,
+        weightUsed: totalWeight,
+      };
+    }
+
+    const couponSnapshot = coupon
+      ? {
+          code: coupon.code,
+          promotionId: coupon.promotion.id,
+          promotionName: coupon.promotion.name,
+          minOrderAmount: coupon.minOrderAmount,
+          discounts: coupon.promotion.discounts.map((d) => ({
+            id: d.id,
+            type: d.type,
+            value: d.value,
+            categoryId: d.categoryId,
+          })),
+        }
+      : null;
+
+    // Montant réellement payable = sous-total produit (déjà remisé) + livraison.
+    const payableAmount = Math.round((totalAmount + shippingCost) * 100) / 100;
+
     const order = await orderRepository.create(
       userId,
       dto,
-      totalAmount,
+      payableAmount,
       orderItems,
       coupon?.id,
       discountedAmount,
+      shippingCost,
+      shippingMethodSnapshot,
+      couponSnapshot,
     );
 
     try {
@@ -397,7 +470,11 @@ export const orderService = {
       service: "orders",
       actor: { userId, role: "CUSTOMER" },
       target: { orderId: order.id },
-      metadata: { totalAmount, itemCount: orderItems.length },
+      metadata: {
+        totalAmount: payableAmount,
+        itemCount: orderItems.length,
+        shippingCost,
+      },
     });
 
     return order;
@@ -440,6 +517,14 @@ export const orderService = {
       };
     }
 
+    let recalculatedShipping:
+      | {
+          shippingCost: number;
+          shippingMethodSnapshot: Record<string, unknown> | null;
+          totalAmount: number;
+        }
+      | undefined;
+
     if (dto.shippingMethodId) {
       const shippingMethod = await shippingMethodRepository.findById(
         dto.shippingMethodId,
@@ -461,9 +546,37 @@ export const orderService = {
           400,
         );
       }
+
+      // La méthode de livraison change → recalculer le coût de port et le
+      // total payable de la commande, sans jamais faire confiance à un
+      // montant fourni par le client.
+      if (dto.shippingMethodId !== order.shippingMethodId) {
+        const totalWeight = order.items.reduce(
+          (sum, item) => sum + (item.product?.weight ?? 0) * item.quantity,
+          0,
+        );
+        const shippingCost = computeShippingCost(shippingMethod, totalWeight);
+
+        recalculatedShipping = {
+          shippingCost,
+          shippingMethodSnapshot: {
+            id: shippingMethod.id,
+            name: shippingMethod.name,
+            estimatedDays: shippingMethod.estimatedDays,
+            basePrice: shippingMethod.basePrice,
+            pricePerKg: shippingMethod.pricePerKg,
+            zones: shippingMethod.zones,
+            weightUsed: totalWeight,
+          },
+          totalAmount:
+            Math.round(
+              (order.totalAmount - order.shippingCost + shippingCost) * 100,
+            ) / 100,
+        };
+      }
     }
 
-    const updated = await orderRepository.update(id, dto);
+    const updated = await orderRepository.update(id, dto, recalculatedShipping);
     await cache.del(CACHE_KEYS.single(id));
     await cache.delByPattern("orders:all:*");
     return updated;

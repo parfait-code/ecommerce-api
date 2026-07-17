@@ -5,6 +5,8 @@ interface PromotionInfo {
   status: string;
   startDate: Date;
   endDate: Date;
+  name: string;
+  slug: string;
 }
 
 interface DiscountWithRelations {
@@ -25,7 +27,11 @@ export interface PricingInfo {
   discountPercentage: number | null;
   hasDiscount: boolean;
   promotionId: string | null;
+  promotionName: string | null;
+  promotionSlug: string | null;
   discountId: string | null;
+  discountType: DiscountType | null;
+  discountValue: number | null;
 }
 
 export const isPromotionActiveNow = (promotion: PromotionInfo): boolean => {
@@ -48,11 +54,6 @@ const computePrice = (
   return Math.max(0, Math.round((originalPrice - discount.value) * 100) / 100);
 };
 
-/**
- * Retourne le meilleur prix (celui qui avantage le plus le client) parmi
- * toutes les remises actives applicables à ce produit (par catégorie ou par produit).
- * Ne cumule pas les remises entre elles.
- */
 export const getBestPricing = (
   product: { id: string; price: number; categoryId: string },
   activeDiscounts: DiscountWithRelations[],
@@ -74,7 +75,11 @@ export const getBestPricing = (
       discountPercentage: null,
       hasDiscount: false,
       promotionId: null,
+      promotionName: null,
+      promotionSlug: null,
       discountId: null,
+      discountType: null,
+      discountValue: null,
     };
   }
 
@@ -102,7 +107,11 @@ export const getBestPricing = (
     discountPercentage,
     hasDiscount: true,
     promotionId: best.promotionId,
+    promotionName: best.promotion.name,
+    promotionSlug: best.promotion.slug,
     discountId: best.id,
+    discountType: best.type,
+    discountValue: best.value,
   };
 };
 

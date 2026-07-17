@@ -7,7 +7,7 @@ import { paginate } from "../../shared/utils/pagination";
 const orderInclude = {
   items: {
     include: {
-      product: { select: { id: true, name: true, sku: true } },
+      product: { select: { id: true, name: true, sku: true, weight: true } },
       combination: {
         select: {
           id: true,
@@ -100,9 +100,13 @@ export const orderRepository = {
       price: number;
       originalPrice: number;
       discountAmount: number;
+      discountSnapshot?: Record<string, unknown> | null;
     }[],
     couponCodeId?: string,
     discountedAmount?: number,
+    shippingCost = 0,
+    shippingMethodSnapshot?: Record<string, unknown> | null,
+    couponSnapshot?: Record<string, unknown> | null,
   ) =>
     prisma.order.create({
       data: {
@@ -112,9 +116,14 @@ export const orderRepository = {
         billingAddressId: data.billingAddressId ?? null,
         billingAddressSnapshot: (data.billingAddress as object) ?? null,
         shippingMethodId: data.shippingMethodId ?? null,
+        shippingCost,
+        ...(shippingMethodSnapshot && {
+          shippingMethodSnapshot: shippingMethodSnapshot as object,
+        }),
         paymentMethodId: data.paymentMethodId,
         notes: data.notes,
         ...(couponCodeId && { couponCodeId }),
+        ...(couponSnapshot && { couponSnapshot: couponSnapshot as object }),
         totalAmount,
         ...(discountedAmount !== undefined && { discountedAmount }),
         items: {
@@ -128,6 +137,9 @@ export const orderRepository = {
             price: i.price,
             originalPrice: i.originalPrice,
             discountAmount: i.discountAmount,
+            ...(i.discountSnapshot && {
+              discountSnapshot: i.discountSnapshot as object,
+            }),
           })),
         },
         statusHistory: {
@@ -161,7 +173,15 @@ export const orderRepository = {
       select: { id: true },
     }),
 
-  update: (id: string, data: UpdateOrderDto) =>
+  update: (
+    id: string,
+    data: UpdateOrderDto,
+    recalculatedShipping?: {
+      shippingCost: number;
+      shippingMethodSnapshot: Record<string, unknown> | null;
+      totalAmount: number;
+    },
+  ) =>
     prisma.order.update({
       where: { id },
       data: {
@@ -181,6 +201,12 @@ export const orderRepository = {
           shippingMethodId: data.shippingMethodId,
         }),
         ...(data.notes && { notes: data.notes }),
+        ...(recalculatedShipping && {
+          shippingCost: recalculatedShipping.shippingCost,
+          shippingMethodSnapshot:
+            recalculatedShipping.shippingMethodSnapshot as object,
+          totalAmount: recalculatedShipping.totalAmount,
+        }),
       },
       include: orderInclude,
     }),
@@ -196,7 +222,7 @@ export const orderRepository = {
         where: { id },
         select: { status: true },
       });
-      if (!current) throw new AppError("Order not found", 404); // était: throw new Error(...)
+      if (!current) throw new AppError("Order not found", 404);
 
       await tx.orderStatusHistory.create({
         data: {
@@ -218,7 +244,6 @@ export const orderRepository = {
   delete: (id: string) => prisma.order.delete({ where: { id } }),
 };
 
-// ── Traçabilité des réservations de stock (pour libération précise à l'annulation) ──
 export const orderReservationRepository = {
   create: (orderItemId: string, warehouseId: string, quantity: number) =>
     prisma.orderItemReservation.create({

@@ -428,6 +428,9 @@ model Order {
   discountedAmount        Float?
   createdAt               DateTime        @default(now())
   updatedAt               DateTime        @updatedAt
+  shippingCost            Float           @default(0)
+  shippingMethodSnapshot  Json?
+  couponSnapshot          Json?
 
   items               OrderItem[]
   payments            Payment[]
@@ -458,6 +461,7 @@ model OrderItem {
   price                Float
   originalPrice        Float
   discountAmount       Float               @default(0)
+  discountSnapshot     Json?
 
   reviews      Review[]
   returnItems  ReturnItem[]

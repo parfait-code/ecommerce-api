@@ -417,6 +417,8 @@ const [combinations, selections] = await Promise.all([
 - `DELETE .../combinations/:combinationId` échoue avec 400 si de l'inventaire existe encore.
 - Côté panier/commande/wishlist, `combinationId` (optionnel) remplace l'ancien `variantId`.
 
+- **Invariant stock direct vs. stock par combinaison** : `POST .../combinations/generate` échoue désormais avec **400** si le produit porte encore du stock attaché directement (sans combinaison) — l'admin doit d'abord le transférer (`POST /inventory/transfer`, §15) ou le retirer. Un produit est soit "simple" (stock direct), soit "à variantes" (stock par combinaison), jamais les deux — évite les incohérences de commande/panier sur un même produit.
+
 ---
 
 ## 7. Tags
@@ -627,18 +629,44 @@ interface Order {
   shippingAddressSnapshot: OrderAddress;
   billingAddressSnapshot: OrderAddress | null;
   shippingMethod: { id: string; name: string; estimatedDays: number } | null;
+  shippingCost: number; // coût de livraison figé au moment de la commande
+  shippingMethodSnapshot: ShippingMethodSnapshot | null; // copie figée de la méthode de livraison
   notes: string | null;
   appliedCoupon: {
     id: string;
     code: string;
     promotion: { id: string; name: string; slug: string };
   } | null;
-  totalAmount: number;
-  discountedAmount: number | null;
+  couponSnapshot: CouponSnapshot | null; // copie figée du coupon + promotion au moment de l'application
+  totalAmount: number; // montant RÉELLEMENT à payer (sous-total remisé + shippingCost) — seul champ à utiliser pour un paiement
+  discountedAmount: number | null; // économie totale réalisée — informatif, JAMAIS un montant à payer
   items: OrderItem[];
   statusHistory: OrderStatusHistory[];
   createdAt: string;
   updatedAt: string;
+}
+
+interface ShippingMethodSnapshot {
+  id: string;
+  name: string;
+  estimatedDays: number;
+  basePrice: number;
+  pricePerKg: number;
+  zones: string[];
+  weightUsed: number; // poids total (kg) utilisé pour ce calcul
+}
+
+interface CouponSnapshot {
+  code: string;
+  promotionId: string;
+  promotionName: string;
+  minOrderAmount: number | null;
+  discounts: {
+    id: string;
+    type: "PERCENTAGE" | "FIXED_AMOUNT";
+    value: number;
+    categoryId: string | null;
+  }[];
 }
 
 interface OrderItem {
@@ -652,12 +680,22 @@ interface OrderItem {
   price: number; // prix final unitaire (après remise)
   originalPrice: number;
   discountAmount: number;
+  discountSnapshot: OrderItemDiscountSnapshot | null; // copie figée de la remise appliquée à cet article
   reviews: {
     id: string;
     rating: number;
     comment: string | null;
     createdAt: string;
   }[];
+}
+
+interface OrderItemDiscountSnapshot {
+  promotionId: string | null;
+  promotionName: string | null;
+  discountId: string | null;
+  type: "PERCENTAGE" | "FIXED_AMOUNT" | null;
+  value: number | null;
+  percentage: number | null; // équivalent pourcentage, même pour un FIXED_AMOUNT
 }
 
 interface OrderStatusHistory {
@@ -693,6 +731,10 @@ interface CreateOrderRequest {
   paymentMethodId?: string;
   notes?: string;
   couponCode?: string;
+  // Aucun champ de montant n'existe dans ce DTO — totalAmount, shippingCost,
+  // discountedAmount sont ENTIÈREMENT calculés côté serveur. Le client ne
+  // peut influencer le montant final qu'indirectement, via les identifiants
+  // (produits, combinaisons, quantités, coupon, méthode de livraison).
 }
 
 interface UpdateOrderStatusRequest {
@@ -709,7 +751,7 @@ interface UpdateOrderStatusRequest {
 | Liste                                                      | `GET /orders?page&limit&status&customer` → `Paginated<Order>`             |
 | Création                                                   | `POST /orders` `CreateOrderRequest` → `Order` (201)                       |
 | Détail                                                     | `GET /orders/:orderId` → `Order`                                          |
-| Mise à jour (adresses/notes)                               | `PUT /orders/:orderId` (body partiel)                                     |
+| Mise à jour (adresses/notes/méthode de livraison)          | `PUT /orders/:orderId` (body partiel)                                     |
 | Annulation                                                 | `DELETE /orders/:orderId` → `{ message: "Order cancelled successfully" }` |
 | Changement de statut (admin)                               | `PUT /orders/:orderId/status` `UpdateOrderStatusRequest`                  |
 | Commandes d'un utilisateur (admin)                         | `GET /user/:userId/orders?page&limit` → `Paginated<Order>`                |
@@ -725,7 +767,13 @@ interface UpdateOrderStatusRequest {
 - `statusHistory` est limité aux 10 dernières entrées côté API.
 - `POST /orders/expire-stale` (admin) déclenche manuellement le même job qui tourne automatiquement toutes les heures (annulation des `PENDING` non payées au-delà de `orders.stale_pending_hours`, 24h par défaut) — utile pour un contrôle manuel/tests, pas nécessaire en usage normal.
 
----
+**🆕 Montant à payer — ne jamais faire confiance au client** :
+
+- `totalAmount` est le **seul** champ à utiliser pour initier un paiement (`POST /payments`, voir §12) — il est entièrement recalculé côté serveur à la création de la commande à partir des données réelles en base (prix produit, promotions actives, coupon, tarif de la méthode de livraison × poids réel des articles). Le frontend ne transmet **aucun montant** dans `CreateOrderRequest`.
+- `discountedAmount` est purement informatif ("vous économisez X") — **ne jamais** l'utiliser comme montant à payer ou l'additionner au prix affiché : c'est une erreur de facturation classique à éviter explicitement dans l'UI panier/récapitulatif.
+- Modifier `shippingMethodId` via `PUT /orders/:orderId` déclenche un recalcul automatique de `shippingCost` et `totalAmount` côté serveur — ne jamais afficher un montant recalculé localement avant confirmation de la réponse API.
+
+**🆕 Traçabilité complète pour audit à long terme** : `shippingMethodSnapshot`, `couponSnapshot` (sur `Order`) et `discountSnapshot` (sur chaque `OrderItem`) sont des copies figées au moment de la commande. Elles permettent de reconstituer et justifier intégralement le calcul du montant d'une commande à n'importe quel moment dans le futur, **même si** le produit, la combinaison, la promotion, le coupon ou la méthode de livraison concernés ont depuis été modifiés ou supprimés. Recommandé pour tout écran "détail de commande" (facture, support client, contentieux) : afficher ces snapshots plutôt que de re-résoudre les entités actuelles (`product`, `appliedCoupon`, `shippingMethod`), qui peuvent avoir changé depuis.
 
 ## 12. Payments
 
@@ -935,6 +983,8 @@ interface InventoryGroupedItem {
 | Transfert (admin)                                        | `POST /inventory/transfer` `TransferInventoryRequest`                                                                                                  |
 
 **Point d'attention front** : il n'existe **pas** de routes dédiées `/inventory/low-stock` ou `/inventory/out-of-stock` — le filtrage stock faible/rupture se fait via les query params `?low_stock=true` / `?out_of_stock=true` sur `GET /inventory/grouped`. Le seuil de stock faible est piloté par le setting `inventory.low_stock_threshold` (10 par défaut) — ne pas le coder en dur côté client. Toujours envoyer un `keyword` non vide sur `/inventory/search`, sinon l'API renvoie une 500 non structurée.
+
+⚠️ **Un produit ne doit jamais avoir à la fois du stock direct (`combinationId: null`) et du stock par combinaison.** L'API applique cette règle à l'écriture (voir §6) ; si un dashboard affiche un produit avec `hasVariants: true` sur `GET /inventory/grouped` mais un `totalQuantity` qui ne correspond à aucune ligne de combinaison visible, c'est un signe d'incohérence historique à régulariser via transfert de stock.
 
 ---
 

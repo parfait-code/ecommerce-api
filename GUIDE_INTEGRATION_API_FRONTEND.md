@@ -172,6 +172,13 @@ Un produit peut avoir des **attributs de variante** (ex : couleur, taille) qui g
 
 ⚠️ **Si `product.combinations.length > 0`**, le frontend **doit** faire sélectionner une combinaison au client avant tout ajout au panier ou commande (`combination_id` requis) — sinon 400.
 
+⚠️ **Invariant stock direct / stock par combinaison** : un produit est **soit** un produit simple (stock attaché directement au produit), **soit** un produit à variantes (stock attaché à chaque combinaison) — **jamais les deux à la fois**. Deux garde-fous appliquent cette règle des deux côtés :
+
+- `POST /inventory` refuse (400) d'ajouter du stock directement sur un produit qui a des combinaisons actives.
+- `POST /product/:productId/combinations/generate` refuse désormais (400) de générer des combinaisons tant qu'il reste du stock attaché directement au produit (`combinationId: null`) — l'admin doit d'abord transférer ce stock vers la bonne combinaison (`POST /inventory/transfer`) ou le retirer.
+
+Le frontend ne doit donc jamais permettre à un admin de créer une variante sur un produit qui a déjà du stock "produit simple" sans d'abord vider/transférer ce stock — l'API le bloquera de toute façon, mais afficher le message d'erreur explicitement évite une manipulation confuse (l'erreur indique la quantité de stock direct restant).
+
 ### 6.4 Attributs (`/categories/:categoryId/attributes`, `/attributes`, `/product/:productId/attributes`)
 
 | Méthode | Route                                | Auth  | Description                                                                                                                                                                                             |
@@ -256,7 +263,7 @@ Le stock n'est **jamais réservé au niveau du panier** — seulement vérifié 
 | GET     | `/orders`                 | User  | Ses propres commandes (admin voit tout via `?customer=email`)                                                                                                |
 | POST    | `/orders`                 | User  | Voir §7.1                                                                                                                                                    |
 | GET     | `/orders/:orderId`        | User  | Doit être propriétaire (sauf admin)                                                                                                                          |
-| PUT     | `/orders/:orderId`        | User  | Modifie adresse/notes/méthode de livraison **avant expédition**                                                                                              |
+| PUT     | `/orders/:orderId`        | User  | Modifie adresse/notes/méthode de livraison **avant expédition** — voir note ci-dessous sur le recalcul automatique du coût de port                           |
 | DELETE  | `/orders/:orderId`        | User  | Annule la commande (transition `CANCELLED`, libère le stock)                                                                                                 |
 | PUT     | `/orders/:orderId/status` | Admin | `{ status, reason?, shippingCarrier?, trackingNumber?, estimatedDeliveryDate? }`                                                                             |
 | GET     | `/user/:userId/orders`    | Admin | Commandes d'un utilisateur donné                                                                                                                             |
@@ -289,6 +296,28 @@ Le stock n'est **jamais réservé au niveau du panier** — seulement vérifié 
 ```
 
 `items` OU `basketId` requis (pas les deux nécessairement, mais au moins un). `shippingAddress` est toujours requis (snapshot conservé même si `shippingAddressId` fourni). Si `shippingMethodId` est fourni, le pays de livraison doit être couvert par les `zones` de cette méthode (sinon 400).
+
+⚠️ **Le frontend n'envoie et ne calcule aucun montant.** Le client ne transmet que des identifiants (produits, combinaisons, quantités, coupon, méthode de livraison) — le serveur calcule intégralement `totalAmount` à partir des données réelles en base au moment de la création, sans jamais faire confiance à un montant fourni par le client. Concrètement, `totalAmount` (le montant réellement à payer) inclut désormais :
+
+1. Le sous-total produit, remise appliquée (la **meilleure** promotion active par produit, jamais cumulée).
+2. Le coût de livraison, calculé côté serveur à partir du poids réel des articles commandés et des tarifs (`basePrice` + `pricePerKg × poids`) de la `shippingMethodId` fournie — **jamais fourni ni influençable par le client**.
+3. La validation puis l'application du coupon, le cas échéant.
+
+`discountedAmount` reste l'économie totale réalisée sur le sous-total produit (informatif) — ce n'est **pas** un montant à payer, `totalAmount` est le seul champ à utiliser pour initier un paiement.
+
+**Champs exposés sur `Order` liés au pricing** (nouveaux ou clarifiés) :
+
+| Champ                    | Description                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `totalAmount`            | Montant réellement à payer = sous-total produit remisé + `shippingCost`. **C'est le seul montant à utiliser pour initier un paiement.**                                                    |
+| `discountedAmount`       | Économie totale réalisée sur le sous-total produit (informatif, jamais un montant à payer)                                                                                                 |
+| `shippingCost`           | Coût de livraison figé au moment de la commande                                                                                                                                            |
+| `shippingMethodSnapshot` | Copie figée de la méthode de livraison au moment de la commande (nom, tarifs, zones, poids utilisé pour le calcul) — reste exploitable même si la méthode est modifiée/supprimée depuis    |
+| `couponSnapshot`         | Copie figée du coupon et de la promotion liée au moment de l'application (code, promotion, discounts) — reste exploitable même si le coupon/la promotion est modifié(e)/supprimé(e) depuis |
+
+Chaque `OrderItem` expose désormais aussi `discountSnapshot` (nullable) : copie figée de la promotion/remise qui a déterminé son prix (`promotionId`, `promotionName`, `discountId`, `type`, `value`, `percentage`). Ensemble, `Order` + `OrderItem[]` permettent de reconstituer et auditer intégralement le montant d'une commande, même des années plus tard, indépendamment de toute modification ou suppression ultérieure des produits, promotions, coupons ou méthodes de livraison concernés.
+
+⚠️ **Modifier la méthode de livraison via `PUT /orders/:orderId`** recalcule automatiquement `shippingCost`, `shippingMethodSnapshot` et `totalAmount` côté serveur (à partir du poids déjà figé des articles de la commande) — le frontend ne doit jamais tenter de recalculer ou d'envoyer ces valeurs lui-même.
 
 ### 6.11 Paiements (`/payments`, `/payment-methods`)
 
@@ -340,6 +369,7 @@ Seule `CASH_ON_DELIVERY` est actuellement disponible (`PAYPAL`, `STRIPE`, `CINET
 | POST    | `/inventory/transfer`           | Admin | `{ item_id, from_warehouse, to_warehouse, quantity }`                                  |
 
 Seuil stock faible : configurable via le setting `inventory.low_stock_threshold` (10 unités par défaut — voir §6.21). Ne pas coder ce seuil en dur côté frontend s'il doit refléter une valeur affichée ailleurs (badges "stock faible").
+⚠️ **Cohérence stock produit vs. stock combinaison** : voir §6.3 — un produit ne doit jamais porter du stock à la fois directement et via ses combinaisons. Si le dashboard admin affiche une vue "stock groupé par produit" (`GET /inventory/grouped`) et détecte `hasVariants: true` avec un total qui semble incohérent avec les lignes de combinaisons visibles, cela indique généralement une incohérence historique (créée avant l'ajout du garde-fou) — utiliser `POST /inventory/transfer` pour régulariser plutôt que d'ignorer l'écart.
 
 ### 6.15 Expéditions & retraits (`/shipments`, `/pickup-requests`, `/labels`)
 
@@ -660,6 +690,7 @@ CANCELLED  CANCELLED   CANCELLED
 - `DELIVERED → REFUNDED` uniquement via un retour complété.
 - Une commande `CANCELLED` ou `REFUNDED` est un état terminal.
 - ⚠️ **Annulation automatique** : une commande restée `PENDING` (jamais payée) au-delà du délai configuré (`orders.stale_pending_hours`, 24h par défaut — §6.21) est automatiquement annulée par un job interne (toutes les heures) et son stock réservé libéré. Le frontend ne doit pas supposer qu'une commande `PENDING` reste disponible indéfiniment pour paiement — prévoir un message adapté si `GET /orders/:orderId` renvoie `CANCELLED` de manière inattendue.
+  ⚠️ **Calcul du montant** : `totalAmount` est entièrement calculé et figé côté serveur à la création de la commande (sous-total produit remisé + coût de livraison), puis recalculé automatiquement si la méthode de livraison change via `PUT /orders/:orderId`. Le frontend n'a jamais à calculer, transmettre, ou faire confiance à un montant venant du client pour initier un paiement — voir §6.10 pour le détail des champs de traçabilité (`shippingMethodSnapshot`, `couponSnapshot`, `OrderItem.discountSnapshot`).
 
 ### 7.2 Cycle de vie d'un paiement
 
