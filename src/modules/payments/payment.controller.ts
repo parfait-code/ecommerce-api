@@ -84,4 +84,14 @@ export const paymentController = {
       next(err);
     }
   },
+
+  reconcileCod: async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const reconciledCount =
+        await paymentService.reconcileCodOrderConfirmation();
+      respond(res, { reconciledCount });
+    } catch (err) {
+      next(err);
+    }
+  },
 };

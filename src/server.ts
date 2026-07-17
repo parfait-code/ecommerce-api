@@ -15,11 +15,12 @@ import {
   startSettingsRefreshJob,
   stopSettingsRefreshJob,
 } from "./shared/jobs/settings-refresh.job";
+import {
+  startPaymentOrderSyncJob,
+  stopPaymentOrderSyncJob,
+} from "./shared/jobs/payment-order-sync.job";
 
 async function bootstrap() {
-  // Charge le snapshot des settings AVANT d'accepter des requêtes — les
-  // accesseurs synchrones (pagination.ts, countries.ts, multer.ts) en
-  // dépendent dès la première requête reçue.
   await settingService.warmup();
 
   const server = app.listen(env.PORT, () => {
@@ -31,6 +32,7 @@ async function bootstrap() {
     startPickupExpirationJob();
     startOrderExpirationJob();
     startSettingsRefreshJob();
+    startPaymentOrderSyncJob();
   });
 
   const shutdown = (signal: string) => {
@@ -41,6 +43,7 @@ async function bootstrap() {
     stopPickupExpirationJob();
     stopOrderExpirationJob();
     stopSettingsRefreshJob();
+    stopPaymentOrderSyncJob();
     server.close(() => process.exit(0));
   };
 

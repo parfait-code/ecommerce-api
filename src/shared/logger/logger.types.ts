@@ -261,7 +261,10 @@ export type SystemEvent =
   | "ORDER_EXPIRATION_JOB_RAN"
   | "ORDER_EXPIRATION_JOB_FAILED"
   | "SETTINGS_REFRESH_JOB_STARTED"
-  | "SETTINGS_REFRESH_JOB_FAILED";
+  | "SETTINGS_REFRESH_JOB_FAILED"
+  | "PAYMENT_ORDER_SYNC_JOB_STARTED"
+  | "PAYMENT_ORDER_SYNC_JOB_RAN"
+  | "PAYMENT_ORDER_SYNC_JOB_FAILED";
 
 // ─── Error Events ────────────────────────────────────────────────────────────
 

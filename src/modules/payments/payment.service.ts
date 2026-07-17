@@ -121,15 +121,27 @@ export const paymentService = {
     });
 
     if (dto.method === "CASH_ON_DELIVERY" && order.status === "PENDING") {
-      await orderService.updateStatus(
-        dto.order_id,
-        {
-          status: "CONFIRMED",
-          reason: "COD payment recorded — order confirmed",
-        },
-        userId,
-        "SYSTEM",
-      );
+      try {
+        await orderService.updateStatus(
+          dto.order_id,
+          {
+            status: "CONFIRMED",
+            reason: "COD payment recorded — order confirmed",
+          },
+          userId,
+          "SYSTEM",
+        );
+      } catch (err) {
+        systemLogger.error("ORDER_SYNC_FAILED", {
+          service: "payment-service",
+          metadata: {
+            orderId: dto.order_id,
+            paymentId: payment.id,
+            reason: "Failed to auto-confirm order after COD payment creation",
+            error: (err as Error).message,
+          },
+        });
+      }
     }
 
     return payment;
@@ -265,5 +277,41 @@ export const paymentService = {
       throw new AppError("Forbidden", 403);
 
     return paymentRepository.findByOrderId(orderId);
+  },
+
+  // Nouveau — réconciliation : rattrape les commandes restées PENDING suite
+  // à un échec de la synchro de confirmation automatique lors de la création
+  // d'un paiement COD. Ne touche JAMAIS aux autres méthodes de paiement.
+  reconcileCodOrderConfirmation: async (): Promise<number> => {
+    const stragglers = await paymentRepository.findPendingCodWithPendingOrder();
+    let fixedCount = 0;
+
+    for (const payment of stragglers) {
+      try {
+        await orderService.updateStatus(
+          payment.orderId,
+          {
+            status: "CONFIRMED",
+            reason:
+              "Reconciliation: COD payment was recorded but order confirmation had previously failed",
+          },
+          null,
+          "SYSTEM",
+        );
+        fixedCount++;
+      } catch (err) {
+        systemLogger.error("ORDER_SYNC_FAILED", {
+          service: "payment-service",
+          metadata: {
+            orderId: payment.orderId,
+            paymentId: payment.id,
+            reason: "Reconciliation attempt failed",
+            error: (err as Error).message,
+          },
+        });
+      }
+    }
+
+    return fixedCount;
   },
 };

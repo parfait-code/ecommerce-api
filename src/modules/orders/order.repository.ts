@@ -1,6 +1,7 @@
 import { prisma } from "../../shared/config/database";
 import { CreateOrderDto, UpdateOrderDto } from "./order.schema";
 import { OrderStatus } from "@prisma/client";
+import { AppError } from "../../shared/utils/app-error";
 import { paginate } from "../../shared/utils/pagination";
 
 const orderInclude = {
@@ -195,7 +196,7 @@ export const orderRepository = {
         where: { id },
         select: { status: true },
       });
-      if (!current) throw new Error("Order not found");
+      if (!current) throw new AppError("Order not found", 404); // était: throw new Error(...)
 
       await tx.orderStatusHistory.create({
         data: {

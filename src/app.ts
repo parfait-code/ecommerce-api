@@ -76,10 +76,10 @@ app.use(requestContext);
 app.use(auditMiddleware);
 
 app.use(authRouter);
+app.use(basketRouter);
 app.use(userRouter);
 app.use(productRouter);
 app.use("/product/:productId/combinations", combinationRouter);
-app.use(basketRouter);
 app.use(orderRouter);
 app.use(paymentRouter);
 app.use(reviewRouter);

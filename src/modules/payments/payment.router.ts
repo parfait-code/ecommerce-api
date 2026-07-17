@@ -3,7 +3,10 @@ import { paymentController } from "./payment.controller";
 import { authGuard } from "../../shared/middlewares/auth-guard";
 import { adminGuard } from "../../shared/middlewares/admin-guard";
 import { validate } from "../../shared/middlewares/validate";
-import { createPaymentSchema, updatePaymentStatusSchema } from "./payment.schema";
+import {
+  createPaymentSchema,
+  updatePaymentStatusSchema,
+} from "./payment.schema";
 
 const router = Router();
 
@@ -39,5 +42,11 @@ router.get(
   paymentController.getByOrderId,
 );
 router.get("/payments", authGuard, adminGuard, paymentController.getAll);
+router.post(
+  "/payments/reconcile-cod",
+  authGuard,
+  adminGuard,
+  paymentController.reconcileCod,
+);
 
 export default router;

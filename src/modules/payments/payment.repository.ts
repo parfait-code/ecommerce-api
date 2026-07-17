@@ -62,4 +62,19 @@ export const paymentRepository = {
       data: { status, ...(notes !== undefined && { notes }) },
       include: paymentInclude,
     }),
+
+  // Nouveau — détecte les commandes bloquées en PENDING alors qu'un paiement
+  // COD a déjà été enregistré, cas où la synchro de confirmation automatique
+  // (payment.service.ts::create) a échoué après la création du paiement.
+  // Scopé STRICTEMENT à CASH_ON_DELIVERY — les autres méthodes ne doivent
+  // jamais confirmer une commande tant que leur paiement n'est pas COMPLETED.
+  findPendingCodWithPendingOrder: () =>
+    prisma.payment.findMany({
+      where: {
+        method: "CASH_ON_DELIVERY",
+        status: "PENDING",
+        order: { status: "PENDING" },
+      },
+      include: paymentInclude,
+    }),
 };
