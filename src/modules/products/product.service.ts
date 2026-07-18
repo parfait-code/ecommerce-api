@@ -220,6 +220,33 @@ export const productService = {
     return updated;
   },
 
+  delete: async (id: string) => {
+    const product = await productRepository.findById(id, true);
+    if (!product) throw new AppError("Product not found", 404);
+
+    await productRepository.delete(id);
+
+    await cache.del(CACHE_KEYS.single(id));
+    await cache.delByPattern("products:all:*");
+    await cache.delByPattern("categories:*");
+
+    businessLogger.log("PRODUCT_DELETED", {
+      service: "products",
+      actor: { userId: null, role: "ADMIN" },
+      target: { productId: id },
+      metadata: { name: product.name, sku: product.sku },
+    });
+
+    auditLogger.log("PRODUCT_DELETED", {
+      service: "products",
+      actor: { userId: null, role: "ADMIN" },
+      target: { productId: id },
+      metadata: { name: product.name, sku: product.sku },
+    });
+
+    return { message: "Product deleted successfully" };
+  },
+
   uploadImages: async (
     id: string,
     files: Express.Multer.File[],

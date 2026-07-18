@@ -251,15 +251,24 @@ interface CreateProductRequest {
 type UpdateProductRequest = Partial<Omit<CreateProductRequest, "categoryId">>;
 ```
 
-| Action                    | Appel                                                                           |
-| ------------------------- | ------------------------------------------------------------------------------- |
-| Liste (avec pricing)      | `GET /product?page&limit&categoryId&search` → `Paginated<Product>`              |
-| Détail                    | `GET /product/:productId` → `Product`                                           |
-| Création                  | `POST /product` `CreateProductRequest` → `Product` (201, `status:DRAFT`)        |
-| Mise à jour               | `PATCH /product/:productId` `UpdateProductRequest` → `Product`                  |
-| Suppression (hard delete) | `DELETE /product/:productId` → `{ message: "Product deleted successfully" }`    |
-| Upload images             | `POST /product/:productId/images` (multipart, champ `images`, `combinationId?`) |
-| Suppression image         | `DELETE /product/:productId/images` `{ imageId }`                               |
+| Action                    | Appel                                                                                          |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| Liste (avec pricing)      | `GET /product?page&limit&categoryId&search&minPrice&maxPrice&tags&sort` → `Paginated<Product>` |
+| Détail                    | `GET /product/:productId` → `Product`                                                          |
+| Création                  | `POST /product` `CreateProductRequest` → `Product` (201, `status:DRAFT`)                       |
+| Mise à jour               | `PATCH /product/:productId` `UpdateProductRequest` → `Product`                                 |
+| Suppression (hard delete) | `DELETE /product/:productId` → `{ message: "Product deleted successfully" }`                   |
+| Upload images             | `POST /product/:productId/images` (multipart, champ `images`, `combinationId?`)                |
+| Suppression image         | `DELETE /product/:productId/images` `{ imageId }`                                              |
+
+**Filtres disponibles sur `GET /product`** (identiques à `GET /categories/slug/:slug/products`, §8) :
+
+| Paramètre  | Exemple                        | Effet                                                                                     |
+| ---------- | ------------------------------ | ----------------------------------------------------------------------------------------- |
+| `minPrice` | `?minPrice=50000`              | Prix produit ≥ valeur                                                                     |
+| `maxPrice` | `?maxPrice=200000`             | Prix produit ≤ valeur                                                                     |
+| `tags`     | `?tags=scandinave,best-seller` | Produits ayant au moins un des tags (slugs séparés par virgule)                           |
+| `sort`     | `?sort=price_asc`              | `newest` (défaut) \| `oldest` \| `price_asc` \| `price_desc` \| `name_asc` \| `name_desc` |
 
 ⚠️ Contrairement à `User` (soft delete via `deletedAt`), un produit supprimé l'est **définitivement** — les commandes passées conservent `productName`/`productSku` en snapshot sur `OrderItem`, mais le produit lui-même disparaît.
 
@@ -486,20 +495,21 @@ interface CreateCategoryRequest {
 }
 ```
 
-| Action                         | Appel                                                                                                           |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| Liste publique **(public)**    | `GET /categories` → `Category[]` (uniquement `isActive:true`)                                                   |
-| Liste admin (avec inactives)   | `GET /categories?includeInactive=true` (nécessite un JWT ADMIN — sinon ignoré)                                  |
-| Détail admin                   | `GET /categories/:categoryId` (retourne même si inactive)                                                       |
-| Détail public par slug         | `GET /categories/slug/:slug` (**404 si inactive**)                                                              |
-| Produits par slug              | `GET /categories/slug/:slug/products?page&limit` (**404 si inactive**)                                          |
-| Création (admin)               | `POST /categories` `CreateCategoryRequest`                                                                      |
-| Mise à jour (admin)            | `PUT /categories/:categoryId`                                                                                   |
-| Suppression (admin)            | `DELETE /categories/:categoryId` (**400** si `_count.products > 0` ou discounts encore rattachés)               |
-| **Upload image/icône (admin)** | `POST /categories/:categoryId/assets` (multipart, champs `image?` et/ou `icon?`, 1 fichier chacun) → `Category` |
-| **Suppression image (admin)**  | `DELETE /categories/:categoryId/image` (**404** si aucune image définie)                                        |
-| **Suppression icône (admin)**  | `DELETE /categories/:categoryId/icon` (**404** si aucune icône définie)                                         |
+| Action                         | Appel                                                                                                                                         |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Liste publique **(public)**    | `GET /categories` → `Category[]` (uniquement `isActive:true`)                                                                                 |
+| Liste admin (avec inactives)   | `GET /categories?includeInactive=true` (nécessite un JWT ADMIN — sinon ignoré)                                                                |
+| Détail admin                   | `GET /categories/:categoryId` (retourne même si inactive)                                                                                     |
+| Détail public par slug         | `GET /categories/slug/:slug` (**404 si inactive**)                                                                                            |
+| Produits par slug              | `GET /categories/slug/:slug/products?page&limit&search&minPrice&maxPrice&tags&sort` (**404 si inactive**) — items incluent désormais `images` |
+| Création (admin)               | `POST /categories` `CreateCategoryRequest`                                                                                                    |
+| Mise à jour (admin)            | `PUT /categories/:categoryId`                                                                                                                 |
+| Suppression (admin)            | `DELETE /categories/:categoryId` (**400** si `_count.products > 0` ou discounts encore rattachés)                                             |
+| **Upload image/icône (admin)** | `POST /categories/:categoryId/assets` (multipart, champs `image?` et/ou `icon?`, 1 fichier chacun) → `Category`                               |
+| **Suppression image (admin)**  | `DELETE /categories/:categoryId/image` (**404** si aucune image définie)                                                                      |
+| **Suppression icône (admin)**  | `DELETE /categories/:categoryId/icon` (**404** si aucune icône définie)                                                                       |
 
+**Point d'attention front** : `GET /categories/slug/:slug/products` renvoie maintenant `images` sur chaque produit (auparavant absent de ce listing, contrairement à `GET /product`), et accepte les mêmes filtres `minPrice`/`maxPrice`/`tags`/`sort` que `GET /product` (§4).
 ⚠️ **Correctif catalogue public** : `GET /categories` ne nécessite plus de token.
 
 ⚠️ **Upload aligné sur le comportement produit/promotion** : l'API **uploade elle-même** l'image/icône vers Cloudflare R2 — ne pas demander à l'utilisateur de saisir une URL manuellement :
