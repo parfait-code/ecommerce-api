@@ -17,19 +17,33 @@ type ProductQuery = {
   limit?: string;
   categoryId?: string;
   search?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  tags?: string;
+  sort?: string;
 };
 
 const CACHE_KEYS = {
-  all: (page: number, limit: number, categoryId?: string, search?: string) =>
-    `products:all:${page}:${limit}${categoryId ? `:${categoryId}` : ""}${search ? `:${search}` : ""}`,
+  all: (
+    page: number,
+    limit: number,
+    categoryId?: string,
+    search?: string,
+    minPrice?: string,
+    maxPrice?: string,
+    tags?: string,
+    sort?: string,
+  ) =>
+    `products:all:${page}:${limit}` +
+    (categoryId ? `:cat=${categoryId}` : "") +
+    (search ? `:s=${search}` : "") +
+    (minPrice ? `:min=${minPrice}` : "") +
+    (maxPrice ? `:max=${maxPrice}` : "") +
+    (tags ? `:tags=${tags}` : "") +
+    (sort ? `:sort=${sort}` : ""),
   single: (id: string) => `products:${id}`,
 };
 
-/**
- * Un produit ne peut passer ACTIVE que si tous les attributs produit
- * (isVariant: false) marqués isRequired: true sur sa catégorie sont renseignés.
- * Les attributs de variante ne sont pas concernés par ce contrôle.
- */
 const assertReadyForActivation = async (product: {
   categoryId: string;
   attributeValues: { attributeDefinitionId: string }[];
@@ -63,6 +77,10 @@ export const productService = {
       limit,
       query.categoryId,
       query.search,
+      query.minPrice,
+      query.maxPrice,
+      query.tags,
+      query.sort,
     );
 
     if (!includeInactive) {
@@ -123,8 +141,6 @@ export const productService = {
     const category = await categoryRepository.findById(dto.categoryId);
     if (!category) throw new AppError("Category not found", 404);
 
-    // Un produit naît toujours en DRAFT — il ne peut avoir d'attributs
-    // renseignés avant d'exister, donc jamais ACTIVE à la création.
     const product = await productRepository.create({
       ...dto,
       status: ProductStatus.DRAFT,
@@ -154,7 +170,6 @@ export const productService = {
   },
 
   update: async (id: string, dto: UpdateProductDto) => {
-    // ✅ Récupérer le produit même s'il est inactif
     const product = await productRepository.findById(id, true);
     if (!product) throw new AppError("Product not found", 404);
 
@@ -210,7 +225,6 @@ export const productService = {
     files: Express.Multer.File[],
     combinationId?: string,
   ) => {
-    // ✅ Récupérer le produit même s'il est inactif
     const product = await productRepository.findById(id, true);
     if (!product) throw new AppError("Product not found", 404);
 
@@ -230,7 +244,6 @@ export const productService = {
   },
 
   deleteImage: async (id: string, imageId: string) => {
-    // ✅ Récupérer le produit même s'il est inactif
     const product = await productRepository.findById(id, true);
     if (!product) throw new AppError("Product not found", 404);
 

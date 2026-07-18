@@ -1,5 +1,6 @@
 import { prisma } from "../../shared/config/database";
 import { CreateCategoryDto, UpdateCategoryDto } from "./category.schema";
+import { parseProductSort } from "../../shared/utils/product-sort";
 
 const categoryInclude = (includeInactive: boolean) => ({
   parent: { select: { id: true, name: true, slug: true } },
@@ -35,16 +36,53 @@ export const categoryRepository = {
 
   findProducts: (
     categoryIds: string[],
-    query: { page?: string; limit?: string },
+    query: {
+      page?: string;
+      limit?: string;
+      search?: string;
+      minPrice?: string;
+      maxPrice?: string;
+      tags?: string;
+      sort?: string;
+    },
     includeInactive = false,
   ) => {
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
     const skip = (page - 1) * limit;
 
+    const minPrice =
+      query.minPrice !== undefined ? Number(query.minPrice) : undefined;
+    const maxPrice =
+      query.maxPrice !== undefined ? Number(query.maxPrice) : undefined;
+    const tagSlugs = query.tags
+      ? query.tags
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : undefined;
+
     const where = {
       categoryId: { in: categoryIds },
       ...(!includeInactive && { status: "ACTIVE" as const }),
+      ...(query.search && {
+        OR: [
+          { name: { contains: query.search, mode: "insensitive" as const } },
+          { sku: { contains: query.search, mode: "insensitive" as const } },
+        ],
+      }),
+      ...((minPrice !== undefined || maxPrice !== undefined) && {
+        price: {
+          ...(minPrice !== undefined &&
+            !Number.isNaN(minPrice) && { gte: minPrice }),
+          ...(maxPrice !== undefined &&
+            !Number.isNaN(maxPrice) && { lte: maxPrice }),
+        },
+      }),
+      ...(tagSlugs &&
+        tagSlugs.length > 0 && {
+          tags: { some: { tag: { slug: { in: tagSlugs } } } },
+        }),
     };
 
     return Promise.all([
@@ -52,8 +90,11 @@ export const categoryRepository = {
         where,
         skip,
         take: limit,
-        include: { category: { select: { id: true, name: true, slug: true } } },
-        orderBy: { createdAt: "desc" },
+        include: {
+          category: { select: { id: true, name: true, slug: true } },
+          images: { orderBy: { position: "asc" as const } },
+        },
+        orderBy: parseProductSort(query.sort),
       }),
       prisma.product.count({ where }),
     ]);
@@ -98,10 +139,6 @@ export const categoryRepository = {
   existsBySlug: (slug: string) =>
     prisma.category.findUnique({ where: { slug } }),
 
-  // ── Nouveau — support du comptage récursif (direct + descendants) ────────
-
-  // Utilisé pour getAll(): une seule requête groupée pour toutes les
-  // catégories, plutôt qu'une requête de comptage par catégorie.
   countProductsGroupedByCategory: (includeInactive: boolean) =>
     prisma.product.groupBy({
       by: ["categoryId"],
@@ -112,8 +149,6 @@ export const categoryRepository = {
   findAllIdsWithParent: () =>
     prisma.category.findMany({ select: { id: true, parentId: true } }),
 
-  // Utilisé pour getById()/getBySlug(): comptage direct sur un ensemble
-  // d'ids déjà résolu (catégorie + descendants).
   countProductsForCategoryIds: (
     categoryIds: string[],
     includeInactive = false,

@@ -49,7 +49,15 @@ export const categoryController = {
       const includeInactive = isAdmin && req.query.includeInactive === "true";
       const result = await categoryService.getProducts(
         req.params.slug as string,
-        req.query as { page?: string; limit?: string },
+        req.query as {
+          page?: string;
+          limit?: string;
+          search?: string;
+          minPrice?: string;
+          maxPrice?: string;
+          tags?: string;
+          sort?: string;
+        },
         includeInactive,
       );
       respond(res, result);
@@ -90,7 +98,6 @@ export const categoryController = {
     }
   },
 
-  // ── Upload image / icône ────────────────────────────────────────────────────
   uploadAssets: async (req: Request, res: Response, next: NextFunction) => {
     try {
       const files = req.files as

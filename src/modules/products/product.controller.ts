@@ -14,6 +14,10 @@ export const productController = {
           limit?: string;
           categoryId?: string;
           search?: string;
+          minPrice?: string;
+          maxPrice?: string;
+          tags?: string;
+          sort?: string;
         },
         includeInactive,
       );

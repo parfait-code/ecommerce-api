@@ -26,7 +26,9 @@
 20. Loyalty
 21. Returns
 22. Dashboard
-23. Gestion des erreurs — pattern recommandé côté frontend
+23. Settings
+24. Popups
+25. Gestion des erreurs — pattern recommandé côté frontend
 
 ---
 
@@ -820,15 +822,18 @@ interface UpdatePaymentStatusRequest {
 }
 ```
 
-| Action                    | Appel                                                                                                              |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Méthodes disponibles      | `GET /payment-methods` → `PaymentMethodInfo[]`                                                                     |
-| Créer un paiement         | `POST /payments` `CreatePaymentRequest` → `Payment` (201, ou 503 si indisponible)                                  |
-| Détail                    | `GET /payments/:payment_id` → `Payment`                                                                            |
-| Paiements d'une commande  | `GET /orders/:orderId/payments` → `Payment[]`                                                                      |
-| Liste (admin)             | `GET /payments?page&limit&status&method&order_id` → `Paginated<Payment>`                                           |
-| Changer le statut (admin) | `PUT /payments/:payment_id/status` `UpdatePaymentStatusRequest`                                                    |
-| Compléter (déprécié)      | `PUT /payments/:payment_id/complete` — équivalent à `PUT .../status { status: "COMPLETED" }`, conservé pour compat |
+| Action                                         | Appel                                                                                                              |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Méthodes disponibles                           | `GET /payment-methods` → `PaymentMethodInfo[]`                                                                     |
+| Créer un paiement                              | `POST /payments` `CreatePaymentRequest` → `Payment` (201, ou 503 si indisponible)                                  |
+| Détail                                         | `GET /payments/:payment_id` → `Payment`                                                                            |
+| Paiements d'une commande                       | `GET /orders/:orderId/payments` → `Payment[]`                                                                      |
+| Liste (admin)                                  | `GET /payments?page&limit&status&method&order_id` → `Paginated<Payment>`                                           |
+| Changer le statut (admin)                      | `PUT /payments/:payment_id/status` `UpdatePaymentStatusRequest`                                                    |
+| Compléter (déprécié)                           | `PUT /payments/:payment_id/complete` — équivalent à `PUT .../status { status: "COMPLETED" }`, conservé pour compat |
+| Réconcilier les commandes COD bloquées (admin) | `POST /payments/reconcile-cod` → `{ reconciledCount: number }`                                                     |
+
+**Point d'attention** : `POST /payments/reconcile-cod` déclenche manuellement le même job qui tourne automatiquement toutes les 15 min (`payment-order-sync.job.ts`) — rattrape les commandes restées `PENDING` alors qu'un paiement COD a déjà été enregistré (échec de synchro transitoire). Ne concerne strictement que `CASH_ON_DELIVERY`.
 
 **Points d'attention front** :
 
@@ -1550,7 +1555,102 @@ interface SalesChartResponse {
 
 ---
 
-## 23. Gestion des erreurs — pattern recommandé côté frontend
+## 23. Settings
+
+Module de configuration à chaud — permet de modifier certains comportements de l'API (seuils, listes, méthodes de paiement actives...) sans redéploiement.
+
+```ts
+interface Setting {
+  id: string;
+  key: string;
+  value: string; // toujours une string en base, même pour type JSON (à parser côté client)
+  type: "STRING" | "NUMBER" | "BOOLEAN" | "JSON";
+  category: string;
+  description: string | null;
+  isPublic: boolean;
+  updatedBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface UpdateSettingRequest {
+  value: unknown; // valeur native (objet/nombre/bool/tableau) — jamais stringifiée manuellement
+}
+
+interface UpdateManySettingsRequest {
+  settings: { key: string; value: unknown }[]; // min 1
+}
+```
+
+| Action                           | Appel                                                              |
+| -------------------------------- | ------------------------------------------------------------------ |
+| Settings publics (storefront)    | `GET /settings/public` → `Setting[]` (uniquement `isPublic: true`) |
+| Liste complète (admin)           | `GET /settings?category=` → `Setting[]`                            |
+| Mise à jour groupée (admin)      | `PATCH /settings` `UpdateManySettingsRequest`                      |
+| Mise à jour d'un setting (admin) | `PATCH /settings/:key` `UpdateSettingRequest`                      |
+
+**Clés disponibles** : `store.currency`, `store.supported_countries`, `payments.enabled_methods`, `payments.unavailable_messages`, `inventory.low_stock_threshold`, `loyalty.points_per_currency_unit`, `security.login_attempt_limit`, `security.login_attempt_window_seconds`, `orders.stale_pending_hours`, `uploads.max_file_size_mb`, `uploads.allowed_mime_types`, `pagination.default_page_size`, `cache.default_ttl_seconds`.
+
+**Point d'attention front** : une modification via `PATCH` prend effet immédiatement pour les accesseurs asynchrones ; certains chemins internes synchrones (pagination, pays supportés, limites d'upload) peuvent mettre jusqu'à 5 min à se rafraîchir (`settings-refresh.job.ts`) — sans impact perceptible côté frontend.
+
+## 24. Popups
+
+```ts
+interface Popup {
+  id: string;
+  title: string;
+  imageUrl: string | null;
+  message: string | null;
+  isActive: boolean;
+  startDate: string | null;
+  endDate: string | null;
+  targetType: "PROMOTION" | "CATEGORY" | "PRODUCT" | "INFO" | "EXTERNAL_LINK";
+  targetId: string | null;
+  externalUrl: string | null;
+  ctaLabel: string | null;
+  displayFrequency: "ONCE_PER_SESSION" | "ONCE_PER_DAY" | "ALWAYS";
+  priority: number;
+  resolvedUrl: string | null; // calculé côté serveur, prêt à consommer
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CreatePopupRequest {
+  title: string; // 2-200
+  imageUrl?: string;
+  message?: string;
+  isActive?: boolean; // défaut true
+  startDate?: string;
+  endDate?: string; // doit être > startDate si les deux sont fournis
+  targetType: Popup["targetType"];
+  targetId?: string; // requis si targetType ∈ PROMOTION|CATEGORY|PRODUCT
+  externalUrl?: string; // requis si targetType = EXTERNAL_LINK
+  ctaLabel?: string; // max 50
+  displayFrequency?: Popup["displayFrequency"]; // défaut ONCE_PER_SESSION
+  priority?: number; // défaut 0
+}
+
+type UpdatePopupRequest = Partial<CreatePopupRequest>;
+```
+
+| Action                     | Appel                                                                       |
+| -------------------------- | --------------------------------------------------------------------------- |
+| Popups actifs **(public)** | `GET /popups/active` → `Popup[]` (fenêtre de dates + `isActive` respectées) |
+| Liste (admin)              | `GET /popups?isActive&targetType&page&limit` → `Popup[]`                    |
+| Détail (admin)             | `GET /popups/:popupId` → `Popup`                                            |
+| Création (admin)           | `POST /popups` `CreatePopupRequest` → `Popup` (201)                         |
+| Mise à jour (admin)        | `PUT /popups/:popupId` `UpdatePopupRequest`                                 |
+| Suppression (admin)        | `DELETE /popups/:popupId`                                                   |
+| Upload image (admin)       | `POST /popups/:popupId/image` (multipart, champ `image`) → `Popup`          |
+| Suppression image (admin)  | `DELETE /popups/:popupId/image`                                             |
+
+**Points d'attention front** :
+
+- `resolvedUrl` est déjà calculé côté serveur (résolution du slug promotion/catégorie ou id produit) — ne jamais reconstruire ce lien côté client.
+- `targetId` est requis pour `PROMOTION`, `CATEGORY`, `PRODUCT` ; `externalUrl` requis pour `EXTERNAL_LINK` ; `INFO` n'exige aucun lien.
+- Comme pour les produits/catégories/promotions, l'upload d'image est géré entièrement par l'API (Cloudflare R2) — envoyer un `FormData` avec le champ `image`, jamais une URL manuelle.
+
+## 25. Gestion des erreurs — pattern recommandé côté frontend
 
 ```ts
 class ApiRequestError extends Error {

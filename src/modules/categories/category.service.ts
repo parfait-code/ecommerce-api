@@ -15,20 +15,30 @@ const CACHE_KEYS = {
   all: "categories:all",
   single: (id: string) => `categories:${id}`,
   bySlug: (slug: string) => `categories:slug:${slug}`,
-  products: (slug: string, page: number, limit: number) =>
-    `categories:${slug}:products:${page}:${limit}`,
+  products: (
+    slug: string,
+    page: number,
+    limit: number,
+    search?: string,
+    minPrice?: string,
+    maxPrice?: string,
+    tags?: string,
+    sort?: string,
+  ) =>
+    `categories:${slug}:products:${page}:${limit}` +
+    (search ? `:s=${search}` : "") +
+    (minPrice ? `:min=${minPrice}` : "") +
+    (maxPrice ? `:max=${maxPrice}` : "") +
+    (tags ? `:tags=${tags}` : "") +
+    (sort ? `:sort=${sort}` : ""),
 };
 
-// ── Comptage total (direct + descendants) ───────────────────────────────────
-
-// Pour une seule catégorie (getById/getBySlug) : résout ses descendants puis
-// fait un seul count() sur l'ensemble catégorie+descendants.
 const attachTotalProductCount = async (
   category: any,
   includeInactive: boolean,
 ) => {
   const descendantIds = await categoryRepository.findDescendantIds(category.id);
-  if (descendantIds.length === 0) return category; // feuille — le _count direct est déjà correct
+  if (descendantIds.length === 0) return category;
 
   const total = await categoryRepository.countProductsForCategoryIds(
     [category.id, ...descendantIds],
@@ -38,9 +48,6 @@ const attachTotalProductCount = async (
   return { ...category, _count: { ...category._count, products: total } };
 };
 
-// Pour une liste complète (getAll) : évite le N+1 — une requête groupée pour
-// les comptes directs + une requête pour la structure de l'arbre, puis
-// sommation récursive en mémoire.
 const buildTotalCountResolver = async (includeInactive: boolean) => {
   const [allCategories, grouped] = await Promise.all([
     categoryRepository.findAllIdsWithParent(),
@@ -137,12 +144,29 @@ export const categoryService = {
 
   getProducts: async (
     slug: string,
-    query: { page?: string; limit?: string },
+    query: {
+      page?: string;
+      limit?: string;
+      search?: string;
+      minPrice?: string;
+      maxPrice?: string;
+      tags?: string;
+      sort?: string;
+    },
     includeInactive = false,
   ) => {
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
-    const cacheKey = CACHE_KEYS.products(slug, page, limit);
+    const cacheKey = CACHE_KEYS.products(
+      slug,
+      page,
+      limit,
+      query.search,
+      query.minPrice,
+      query.maxPrice,
+      query.tags,
+      query.sort,
+    );
 
     if (!includeInactive) {
       const cached = await cache.get(cacheKey);

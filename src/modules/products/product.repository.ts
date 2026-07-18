@@ -1,6 +1,18 @@
 import { prisma } from "../../shared/config/database";
 import { CreateProductDto, UpdateProductDto } from "./product.schema";
 import { paginate } from "../../shared/utils/pagination";
+import { parseProductSort } from "../../shared/utils/product-sort";
+
+export interface ProductListQuery {
+  page?: string;
+  limit?: string;
+  categoryId?: string;
+  search?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  tags?: string;
+  sort?: string;
+}
 
 const productInclude = {
   category: { select: { id: true, name: true, slug: true } },
@@ -36,16 +48,20 @@ const productInclude = {
 };
 
 export const productRepository = {
-  findAll: async (
-    query: {
-      page?: string;
-      limit?: string;
-      categoryId?: string;
-      search?: string;
-    },
-    includeInactive = false,
-  ) => {
+  findAll: async (query: ProductListQuery, includeInactive = false) => {
     const { skip, take } = paginate(query);
+
+    const minPrice =
+      query.minPrice !== undefined ? Number(query.minPrice) : undefined;
+    const maxPrice =
+      query.maxPrice !== undefined ? Number(query.maxPrice) : undefined;
+    const tagSlugs = query.tags
+      ? query.tags
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : undefined;
+
     const where = {
       ...(!includeInactive && { status: "ACTIVE" as const }),
       ...(query.categoryId && { categoryId: query.categoryId }),
@@ -55,13 +71,26 @@ export const productRepository = {
           { sku: { contains: query.search, mode: "insensitive" as const } },
         ],
       }),
+      ...((minPrice !== undefined || maxPrice !== undefined) && {
+        price: {
+          ...(minPrice !== undefined &&
+            !Number.isNaN(minPrice) && { gte: minPrice }),
+          ...(maxPrice !== undefined &&
+            !Number.isNaN(maxPrice) && { lte: maxPrice }),
+        },
+      }),
+      ...(tagSlugs &&
+        tagSlugs.length > 0 && {
+          tags: { some: { tag: { slug: { in: tagSlugs } } } },
+        }),
     };
+
     const [items, total] = await Promise.all([
       prisma.product.findMany({
         where,
         skip,
         take,
-        orderBy: { createdAt: "desc" },
+        orderBy: parseProductSort(query.sort),
         include: productInclude,
       }),
       prisma.product.count({ where }),
