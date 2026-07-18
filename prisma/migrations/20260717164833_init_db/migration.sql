@@ -290,6 +290,9 @@ CREATE TABLE "Order" (
     "discountedAmount" DOUBLE PRECISION,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "shippingCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "shippingMethodSnapshot" JSONB,
+    "couponSnapshot" JSONB,
 
     CONSTRAINT "Order_pkey" PRIMARY KEY ("id")
 );
@@ -307,6 +310,7 @@ CREATE TABLE "OrderItem" (
     "price" DOUBLE PRECISION NOT NULL,
     "originalPrice" DOUBLE PRECISION NOT NULL,
     "discountAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "discountSnapshot" JSONB,
 
     CONSTRAINT "OrderItem_pkey" PRIMARY KEY ("id")
 );
