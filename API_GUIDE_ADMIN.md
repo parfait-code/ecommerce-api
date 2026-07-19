@@ -451,7 +451,18 @@ await api.post(`/categories/${category.id}/assets`, formData);
 
 ---
 
-## 9. Orders
+## 9. Reviews (modération)
+
+Le module Reviews n'a pas de routes strictement réservées à l'admin — mais `authGuard` seul suffit, avec un **bypass de propriété** appliqué côté service quand `role === "ADMIN"`.
+
+| Action               | Appel                                       | Note                                                                |
+| -------------------- | ------------------------------------------- | ------------------------------------------------------------------- |
+| Mise à jour (bypass) | `PUT /reviews/:rid` `{ rating?, comment? }` | Un admin peut modifier N'IMPORTE QUEL avis, pas seulement les siens |
+| Suppression (bypass) | `DELETE /reviews/:rid`                      | Idem — modération de contenu inapproprié                            |
+
+⚠️ Il n'existe **aucune route de listing global** des avis (`GET /reviews`) — la seule vue paginée est par produit (`GET /products/:pid/reviews`, publique). Pour une modale de modération, itérer produit par produit ou construire une vue dédiée côté dashboard n'est pas couvert par l'API actuelle.
+
+## 10. Orders
 
 ```ts
 interface Order {
@@ -543,7 +554,7 @@ Transitions strictement contrôlées côté serveur (400 si invalide). `PENDING 
 
 ---
 
-## 10. Payments
+## 11. Payments
 
 ```ts
 interface Payment {
@@ -584,7 +595,7 @@ interface UpdatePaymentStatusRequest {
 
 ---
 
-## 11. Warehouses
+## 12. Warehouses
 
 ```ts
 interface Warehouse {
@@ -619,7 +630,7 @@ interface CreateWarehouseRequest {
 
 ---
 
-## 12. Inventory
+## 13. Inventory
 
 ```ts
 interface InventoryItem {
@@ -687,7 +698,7 @@ interface InventoryGroupedItem {
 
 ---
 
-## 13. Shipments & Pickup Requests
+## 14. Shipments & Pickup Requests
 
 ```ts
 interface Shipment {
@@ -787,7 +798,7 @@ interface UpdatePickupStatusRequest {
 
 ---
 
-## 14. Shipping Methods
+## 15. Shipping Methods
 
 ```ts
 interface ShippingMethod {
@@ -811,7 +822,7 @@ interface ShippingMethod {
 
 ---
 
-## 15. Promotions, Discounts & Coupons
+## 16. Promotions, Discounts & Coupons
 
 ```ts
 interface Promotion {
@@ -906,7 +917,7 @@ interface CreateCouponRequest {
 
 ---
 
-## 16. Popups
+## 17. Popups
 
 ```ts
 interface Popup {
@@ -956,7 +967,7 @@ Règles de validation `targetType` : `PROMOTION`/`CATEGORY`/`PRODUCT` → `targe
 
 ---
 
-## 17. Loyalty
+## 18. Loyalty
 
 ```ts
 interface LoyaltyBalance {
@@ -991,7 +1002,7 @@ Barème configurable via `loyalty.points_per_currency_unit` (§19).
 
 ---
 
-## 18. Returns
+## 19. Returns
 
 ```ts
 interface ReturnRequest {
@@ -1038,7 +1049,7 @@ interface UpdateReturnStatusRequest {
 
 ---
 
-## 19. Settings
+## 20. Settings
 
 Module de configuration à chaud — modifie certains comportements de l'API (seuils, listes, méthodes de paiement, etc.) sans redéploiement.
 
@@ -1093,7 +1104,7 @@ Prend effet **immédiatement** pour les accesseurs asynchrones ; certains chemin
 
 ---
 
-## 20. Dashboard
+## 21. Dashboard
 
 ```ts
 interface DashboardStats {
@@ -1161,7 +1172,7 @@ interface SalesChartResponse {
 
 ---
 
-## 21. Gestion des erreurs — pattern recommandé
+## 22. Gestion des erreurs — pattern recommandé
 
 ```ts
 class ApiRequestError extends Error {
